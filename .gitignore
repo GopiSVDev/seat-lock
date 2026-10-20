@@ -38,3 +38,4 @@ build/
 !.env.example
 
 specs.md
+NOTES.md
