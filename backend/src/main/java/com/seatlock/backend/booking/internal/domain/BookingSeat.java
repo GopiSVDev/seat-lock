@@ -25,4 +25,10 @@ public class BookingSeat {
 
     @Column(nullable = false)
     private String seatLabel;
+
+    public BookingSeat(Booking booking, Long showSeatId, String seatLabel) {
+        this.booking = booking;
+        this.showSeatId = showSeatId;
+        this.seatLabel = seatLabel;
+    }
 }

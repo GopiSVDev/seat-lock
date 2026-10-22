@@ -29,4 +29,11 @@ public class Booking {
 
     @Column(nullable = false)
     private Instant createdAt;
+
+    public Booking(Long showId, String customerName) {
+        this.showId = showId;
+        this.customerName = customerName;
+        this.status = BookingStatus.CONFIRMED;
+        this.createdAt = Instant.now();
+    }
 }
