@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.Duration;
 import java.time.Instant;
 
 @Entity
@@ -37,4 +38,13 @@ public class Show {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ShowFormat format;
+
+    public Show(Movie movie, Screen screen, Instant startTime, String language, ShowFormat format) {
+        this.movie = movie;
+        this.screen = screen;
+        this.startTime = startTime;
+        this.endTime = startTime.plus(Duration.ofMinutes(movie.getDurationMinutes()));
+        this.language = language;
+        this.format = format;
+    }
 }
