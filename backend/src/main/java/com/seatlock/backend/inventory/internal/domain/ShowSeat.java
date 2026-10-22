@@ -35,4 +35,13 @@ public class ShowSeat {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ShowSeatStatus status;
+
+    public ShowSeat(Long showId, Long seatId, String rowLabel, int seatNumber, SeatType seatType) {
+        this.showId = showId;
+        this.seatId = seatId;
+        this.rowLabel = rowLabel;
+        this.seatNumber = seatNumber;
+        this.seatType = seatType;
+        this.status = ShowSeatStatus.AVAILABLE;
+    }
 }
