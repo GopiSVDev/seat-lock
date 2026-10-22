@@ -1,5 +1,6 @@
 package com.seatlock.backend.inventory.internal.domain;
 
+import com.seatlock.backend.shared.exception.ConflictException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -43,5 +44,16 @@ public class ShowSeat {
         this.seatNumber = seatNumber;
         this.seatType = seatType;
         this.status = ShowSeatStatus.AVAILABLE;
+    }
+
+    public void book() {
+        if (status != ShowSeatStatus.AVAILABLE) {
+            throw new ConflictException("Seat " + getLabel() + " is already booked");
+        }
+        status = ShowSeatStatus.BOOKED;
+    }
+
+    public String getLabel() {
+        return rowLabel + seatNumber;
     }
 }

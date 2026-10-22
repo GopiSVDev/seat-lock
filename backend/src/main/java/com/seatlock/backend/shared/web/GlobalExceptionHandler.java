@@ -1,5 +1,6 @@
 package com.seatlock.backend.shared.web;
 
+import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -26,9 +27,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ProblemDetail handleConflict(ConflictException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     // Unique constraint hit; constraint names stay in the logs, not the response
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ProblemDetail handleConflict(DataIntegrityViolationException ex) {
+    public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Request conflicts with existing data");
     }
