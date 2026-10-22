@@ -1,11 +1,16 @@
 package com.seatlock.backend.booking.internal.domain;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 
 @Entity
 @Table(name = "booking", schema = "booking")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Booking {
 
     @Id
@@ -25,23 +30,10 @@ public class Booking {
     @Column(nullable = false)
     private Instant createdAt;
 
-    public Long getId() {
-        return id;
-    }
-
-    public Long getShowId() {
-        return showId;
-    }
-
-    public String getCustomerName() {
-        return customerName;
-    }
-
-    public BookingStatus getStatus() {
-        return status;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
+    public Booking(Long showId, String customerName) {
+        this.showId = showId;
+        this.customerName = customerName;
+        this.status = BookingStatus.CONFIRMED;
+        this.createdAt = Instant.now();
     }
 }

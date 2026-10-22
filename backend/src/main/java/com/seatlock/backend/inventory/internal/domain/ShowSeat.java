@@ -1,10 +1,16 @@
 package com.seatlock.backend.inventory.internal.domain;
 
+import com.seatlock.backend.shared.exception.ConflictException;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "show_seat", schema = "inventory",
         uniqueConstraints = @UniqueConstraint(columnNames = {"show_id", "seat_id"}))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ShowSeat {
 
     @Id
@@ -31,31 +37,23 @@ public class ShowSeat {
     @Column(nullable = false)
     private ShowSeatStatus status;
 
-    public Long getId() {
-        return id;
+    public ShowSeat(Long showId, Long seatId, String rowLabel, int seatNumber, SeatType seatType) {
+        this.showId = showId;
+        this.seatId = seatId;
+        this.rowLabel = rowLabel;
+        this.seatNumber = seatNumber;
+        this.seatType = seatType;
+        this.status = ShowSeatStatus.AVAILABLE;
     }
 
-    public Long getShowId() {
-        return showId;
+    public void book() {
+        if (status != ShowSeatStatus.AVAILABLE) {
+            throw new ConflictException("Seat " + getLabel() + " is already booked");
+        }
+        status = ShowSeatStatus.BOOKED;
     }
 
-    public Long getSeatId() {
-        return seatId;
-    }
-
-    public String getRowLabel() {
-        return rowLabel;
-    }
-
-    public int getSeatNumber() {
-        return seatNumber;
-    }
-
-    public SeatType getSeatType() {
-        return seatType;
-    }
-
-    public ShowSeatStatus getStatus() {
-        return status;
+    public String getLabel() {
+        return rowLabel + seatNumber;
     }
 }
