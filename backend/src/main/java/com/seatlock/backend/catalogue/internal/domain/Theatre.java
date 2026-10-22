@@ -1,9 +1,14 @@
 package com.seatlock.backend.catalogue.internal.domain;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "theatre", schema = "catalogue")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Theatre {
 
     @Id
@@ -18,20 +23,4 @@ public class Theatre {
 
     @Column(nullable = false)
     private String address;
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getCity() {
-        return city;
-    }
-
-    public String getAddress() {
-        return address;
-    }
 }

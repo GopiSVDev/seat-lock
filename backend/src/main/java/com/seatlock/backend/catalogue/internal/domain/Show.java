@@ -1,11 +1,16 @@
 package com.seatlock.backend.catalogue.internal.domain;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 
 @Entity
 @Table(name = "shows", schema = "catalogue")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Show {
 
     @Id
@@ -32,32 +37,4 @@ public class Show {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ShowFormat format;
-
-    public Long getId() {
-        return id;
-    }
-
-    public Movie getMovie() {
-        return movie;
-    }
-
-    public Screen getScreen() {
-        return screen;
-    }
-
-    public Instant getStartTime() {
-        return startTime;
-    }
-
-    public Instant getEndTime() {
-        return endTime;
-    }
-
-    public String getLanguage() {
-        return language;
-    }
-
-    public ShowFormat getFormat() {
-        return format;
-    }
 }

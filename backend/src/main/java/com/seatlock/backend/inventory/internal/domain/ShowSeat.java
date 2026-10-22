@@ -1,10 +1,15 @@
 package com.seatlock.backend.inventory.internal.domain;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "show_seat", schema = "inventory",
         uniqueConstraints = @UniqueConstraint(columnNames = {"show_id", "seat_id"}))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ShowSeat {
 
     @Id
@@ -30,32 +35,4 @@ public class ShowSeat {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ShowSeatStatus status;
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getShowId() {
-        return showId;
-    }
-
-    public Long getSeatId() {
-        return seatId;
-    }
-
-    public String getRowLabel() {
-        return rowLabel;
-    }
-
-    public int getSeatNumber() {
-        return seatNumber;
-    }
-
-    public SeatType getSeatType() {
-        return seatType;
-    }
-
-    public ShowSeatStatus getStatus() {
-        return status;
-    }
 }

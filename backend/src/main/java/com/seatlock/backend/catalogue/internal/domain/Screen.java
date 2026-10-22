@@ -1,10 +1,15 @@
 package com.seatlock.backend.catalogue.internal.domain;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "screen", schema = "catalogue",
         uniqueConstraints = @UniqueConstraint(columnNames = {"theatre_id", "name"}))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Screen {
 
     @Id
@@ -17,16 +22,4 @@ public class Screen {
 
     @Column(nullable = false)
     private String name;
-
-    public Long getId() {
-        return id;
-    }
-
-    public Theatre getTheatre() {
-        return theatre;
-    }
-
-    public String getName() {
-        return name;
-    }
 }
