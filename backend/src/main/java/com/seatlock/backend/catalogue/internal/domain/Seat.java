@@ -30,6 +30,13 @@ public class Seat {
     @Column(nullable = false)
     private SeatType seatType;
 
+    public Seat(Screen screen, String rowLabel, int seatNumber, SeatType seatType) {
+        this.screen = screen;
+        this.rowLabel = rowLabel;
+        this.seatNumber = seatNumber;
+        this.seatType = seatType;
+    }
+
     public String getLabel() {
         return rowLabel + seatNumber;
     }

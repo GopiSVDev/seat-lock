@@ -22,4 +22,9 @@ public class Screen {
 
     @Column(nullable = false)
     private String name;
+
+    public Screen(Theatre theatre, String name) {
+        this.theatre = theatre;
+        this.name = name;
+    }
 }
