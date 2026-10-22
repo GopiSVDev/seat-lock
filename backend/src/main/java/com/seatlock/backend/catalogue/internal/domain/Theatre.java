@@ -23,4 +23,10 @@ public class Theatre {
 
     @Column(nullable = false)
     private String address;
+
+    public Theatre(String name, String city, String address) {
+        this.name = name;
+        this.city = city;
+        this.address = address;
+    }
 }
