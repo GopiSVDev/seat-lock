@@ -26,9 +26,14 @@ public class BookingSeat {
     @Column(nullable = false)
     private String seatLabel;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private BookingStatus status;
+
     public BookingSeat(Booking booking, Long showSeatId, String seatLabel) {
         this.booking = booking;
         this.showSeatId = showSeatId;
         this.seatLabel = seatLabel;
+        this.status = booking.getStatus();
     }
 }
