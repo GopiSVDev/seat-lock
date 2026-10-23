@@ -7,6 +7,7 @@ import com.seatlock.backend.inventory.internal.domain.SeatType;
 import com.seatlock.backend.inventory.internal.domain.ShowSeat;
 import com.seatlock.backend.inventory.internal.repository.ShowSeatRepository;
 import com.seatlock.backend.inventory.internal.web.dto.SeatMapResponse;
+import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
@@ -48,13 +49,16 @@ public class ShowSeatService implements InventoryApi {
     @Transactional
     public List<BookedSeat> bookSeats(Long showId, List<Long> showSeatIds) {
         Set<Long> requested = new HashSet<>(showSeatIds);
+        int booked = showSeatRepository.bookIfAvailable(showId, requested);
         List<ShowSeat> showSeats = showSeatRepository.findAllById(requested);
 
-        boolean allValid = showSeats.size() == requested.size() && showSeats.stream().allMatch(seat -> seat.getShowId().equals(showId));
+        if (booked != requested.size()) {
+            boolean allValid = showSeats.size() == requested.size() && showSeats.stream().allMatch(seat -> seat.getShowId().equals(showId));
 
-        if (!allValid) throw new NotFoundException("Seats for show", showId);
+            if (!allValid) throw new NotFoundException("Seats for show", showId);
 
-        showSeats.forEach(ShowSeat::book);
+            throw new ConflictException("One or more seats are already booked");
+        }
 
         return showSeats.stream().map(seat -> new BookedSeat(seat.getId(), seat.getLabel())).toList();
     }
