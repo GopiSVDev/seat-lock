@@ -4,7 +4,7 @@
 --
 -- Ids are explicit and follow formulas the k6 scripts rely on (see lib.js):
 --   50 movies, 20 theatres in 5 cities, 2 screens each (40 screens of 250 seats: rows A-J x 25,
---   I-J premium), plus screen 41 "Flash Arena" with 1,000 seats (rows A-T x 50) for hot-show.js
+--   I-J premium), plus screen 41 "Flash Arena" with 1,000 seats (rows A-T x 50) for flash-sale.js
 --   :shows shows, round-robin over screens 1-40 and movies, 4 hours apart per screen
 --   show_seat id = (show - 1) * 250 + k + 1 for seat k (0-249) of the show's screen
 --   the first :booked_shows shows are sold out by seeded bookings of 2 seats

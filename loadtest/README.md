@@ -53,28 +53,42 @@ A rate passes only if all of the following hold during the step:
 | p99 latency        | ≤ 500 ms                                                                   |
 | Error rate         | < 1%                                                                       |
 | Dropped iterations | < 1% (k6 could not start requests on time because the backend fell behind) |
-| Oversold seats     | 0 (`hot-show` only: seats in 201 responses = seats marked BOOKED)          |
+
+Latency limits apply to all requests together and, for p95/p99, to each request type on its own
+(`book`, `seatmap`, ...), so slow bookings can't hide behind fast reads in `mixed`. Only the scenario's
+own requests count: `setup()`/`teardown()` requests (tag `name:setup`) are left out.
+
+`flash-sale` is an event test, not a capacity search: it passes when no seat is oversold (seats in 201
+responses = seats marked BOOKED afterwards), errors < 1% and dropped < 1%. Its latency is reported, not
+judged.
 
 The limits can be overridden with environment variables (`P90_MS`, `P95_MS`, `P99_MS`, ...), listed at
 the top of `find-capacity.mjs`. A run with different limits is not comparable with earlier runs.
 
 ## Scenarios
 
-| Test          | Script           | Requests                                                                                                  | Success     |
-| ------------- | ---------------- | --------------------------------------------------------------------------------------------------------- | ----------- |
-| `seatmap`     | `seatmap.js`     | `GET /shows/{id}/seats` (250 seats), Zipf-popular shows                                                   | 200         |
-| `book`        | `book.js`        | `POST /bookings` for 2 seats, every request on different seats (cost of a booking, no contention)         | 201         |
-| `hot-show`    | `hot-show.js`    | Flash sale: `POST /bookings` for 1-4 adjacent seats of one new 1,000-seat show, centre seats most wanted  | 201 or 409  |
-| `mixed`       | `mixed.js`       | Browsing and booking: 30% seat map, 20% show, 15% movie, 5% theatre, 5% screen, 10% booking, 15% booking | 200 / 201   |
-| `show-create` | `show-create.js` | `POST /shows` on a 250-seat screen (creates 250 show seats in the same transaction)                       | 201         |
+| Test          | Kind     | Script           | Requests                                                                                                  | Success     |
+| ------------- | -------- | ---------------- | --------------------------------------------------------------------------------------------------------- | ----------- |
+| `seatmap`     | capacity | `seatmap.js`     | `GET /shows/{id}/seats` (250 seats), Zipf-popular shows                                                   | 200         |
+| `book`        | capacity | `book.js`        | `POST /bookings` for 2 seats, every request on different seats (cost of a booking, no contention)         | 201         |
+| `mixed`       | capacity | `mixed.js`       | Browsing and booking: 30% seat map, 20% show, 15% movie, 5% theatre, 5% screen, 10% booking, 15% book    | 200 / 201   |
+| `show-create` | capacity | `show-create.js` | `POST /shows` on a 250-seat screen (creates 250 show seats in the same transaction)                       | 201         |
+| `flash-sale`  | event    | `flash-sale.js`  | Users rush a new 1,000-seat show: seat map, think, book adjacent seats, retry on 409                      | 200 / 201 / 409 |
 
 - **Zipf** (s = 1): a few shows get most of the traffic, like new releases on a Friday evening. Popular
   ranks are spread over all show ids, so hot rows are not clustered at the start of the table.
-- **book** and **mixed** take seats in a fixed order and continue after the seats earlier runs took
-  (`setup()` finds the first untouched show). A run aborts when the bookable seats run out: reseed.
-- **hot-show** schedules a fresh show in `setup()`, so every run and every capacity step is a new sale.
-  Early requests compete for free seats; once sold out, every request is a fast 409. `teardown()` reads
-  the seat map and the step fails if any seat was confirmed twice.
+- **book** and **mixed** never collide: booking n gets its own seat pair. Consecutive bookings go to
+  different shows of a window of 500 shows on sale at once (`SHOW_WINDOW`), so concurrent bookings
+  touch rows all over the table like real traffic, not the same few pages. Each run continues after the
+  seats earlier runs took (`setup()` binary-searches the first free one). A run aborts when the
+  bookable seats run out: reseed.
+- **flash-sale** opens a fresh show in `setup()`. New users arrive from 0 to `RATE` users/s over `RAMP`
+  (default 10s), then at `RATE` until `DURATION`. Each user reads the seat map (leaves if sold out),
+  thinks 0-`THINK_MAX_S` s (default 3), books 1-4 adjacent free seats near the centre, and starts again
+  on a 409, up to `MAX_ATTEMPTS` (3) bookings. Stale seat maps cause 409s, as in a real sale. It reports
+  users who booked / saw sold out / gave up, sold-out time, latency of 201 and 409 bookings separately,
+  and the oversell check. Through `find-capacity.mjs` it first warms up the JVM with `mixed`, then runs
+  once at `PEAK_USERS` (default 200) users/s for `EVENT_DURATION` (default 1m).
 - **show-create** runs at a few req/s (its own defaults in `find-capacity.mjs`) and grows the dataset:
   reseed afterwards.
 - **mixed** picks the request type by iteration number, so every run sends exactly the same shares.
@@ -133,12 +147,14 @@ async-profiler is downloaded automatically by `profile.sh` into `loadtest/.tools
    sudo lxc exec seat-lock -- sh -c 'cd /root/seat-lock && docker compose up -d postgres backend'
    ```
 3. Seed the dataset: `loadtest/seed.sh`. Reseed when `book`/`mixed` run out of seats and after
-   `show-create`. `seatmap` and `hot-show` don't need a reseed.
+   `show-create`. `seatmap` and `flash-sale` don't need a reseed.
 
 ### 2. Find the capacity
 
 ```bash
 taskset -c 0-9 node loadtest/find-capacity.mjs <test> "what changed"
+# event test: warm-up, then one sale
+PEAK_USERS=200 taskset -c 0-9 node loadtest/find-capacity.mjs flash-sale "what changed"
 ```
 
 The script runs k6 in steps of increasing rate and reports the highest rate that passes a sustained run:
@@ -209,7 +225,7 @@ loadtest/diagnose.sh book 300 180 "where does DB hold time go"
 
 | Side      | Source                                                                           | Shows                                                                                       |
 | --------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Postgres  | `pg_stat_activity` sampled every 10 ms, `pg_stat_wal` with `track_wal_io_timing` | What app connections do: run SQL, wait on WAL or locks (row locks in `hot-show`), or idle   |
+| Postgres  | `pg_stat_activity` sampled every 10 ms, `pg_stat_wal` with `track_wal_io_timing` | What app connections do: run SQL, wait on WAL or locks (row locks in `flash-sale`), or idle   |
 | VM kernel | `/proc/stat`, `/proc/pressure/{cpu,io}`, `vmstat`, `/proc/<pid>/stat`            | CPU split incl. iowait and steal; time tasks waited for the CPU or for I/O; CPU per process |
 | JVM       | async-profiler wall-clock profile                                                | What the Tomcat request threads wait on (pool, Postgres reply, CPU)                         |
 
@@ -235,8 +251,9 @@ rate and duration means cheaper requests.
 
 | Path                     | Description                                                                         |
 | ------------------------ | ----------------------------------------------------------------------------------- |
-| `seatmap.js`, `book.js`, `hot-show.js`, `mixed.js`, `show-create.js` | k6 scenarios                            |
-| `lib.js`                 | Shared k6 helpers: options, Zipf, seat and booking id formulas                      |
+| `seatmap.js`, `book.js`, `mixed.js`, `show-create.js` | k6 capacity scenarios                                  |
+| `flash-sale.js`          | k6 event scenario (flash sale)                                                      |
+| `lib.js`                 | Shared k6 helpers: options and per-request metrics, Zipf, seat and booking id formulas |
 | `seed.sh`, `seed.sql`    | Seed the dataset and write `data/seed.json`                                         |
 | `check.sh`               | Seat and booking consistency check (all counts must be 0)                           |
 | `find-capacity.mjs`      | Capacity search; writes `results/RESULTS.md` and `results/runs/`                    |

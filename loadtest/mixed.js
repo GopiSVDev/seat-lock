@@ -7,6 +7,7 @@
 //    5% GET /screens/{id}       screen layout (250 seats)
 //   10% GET /bookings/{id}      seeded bookings
 //   15% POST /bookings          2 seats, no contention (same seat order as book.js)
+// Latency is reported per request type, so slow bookings can't hide behind fast reads.
 //   node loadtest/find-capacity.mjs mixed
 //
 // Single run by hand:
@@ -24,7 +25,7 @@ import {
 const seed = JSON.parse(open('./data/seed.json'));
 const BOOK_FROM = 85; // buckets 85-99 book
 
-export const options = arrivalOptions('mixed');
+export const options = arrivalOptions('mixed', ['seatmap', 'show', 'movie', 'theatre', 'screen', 'booking', 'book']);
 
 export function setup() {
   return { start: firstFreeBooking(seed) };

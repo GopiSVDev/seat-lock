@@ -14,7 +14,7 @@ import { arrivalOptions, randomInt, BASE_URL, JSON_HEADERS } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
 
-export const options = arrivalOptions('show_create');
+export const options = arrivalOptions('show_create', ['create-show']);
 
 export default function () {
   // Far beyond the seeded shows; overlapping shows are not checked yet

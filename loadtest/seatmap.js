@@ -14,7 +14,7 @@ import { arrivalOptions, popularShow, BASE_URL } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
 
-export const options = arrivalOptions('seatmap');
+export const options = arrivalOptions('seatmap', ['seatmap']);
 
 export default function () {
   const res = http.get(`${BASE_URL}/shows/${popularShow(seed)}/seats`, { tags: { name: 'seatmap' } });

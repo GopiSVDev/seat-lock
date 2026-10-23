@@ -1,5 +1,6 @@
 // Booking test: POST /bookings for 2 seats, every request on different seats (no contention).
-// Measures the cost of a booking itself. Each run continues after the seats earlier runs took.
+// Measures the cost of a booking itself. Consecutive bookings go to different shows (500 on sale at
+// once, SHOW_WINDOW), like real traffic. Each run continues after the seats earlier runs took.
 // Normally driven by find-capacity.mjs:
 //   node loadtest/find-capacity.mjs book
 //
@@ -15,7 +16,7 @@ import { arrivalOptions, bookingRequest, firstFreeBooking, BASE_URL, JSON_HEADER
 
 const seed = JSON.parse(open('./data/seed.json'));
 
-export const options = arrivalOptions('book');
+export const options = arrivalOptions('book', ['book']);
 
 export function setup() {
   return { start: firstFreeBooking(seed) };

@@ -6,6 +6,10 @@
 // <test> is a k6 script in this folder (book -> book.js) that reads RATE and DURATION.
 // Tests with a very different cost per request start from their own defaults (TEST_DEFAULTS).
 //
+// Event tests (MODE=event, e.g. flash-sale) are not searched: after the warm-up (with WARMUP_TEST)
+// they run once at PEAK_USERS users/s for EVENT_DURATION and pass if no seat was oversold and
+// errors and dropped iterations stay under the limits. Latency is reported, not judged.
+//
 // How it searches:
 //   1. warm-up   not judged. Gentle start (50, 100, 200 req/s for 30s each, so a cold JVM isn't
 //                flooded), then 1-minute steps at WARMUP_RATE until the backend's CPU cost per
@@ -22,8 +26,9 @@
 //   4. confirm   hold the best rate for CONFIRM_DURATION (2 min); if it misses, lower it by BACKOFF (5%)
 //                and try again
 //
-// A step passes when: p90 <= P90_MS, p95 <= P95_MS, p99 <= P99_MS, error rate < MAX_ERROR_RATE, k6 dropped < 1% of iterations
-// and, for tests that report seats_booked/seats_sold (hot-show), no seat was sold twice.
+// A step passes when: p90 <= P90_MS, p95 <= P95_MS, p99 <= P99_MS (over all requests, and p95/p99 for each
+// request type, so slow bookings can't hide behind fast reads), error rate < MAX_ERROR_RATE and
+// k6 dropped < 1% of iterations. Only the scenario's own requests count (tag load:yes), not setup().
 // After each step the numbers for that step are pulled from Prometheus and saved with it:
 // where the time went per request (queue, DB connection wait, DB work, Java code) and saturation
 // (threads, pool, GC, CPU, memory). The VM at its CPU limit = hardware bound;
@@ -44,9 +49,14 @@ const [test, note = ''] = process.argv.slice(2);
 // Show scheduling writes 250 rows per request, so it runs at a few req/s instead of hundreds
 const TEST_DEFAULTS = {
   'show-create': { START_RATE: 2, RESOLUTION: 1, WARMUP_RATE: 2 },
+  'flash-sale': { MODE: 'event', WARMUP_TEST: 'mixed' },
 };
 const env = (name, fallback) => process.env[name] ?? TEST_DEFAULTS[test]?.[name] ?? fallback;
 const config = {
+  mode: env('MODE', 'capacity'),
+  peakUsers: Number(env('PEAK_USERS', 200)),
+  eventDuration: env('EVENT_DURATION', '1m'),
+  warmupTest: env('WARMUP_TEST', test),
   p90Ms: Number(env('P90_MS', 150)),
   p95Ms: Number(env('P95_MS', 200)),
   p99Ms: Number(env('P99_MS', 500)),
@@ -75,7 +85,9 @@ const config = {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, `${test}.js`);
-if (!test || !existsSync(script)) {
+const warmupScript = join(here, `${config.warmupTest}.js`);
+const isEvent = config.mode === 'event';
+if (!test || !existsSync(script) || !existsSync(warmupScript)) {
   console.error('usage: node loadtest/find-capacity.mjs <test> [note]   (e.g. book)');
   process.exit(1);
 }
@@ -104,13 +116,14 @@ function sleep(seconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000);
 }
 
-function runStep(phase, rate, duration) {
+function runStep(phase, rate, duration, stepScript = script) {
   const summaryFile = join(tmpdir(), `k6-${runId}-${steps.length}.json`);
   const args = ['run', '-q', `--summary-export=${summaryFile}`, '--tag', `testid=${runId}`];
   if (config.prometheusUrl) args.push('-o', 'experimental-prometheus-rw');
-  process.stdout.write(`${phase.padEnd(8)} ${String(rate).padStart(6)} req/s for ${duration.padEnd(3)} ... `);
+  const unit = phase === 'event' ? 'users/s' : 'req/s';
+  process.stdout.write(`${phase.padEnd(8)} ${String(rate).padStart(6)} ${unit} for ${duration.padEnd(3)} ... `);
 
-  const k6 = spawnSync('k6', [...args, script], {
+  const k6 = spawnSync('k6', [...args, stepScript], {
     stdio: ['ignore', 'ignore', 'inherit'],
     env: {
       ...process.env,
@@ -128,35 +141,48 @@ function runStep(phase, rate, duration) {
 
   const m = JSON.parse(readFileSync(summaryFile, 'utf8')).metrics;
   rmSync(summaryFile);
-  const d = m.http_req_duration ?? {};
+  // The scenario's own requests (load:yes), without setup() and teardown()
+  const d = m['http_req_duration{load:yes}'] ?? m.http_req_duration ?? {};
+  const reqs = m['http_reqs{load:yes}'] ?? m.http_reqs ?? {};
   const iterations = m.iterations?.count ?? 0;
   const dropped = m.dropped_iterations?.count ?? 0;
   const step = {
     phase,
     rate,
     duration,
-    achievedRate: round(m.http_reqs?.rate ?? 0),
-    requests: m.http_reqs?.count ?? 0,
+    achievedRate: round(reqs.rate ?? 0),
+    requests: reqs.count ?? 0,
     avgMs: round(d.avg),
     p90Ms: round(d['p(90)']),
     p95Ms: round(d['p(95)']),
     p99Ms: round(d['p(99)']),
     maxMs: round(d.max),
-    errorRate: m.http_req_failed?.value ?? 0,
+    errorRate: (m['http_req_failed{load:yes}'] ?? m.http_req_failed)?.value ?? 0,
     droppedRate: iterations + dropped > 0 ? dropped / (iterations + dropped) : 0,
+    byRequest: requestBreakdown(m),
   };
-  // Seats confirmed to clients vs seats marked sold afterwards (hot-show); a difference is an oversell
+  // Seats confirmed to clients vs seats marked sold afterwards (flash-sale); a difference is an oversell
   if (m.seats_sold) {
-    step.seatsBooked = m.seats_booked?.count ?? 0;
-    step.seatsSold = m.seats_sold.count;
-    step.oversold = step.seatsBooked - step.seatsSold;
+    step.sale = {
+      users: iterations,
+      booked: m.users_booked?.count ?? 0,
+      soldOut: m.users_sold_out?.count ?? 0,
+      gaveUp: m.users_gave_up?.count ?? 0,
+      attempts: m.booking_attempts?.count ?? 0,
+      seatsBooked: m.seats_booked?.count ?? 0,
+      seatsSold: m.seats_sold.count,
+      seatsTotal: m.seats_total?.count ?? 0,
+    };
+    // Last successful booking counts as the sell-out only if every seat was sold
+    const lastBookingS = m.booked_after_open?.max == null ? null : round(m.booked_after_open.max / 1000);
+    step.sale.soldOutAfterS = step.sale.seatsSold === step.sale.seatsTotal ? lastBookingS : 'not sold out';
+    step.sale.oversold = step.sale.seatsBooked - step.sale.seatsSold;
   }
-  step.pass = phase === 'warmup' ? null :
-    step.p90Ms <= config.p90Ms &&
-    step.p95Ms <= config.p95Ms &&
-    step.p99Ms <= config.p99Ms &&
-    step.errorRate < config.maxErrorRate && step.droppedRate < 0.01 &&
-    (step.oversold ?? 0) === 0;
+  const withinErrors = step.errorRate < config.maxErrorRate && step.droppedRate < 0.01 && (step.sale?.oversold ?? 0) === 0;
+  const withinLatency =
+    step.p90Ms <= config.p90Ms && step.p95Ms <= config.p95Ms && step.p99Ms <= config.p99Ms &&
+    step.byRequest.every((r) => r.p95Ms <= config.p95Ms && r.p99Ms <= config.p99Ms);
+  step.pass = phase === 'warmup' ? null : phase === 'event' ? withinErrors : withinErrors && withinLatency;
 
   // Prometheus scrapes every 5s, so wait before reading the step's window.
   const endSeconds = Date.now() / 1000;
@@ -174,13 +200,38 @@ function runStep(phase, rate, duration) {
       `db ${t.connHoldMs ?? '?'} + java ${t.javaMs ?? '?'}  |  cpu backend ${t.cpuBackend ?? '?'} db ${t.cpuDb ?? '?'}  |  ` +
       `sql ${t.dbStatementsPerRequest ?? '?'}/req`,
   );
-  if (step.seatsSold != null) {
+  if (step.byRequest.length > 1) {
+    console.log(`${' '.repeat(37)}${step.byRequest.map((r) => `${r.label} p95 ${r.p95Ms}/p99 ${r.p99Ms}ms`).join('  ')}`);
+  }
+  const sale = step.sale;
+  if (sale) {
     console.log(
-      `${' '.repeat(37)}seats booked ${step.seatsBooked}, sold ${step.seatsSold}` +
-        (step.oversold === 0 ? '' : `  OVERSOLD ${step.oversold}`),
+      `${' '.repeat(37)}users ${sale.users}: booked ${sale.booked}, saw sold out ${sale.soldOut}, gave up ${sale.gaveUp}  |  ` +
+        `sold out after ${sale.soldOutAfterS ?? '?'}s  |  seats booked ${sale.seatsBooked}, sold ${sale.seatsSold}` +
+        (sale.oversold === 0 ? '' : `  OVERSOLD ${sale.oversold}`),
     );
   }
   return step;
+}
+
+// Latency per request type (and status where the script splits it), from the k6 submetrics
+// exported by lib.js baseOptions: keys like 'http_req_duration{name:book,status:201}'.
+function requestBreakdown(m) {
+  return Object.keys(m)
+    .map((key) => key.match(/^http_req_duration\{(name:[^}]+)\}$/)?.[1])
+    .filter((tags) => tags && !tags.includes('name:setup'))
+    .map((tags) => {
+      const d = m[`http_req_duration{${tags}}`];
+      const label = tags.replace('name:', '').replace(',status:', ' ');
+      return {
+        label,
+        count: m[`http_reqs{${tags}}`]?.count ?? 0,
+        avgMs: round(d.avg),
+        p95Ms: round(d['p(95)']),
+        p99Ms: round(d['p(99)']),
+      };
+    })
+    .filter((r) => r.count > 0);
 }
 
 function verdict(step) {
@@ -312,10 +363,10 @@ function cpuMsPerRequest(step) {
 }
 
 function warmUp() {
-  for (const rate of [50, 100, 200].filter((r) => r < config.warmupRate)) runStep('warmup', rate, '30s');
+  for (const rate of [50, 100, 200].filter((r) => r < config.warmupRate)) runStep('warmup', rate, '30s', warmupScript);
   let previous = null;
   for (let i = 0; i < config.warmupMaxSteps; i++) {
-    const cost = cpuMsPerRequest(runStep('warmup', config.warmupRate, config.warmupDuration));
+    const cost = cpuMsPerRequest(runStep('warmup', config.warmupRate, config.warmupDuration, warmupScript));
     if (cost == null) {
       console.log('Warm-up: no CPU data from Prometheus, continuing after one step');
       return;
@@ -331,49 +382,58 @@ function warmUp() {
   console.log(`Warm-up: CPU per request still changing after ${config.warmupMaxSteps} steps, continuing anyway`);
 }
 
-const target =
-  `p90 <= ${config.p90Ms} ms, p95 <= ${config.p95Ms} ms, p99 <= ${config.p99Ms} ms, ` +
-  `errors < ${pct(config.maxErrorRate)}`;
+const target = isEvent
+  ? `no seat oversold, errors < ${pct(config.maxErrorRate)}, dropped < 1% (latency reported, not judged)`
+  : `p90 <= ${config.p90Ms} ms, p95 <= ${config.p95Ms} ms, p99 <= ${config.p99Ms} ms (also p95/p99 per request type), ` +
+    `errors < ${pct(config.maxErrorRate)}`;
 // Rates are kept on a grid of RESOLUTION req/s (e.g. 800, 810).
 const gridDown = (r) => Math.floor(r / config.resolution) * config.resolution;
 const gridUp = (r) => Math.ceil(r / config.resolution) * config.resolution;
 
 console.log(`Target: ${target}`);
-console.log(
-  previous && process.env.START_RATE == null
-    ? `Previous result ${previous.rate} req/s (${previous.id}): ramp starts at ${config.startRate}, x${config.growth} per step\n`
-    : `Ramp starts at ${config.startRate}, x${config.growth} per step\n`,
-);
+if (isEvent) console.log(`Event: ${config.peakUsers} users/s for ${config.eventDuration}, warm-up with ${config.warmupTest}\n`);
+else {
+  console.log(
+    previous && process.env.START_RATE == null
+      ? `Previous result ${previous.rate} req/s (${previous.id}): ramp starts at ${config.startRate}, x${config.growth} per step\n`
+      : `Ramp starts at ${config.startRate}, x${config.growth} per step\n`,
+  );
+}
 warmUp();
 
-let lo = 0; // highest passing rate
-let hi = null; // lowest failing rate
-for (let rate = gridUp(config.startRate); hi === null && rate <= config.maxRate; rate = gridUp(rate * config.growth)) {
-  if (runStep('ramp', rate, config.stepDuration).pass) lo = rate;
-  else hi = rate;
-}
-if (hi === null) console.log(`Never failed up to MAX_RATE=${config.maxRate}; confirming ${lo} req/s`);
-
-const narrowEnough = () => hi === null || hi - lo <= config.resolution;
-const isFine = () => hi - lo <= Math.max(lo * config.precision, config.resolution);
-const budgetLeft = () => Date.now() - startedAt.getTime() < config.searchBudgetMinutes * 60_000;
-while (!narrowEnough() && budgetLeft()) {
-  const mid = Math.max(gridDown((lo + hi) / 2), lo + config.resolution);
-  const duration = isFine() ? config.fineStepDuration : config.stepDuration;
-  if (runStep('refine', mid, duration).pass) lo = mid;
-  else hi = mid;
-}
-
-if (!narrowEnough()) console.log(`Search budget used up; confirming best passing rate ${lo} req/s`);
-
 let final = null;
-for (let attempt = 0; lo > 0 && attempt < config.maxConfirmAttempts; attempt++) {
-  const step = runStep('confirm', lo, config.confirmDuration);
-  if (step.pass) {
-    final = step;
-    break;
+if (isEvent) {
+  const step = runStep('event', config.peakUsers, config.eventDuration);
+  if (step.pass) final = step;
+} else {
+  let lo = 0; // highest passing rate
+  let hi = null; // lowest failing rate
+  for (let rate = gridUp(config.startRate); hi === null && rate <= config.maxRate; rate = gridUp(rate * config.growth)) {
+    if (runStep('ramp', rate, config.stepDuration).pass) lo = rate;
+    else hi = rate;
   }
-  lo = gridDown(lo * config.backoff);
+  if (hi === null) console.log(`Never failed up to MAX_RATE=${config.maxRate}; confirming ${lo} req/s`);
+
+  const narrowEnough = () => hi === null || hi - lo <= config.resolution;
+  const isFine = () => hi - lo <= Math.max(lo * config.precision, config.resolution);
+  const budgetLeft = () => Date.now() - startedAt.getTime() < config.searchBudgetMinutes * 60_000;
+  while (!narrowEnough() && budgetLeft()) {
+    const mid = Math.max(gridDown((lo + hi) / 2), lo + config.resolution);
+    const duration = isFine() ? config.fineStepDuration : config.stepDuration;
+    if (runStep('refine', mid, duration).pass) lo = mid;
+    else hi = mid;
+  }
+
+  if (!narrowEnough()) console.log(`Search budget used up; confirming best passing rate ${lo} req/s`);
+
+  for (let attempt = 0; lo > 0 && attempt < config.maxConfirmAttempts; attempt++) {
+    const step = runStep('confirm', lo, config.confirmDuration);
+    if (step.pass) {
+      final = step;
+      break;
+    }
+    lo = gridDown(lo * config.backoff);
+  }
 }
 
 // --- save results ---
@@ -419,7 +479,9 @@ const stepRows = steps.map(
 writeFileSync(
   join(runsDir, `${runId}.md`),
   [
-    `# ${test}: ${final ? `${final.rate} req/s` : 'no stable rate found'}`,
+    isEvent
+      ? `# ${test}: ${final ? 'passed' : 'failed'} at ${config.peakUsers} users/s`
+      : `# ${test}: ${final ? `${final.rate} req/s` : 'no stable rate found'}`,
     '',
     note ? `> ${note}\n` : '',
     `- Date: ${startedAt.toISOString()}`,
@@ -453,15 +515,30 @@ writeFileSync(
       (q) => `| \`${q.query.replace(/\|/g, '\\|')}\` | ${q.perRequest} | ${cell(q.avgMs)} |`,
     ),
     '',
-    ...(steps.some((s) => s.seatsSold != null)
+    '## Latency by request type (k6)',
+    '',
+    '| Phase | req/s | Result | Request | Count | Avg ms | p95 ms | p99 ms |',
+    '|---|---:|---|---|---:|---:|---:|---:|',
+    ...steps.flatMap((s) =>
+      s.byRequest.map((r) => `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${r.label} | ${r.count} | ${r.avgMs} | ${r.p95Ms} | ${r.p99Ms} |`),
+    ),
+    '',
+    ...(steps.some((s) => s.sale)
       ? [
-          '## Seats (oversell check)',
+          '## Sale',
           '',
-          'Seats in 201 responses vs BOOKED seats in the seat map after the step. Any difference is an oversell.',
+          'Users = sessions started. "Sold out after" = last successful booking, from the sale opening.',
+          'Seats booked = seats in 201 responses; seats sold = BOOKED seats in the seat map afterwards.',
+          'Any difference is an oversell.',
           '',
-          '| Phase | req/s | Result | Seats booked | Seats sold | Oversold |',
-          '|---|---:|---|---:|---:|---:|',
-          ...steps.map((s) => `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${cell(s.seatsBooked)} | ${cell(s.seatsSold)} | ${cell(s.oversold)} |`),
+          '| Phase | Users/s | Result | Users | Booked | Saw sold out | Gave up | Booking attempts | Sold out after s | Seats booked | Seats sold | Oversold |',
+          '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+          ...steps
+            .filter((s) => s.sale)
+            .map((s) => {
+              const x = s.sale;
+              return `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${x.users} | ${x.booked} | ${x.soldOut} | ${x.gaveUp} | ${x.attempts} | ${cell(x.soldOutAfterS)} | ${x.seatsBooked} | ${x.seatsSold} | ${x.oversold} |`;
+            }),
           '',
         ]
       : []),
@@ -480,25 +557,40 @@ writeFileSync(
 // RESULTS.md has one section per test ("## <test> ..."), each with its own table.
 // The row goes at the end of this test's table; a missing file or section is created.
 const historyFile = join(resultsDir, 'RESULTS.md');
-const tableHeader = [
-  '| Date | Stable req/s | vs previous | p90 ms | p95 ms | p99 ms | Errors | Target | CPU backend | CPU db | Note |',
-  '|---|---:|---:|---:|---:|---:|---:|---|---|---|---|',
-];
+const tableHeader = isEvent
+  ? [
+      '| Date | Users/s | Result | Users | Sold out after s | Oversold | p95 book 201 ms | p95 book 409 ms | p95 seat map ms | Errors | CPU backend | CPU db | Note |',
+      '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|',
+    ]
+  : [
+      '| Date | Stable req/s | vs previous | p90 ms | p95 ms | p99 ms | Errors | Target | CPU backend | CPU db | Note |',
+      '|---|---:|---:|---:|---:|---:|---:|---|---|---|---|',
+    ];
 // Change of the stable rate against the previous result for the same test
 const change = final && previous ? (final.rate - previous.rate) / previous.rate : null;
 const changeCell = change == null ? '-' : `${change >= 0 ? '+' : ''}${(change * 100).toFixed(1)}%`;
-const row =
-  `| ${startedAt.toISOString().slice(0, 10)} | ${final ? final.rate : 'none'} | ${changeCell} | ` +
-  `${final?.p90Ms ?? '-'} | ${final?.p95Ms ?? '-'} | ${final?.p99Ms ?? '-'} | ${final ? pct(final.errorRate) : '-'} | ` +
-  `p90/p95/p99 <= ${config.p90Ms}/${config.p95Ms}/${config.p99Ms} ms | ${cpuCell(final?.metrics.cpuBackend, result.limits.vm)} | ${cpuCell(final?.metrics.cpuDb, result.limits.vm)} | ` +
-  `${note} |`;
+const eventStep = steps.find((s) => s.phase === 'event');
+const p95Of = (label) => eventStep?.byRequest.find((r) => r.label === label)?.p95Ms ?? '-';
+const eventRow = eventStep
+  ? `| ${startedAt.toISOString().slice(0, 10)} | ${eventStep.rate} | ${verdict(eventStep)} | ${eventStep.sale?.users ?? '-'} | ` +
+    `${cell(eventStep.sale?.soldOutAfterS)} | ${cell(eventStep.sale?.oversold)} | ${p95Of('book 201')} | ${p95Of('book 409')} | ` +
+    `${p95Of('seatmap')} | ${pct(eventStep.errorRate)} | ${cpuCell(eventStep.metrics.cpuBackend, result.limits.vm)} | ` +
+    `${cpuCell(eventStep.metrics.cpuDb, result.limits.vm)} | ${note} |`
+  : null;
+const row = isEvent
+  ? eventRow
+  : `| ${startedAt.toISOString().slice(0, 10)} | ${final ? final.rate : 'none'} | ${changeCell} | ` +
+    `${final?.p90Ms ?? '-'} | ${final?.p95Ms ?? '-'} | ${final?.p99Ms ?? '-'} | ${final ? pct(final.errorRate) : '-'} | ` +
+    `p90/p95/p99 <= ${config.p90Ms}/${config.p95Ms}/${config.p99Ms} ms | ${cpuCell(final?.metrics.cpuBackend, result.limits.vm)} | ${cpuCell(final?.metrics.cpuDb, result.limits.vm)} | ` +
+    `${note} |`;
 
 const history = existsSync(historyFile)
   ? readFileSync(historyFile, 'utf8').replace(/\n+$/, '').split('\n')
   : [
       '# Load test results',
       '',
-      'Highest rate each test sustained for the full confirm run within its target.',
+      'Capacity tests: highest rate sustained for the full confirm run within the target.',
+      'Event tests (flash-sale): one run at a fixed arrival of users; passes with no oversell and errors < 1%.',
       'Generated by `node loadtest/find-capacity.mjs <test> [note]`.',
       'CPU columns are average cores used during the confirm run (limit in brackets).',
       'App (PostgreSQL + backend) in an LXD VM with 1 vCPU (pinned to one host core) and 2 GB RAM; k6 and monitoring',
@@ -523,9 +615,12 @@ if (sectionAt === -1) {
 }
 writeFileSync(historyFile, history.join('\n') + '\n');
 
-console.log(
-  final
-    ? `\nStable: ${final.rate} req/s (p90 ${final.p90Ms} / p95 ${final.p95Ms} / p99 ${final.p99Ms} ms over ${config.confirmDuration})`
-    : '\nNo stable rate found',
-);
+if (isEvent) console.log(`\nEvent ${final ? 'passed' : 'failed'}: ${target}`);
+else {
+  console.log(
+    final
+      ? `\nStable: ${final.rate} req/s (p90 ${final.p90Ms} / p95 ${final.p95Ms} / p99 ${final.p99Ms} ms over ${config.confirmDuration})`
+      : '\nNo stable rate found',
+  );
+}
 console.log(`Saved: loadtest/results/runs/${runId}.md`);
