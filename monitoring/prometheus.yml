@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+# Prometheus runs on the laptop (host network); the app runs in the LXD VM seat-lock.
+# 10.24.21.250 is the VM's fixed IP (VM_IP in .env, BASE_URL default in the k6 scripts).
+scrape_configs:
+  - job_name: backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["10.24.21.250:8080"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["localhost:9187"]
+
+  # VM CPU and memory as LXD sees them, so no agent runs inside the VM.
+  # Needs: sudo lxc config set core.metrics_address 127.0.0.1:8444
+  #        sudo lxc config set core.metrics_authentication false
+  - job_name: lxd
+    scheme: https
+    metrics_path: /1.0/metrics
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ["127.0.0.1:8444"]

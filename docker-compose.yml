@@ -7,10 +7,20 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is not set}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is not set}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
+    # pg_stat_statements: per-statement stats for postgres-exporter (load tests)
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_preload_libraries=pg_stat_statements",
+        "-c",
+        "pg_stat_statements.track=all",
+      ]
     ports:
       - "${POSTGRES_PORT:?POSTGRES_PORT is not set}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./monitoring/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test:
         [
@@ -29,7 +39,11 @@ services:
     ports:
       - "${BACKEND_PORT:?BACKEND_PORT is not set}:${BACKEND_PORT:?BACKEND_PORT is not set}"
     environment:
+      # Heap as a share of the machine's RAM, leaving room for Postgres (512 MB on the 2 GB VM)
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=25
       SERVER_PORT: ${BACKEND_PORT:?BACKEND_PORT is not set}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:?DB_POOL_SIZE is not set}
+      TOMCAT_MAX_THREADS: ${TOMCAT_MAX_THREADS:?TOMCAT_MAX_THREADS is not set}
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB is not set}
       DB_USERNAME: ${POSTGRES_USER:?POSTGRES_USER is not set}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
@@ -47,5 +61,37 @@ services:
       retries: 5
       start_period: 20s
 
+  # --- Load test monitoring: runs on the laptop, the app (postgres, backend) runs in the LXD VM ---
+  # docker compose --profile monitoring up -d prometheus postgres-exporter
+  # Host networking so Prometheus reaches the VM and k6 reaches Prometheus on localhost:9090.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: seat-lock-prometheus
+    profiles: [monitoring]
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    container_name: seat-lock-postgres-exporter
+    profiles: [monitoring]
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --collector.stat_statements
+      - --collector.stat_statements.include_query
+      - --collector.stat_statements.query_length=200
+    environment:
+      DATA_SOURCE_URI: ${VM_IP:?VM_IP is not set}:${POSTGRES_PORT:?POSTGRES_PORT is not set}/${POSTGRES_DB:?POSTGRES_DB is not set}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_USER:?POSTGRES_USER is not set}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
+
 volumes:
   postgres_data:
+  prometheus_data:
