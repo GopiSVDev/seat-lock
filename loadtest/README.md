@@ -173,7 +173,7 @@ each resource was, and how many SQL statements each request ran. The run is save
 `results/runs/<id>.json`; `results.mjs` then regenerates its report (`runs/<id>.md`) and
 `results/RESULTS.md` from all saved runs, so changing the report format and running
 `node loadtest/results.mjs` updates every past run too. Rows of runs whose JSON is not on this machine
-(`runs/` is git-ignored) are kept as they are. Each failed step lists the criteria it missed;
+(`runs/*.json` is git-ignored) are kept as they are. Each failed step lists the criteria it missed;
 RESULTS.md describes every test, its pass criteria, and what limited each run.
 
 After booking runs, `loadtest/check.sh` confirms that seats and bookings agree (every count 0).
@@ -265,7 +265,7 @@ rate and duration means cheaper requests.
 | `profile.sh`             | CPU profiling with async-profiler; writes `results/profiles/`                       |
 | `diagnose.sh`            | Time breakdown from Postgres, the VM kernel and the JVM; writes `results/diagnose/` |
 | `results/RESULTS.md`     | History of all runs, one section per test with what it does and its pass criteria   |
-| `results/runs/`          | Per run: `.json` record and `.md` report with every step, time breakdown, SQL and saturation (git-ignored) |
+| `results/runs/`          | Per run: `.md` report with every step, time breakdown, SQL and saturation (in git) and the `.json` record it is generated from (git-ignored) |
 | `results/profiles/`      | Per profile: flame graph and summaries (git-ignored)                                |
 | `data/`                  | `seed.json` written by `seed.sh` (git-ignored)                                      |
 | `../monitoring/`         | Prometheus scrape config (VM backend, exporter, LXD) and `pg_stat_statements` setup |

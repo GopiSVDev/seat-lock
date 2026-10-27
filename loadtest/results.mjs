@@ -312,7 +312,7 @@ export function writeResultsPage(resultsDir) {
 
 const TEST_MODES = { 'flash-sale': 'event' };
 
-// Rows already in RESULTS.md for runs whose JSON is not on this machine (runs/ is git-ignored): kept as they are,
+// Rows already in RESULTS.md for runs whose JSON is not on this machine (runs/*.json is git-ignored): kept as they are,
 // along with each test's Pass line for tests with no saved run left
 function keptRows(historyFile, savedIds) {
   const kept = [];
