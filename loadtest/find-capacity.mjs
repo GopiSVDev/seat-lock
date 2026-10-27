@@ -29,11 +29,13 @@
 // A step passes when: p90 <= P90_MS, p95 <= P95_MS, p99 <= P99_MS (over all requests, and p95/p99 for each
 // request type, so slow bookings can't hide behind fast reads), error rate < MAX_ERROR_RATE and
 // k6 dropped < 1% of iterations. Only the scenario's own requests count (tag load:yes), not setup().
+// A failed step records which of these it missed (results.mjs failures).
 // After each step the numbers for that step are pulled from Prometheus and saved with it:
 // where the time went per request (queue, DB connection wait, DB work, Java code) and saturation
 // (threads, pool, GC, CPU, memory). The VM at its CPU limit = hardware bound;
 // latency rising with CPU to spare = software bound.
-// Results go to loadtest/results/ (RESULTS.md history table + one .md/.json per run).
+// Results go to loadtest/results/: runs/<id>.json is the record; runs/<id>.md and RESULTS.md are generated
+// from all saved runs by results.mjs (node loadtest/results.mjs rebuilds them).
 //
 // The app runs in the LXD VM (VM name, BASE_URL); k6 and Prometheus run on the laptop.
 // Backend CPU comes from the JVM, VM CPU and memory from LXD's metrics endpoint.
@@ -43,6 +45,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { failures, pct, round, targetText, verdict, writeResultsPage, writeRunReport } from './results.mjs';
 
 const [test, note = ''] = process.argv.slice(2);
 
@@ -178,11 +181,8 @@ function runStep(phase, rate, duration, stepScript = script) {
     step.sale.soldOutAfterS = step.sale.seatsSold === step.sale.seatsTotal ? lastBookingS : 'not sold out';
     step.sale.oversold = step.sale.seatsBooked - step.sale.seatsSold;
   }
-  const withinErrors = step.errorRate < config.maxErrorRate && step.droppedRate < 0.01 && (step.sale?.oversold ?? 0) === 0;
-  const withinLatency =
-    step.p90Ms <= config.p90Ms && step.p95Ms <= config.p95Ms && step.p99Ms <= config.p99Ms &&
-    step.byRequest.every((r) => r.p95Ms <= config.p95Ms && r.p99Ms <= config.p99Ms);
-  step.pass = phase === 'warmup' ? null : phase === 'event' ? withinErrors : withinErrors && withinLatency;
+  const missed = failures(step, config);
+  step.pass = missed === null ? null : missed.length === 0;
 
   // Prometheus scrapes every 5s, so wait before reading the step's window.
   const endSeconds = Date.now() / 1000;
@@ -195,6 +195,7 @@ function runStep(phase, rate, duration, stepScript = script) {
     `${verdict(step).toUpperCase().padEnd(4)}  p90 ${step.p90Ms}ms  p95 ${step.p95Ms}ms  p99 ${step.p99Ms}ms  ` +
       `errors ${pct(step.errorRate)}  dropped ${pct(step.droppedRate)}`,
   );
+  if (step.pass === false) console.log(`${' '.repeat(37)}missed: ${missed.join(', ')}`);
   console.log(
     `${' '.repeat(37)}avg ${step.avgMs}ms = queue ${t.queueMs ?? '?'} + conn wait ${t.connWaitMs ?? '?'} + ` +
       `db ${t.connHoldMs ?? '?'} + java ${t.javaMs ?? '?'}  |  cpu backend ${t.cpuBackend ?? '?'} db ${t.cpuDb ?? '?'}  |  ` +
@@ -232,18 +233,6 @@ function requestBreakdown(m) {
       };
     })
     .filter((r) => r.count > 0);
-}
-
-function verdict(step) {
-  return step.pass === null ? 'done' : step.pass ? 'pass' : 'fail';
-}
-
-function round(n) {
-  return n == null ? null : Math.round(n * 10) / 10;
-}
-
-function pct(n) {
-  return `${(n * 100).toFixed(2)}%`;
 }
 
 function sh(cmd) {
@@ -382,10 +371,7 @@ function warmUp() {
   console.log(`Warm-up: CPU per request still changing after ${config.warmupMaxSteps} steps, continuing anyway`);
 }
 
-const target = isEvent
-  ? `no seat oversold, errors < ${pct(config.maxErrorRate)}, dropped < 1% (latency reported, not judged)`
-  : `p90 <= ${config.p90Ms} ms, p95 <= ${config.p95Ms} ms, p99 <= ${config.p99Ms} ms (also p95/p99 per request type), ` +
-    `errors < ${pct(config.maxErrorRate)}`;
+const target = targetText(config);
 // Rates are kept on a grid of RESOLUTION req/s (e.g. 800, 810).
 const gridDown = (r) => Math.floor(r / config.resolution) * config.resolution;
 const gridUp = (r) => Math.ceil(r / config.resolution) * config.resolution;
@@ -457,165 +443,10 @@ const runsDir = join(resultsDir, 'runs');
 mkdirSync(runsDir, { recursive: true });
 writeFileSync(join(runsDir, `${runId}.json`), JSON.stringify(result, null, 2) + '\n');
 
-const commitLabel = `${result.commit}${result.uncommittedChanges ? ' (+changes)' : ''}`;
-const cpuCell = (used, l) => `${used ?? '-'} (${l ? l.cpus : '?'})`;
-const limit = (l) => (l ? `${l.cpus} CPU / ${l.memoryMb} MB` : 'n/a');
-const cell = (v) => v ?? '-';
-// SQL breakdown is shown for the confirmed step, or the last judged step if nothing was confirmed.
-const sqlStep = final ?? [...steps].reverse().find((s) => s.pass !== null);
-const ofLimit = (v, max) => `${cell(v)} / ${cell(max)}`;
-const timeRows = steps.map((s) => {
-  const t = s.metrics;
-  return `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${s.avgMs} | ${cell(t.queueMs)} | ${cell(t.connWaitMs)} | ${cell(t.connHoldMs)} | ${cell(t.inPostgresMs)} | ${cell(t.javaMs)} | ${cell(t.serverAvgMs)} | ${cell(t.serverP95Ms)} | ${cell(t.dbStatementsPerRequest)} |`;
-});
-const saturationRows = steps.map((s) => {
-  const t = s.metrics;
-  return `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${ofLimit(t.tomcatBusyMax, t.tomcatThreads)} | ${ofLimit(t.poolActiveMax, t.poolSize)} | ${cell(t.poolPendingMax)} | ${cell(t.gcPausePct)} | ${cell(t.cpuVm)} | ${cell(t.cpuBackend)} | ${cell(t.cpuDb)} | ${cell(t.memVmMb)} | ${cell(t.heapMaxMb)} | ${cell(t.dbCacheHitPct)} |`;
-});
-const stepRows = steps.map(
-  (s) =>
-    `| ${s.phase} | ${s.rate} | ${s.duration} | ${s.achievedRate} | ${s.avgMs} | ${s.p90Ms} | ${s.p95Ms} | ${s.p99Ms} | ${pct(s.errorRate)} | ${pct(s.droppedRate)} | ${verdict(s)} |`,
-);
-writeFileSync(
-  join(runsDir, `${runId}.md`),
-  [
-    isEvent
-      ? `# ${test}: ${final ? 'passed' : 'failed'} at ${config.peakUsers} users/s`
-      : `# ${test}: ${final ? `${final.rate} req/s` : 'no stable rate found'}`,
-    '',
-    note ? `> ${note}\n` : '',
-    `- Date: ${startedAt.toISOString()}`,
-    `- Commit: ${commitLabel}`,
-    `- Target: ${target}`,
-    `- VM: ${limit(result.limits.vm)} (backend and Postgres share it)`,
-    '',
-    '## Latency (k6)',
-    '',
-    '| Phase | Target req/s | Duration | Achieved req/s | Avg ms | p90 ms | p95 ms | p99 ms | Errors | Dropped | Result |',
-    '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|',
-    ...stepRows,
-    '',
-    '## Where the time went (avg ms per request)',
-    '',
-    'Queued + network + Waiting for DB connection + Holding DB connection + Java code = k6 avg.',
-    '"Inside Postgres" is the part of "Holding DB connection" spent executing SQL.',
-    '',
-    '| Phase | req/s | Result | k6 avg | Queued + network | Waiting for DB connection | Holding DB connection | Inside Postgres | Java code | Server avg | Server p95 | SQL statements / request |',
-    '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
-    ...timeRows,
-    '',
-    `## SQL per request (${sqlStep ? `${sqlStep.phase} at ${sqlStep.rate} req/s` : 'no data'})`,
-    '',
-    'Every statement Postgres ran, per HTTP request. Each one is a round trip unless the driver batches it',
-    '(pgjdbc sends BEGIN together with the first statement of a transaction).',
-    '',
-    '| Statement | Per request | Avg ms in Postgres |',
-    '|---|---:|---:|',
-    ...(sqlStep?.metrics.statements ?? []).map(
-      (q) => `| \`${q.query.replace(/\|/g, '\\|')}\` | ${q.perRequest} | ${cell(q.avgMs)} |`,
-    ),
-    '',
-    '## Latency by request type (k6)',
-    '',
-    '| Phase | req/s | Result | Request | Count | Avg ms | p95 ms | p99 ms |',
-    '|---|---:|---|---|---:|---:|---:|---:|',
-    ...steps.flatMap((s) =>
-      s.byRequest.map((r) => `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${r.label} | ${r.count} | ${r.avgMs} | ${r.p95Ms} | ${r.p99Ms} |`),
-    ),
-    '',
-    ...(steps.some((s) => s.sale)
-      ? [
-          '## Sale',
-          '',
-          'Users = sessions started. "Sold out after" = last successful booking, from the sale opening.',
-          'Seats booked = seats in 201 responses; seats sold = BOOKED seats in the seat map afterwards.',
-          'Any difference is an oversell.',
-          '',
-          '| Phase | Users/s | Result | Users | Booked | Saw sold out | Gave up | Booking attempts | Sold out after s | Seats booked | Seats sold | Oversold |',
-          '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
-          ...steps
-            .filter((s) => s.sale)
-            .map((s) => {
-              const x = s.sale;
-              return `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${x.users} | ${x.booked} | ${x.soldOut} | ${x.gaveUp} | ${x.attempts} | ${cell(x.soldOutAfterS)} | ${x.seatsBooked} | ${x.seatsSold} | ${x.oversold} |`;
-            }),
-          '',
-        ]
-      : []),
-    '## Saturation',
-    '',
-    'Max values over the step, except CPU (average cores), GC (% of time paused) and cache hit (%).',
-    '"DB + OS CPU" is VM CPU minus backend CPU: Postgres plus Docker and the OS.',
-    '',
-    '| Phase | req/s | Result | Tomcat threads busy / max | DB pool active / size | Pool waiting | GC pause % | VM CPU | Backend CPU | DB + OS CPU | VM mem MB | Heap MB | DB cache hit % |',
-    '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
-    ...saturationRows,
-    '',
-  ].join('\n'),
-);
+writeRunReport(result, runsDir);
+writeResultsPage(resultsDir);
 
-// RESULTS.md has one section per test ("## <test> ..."), each with its own table.
-// The row goes at the end of this test's table; a missing file or section is created.
-const historyFile = join(resultsDir, 'RESULTS.md');
-const tableHeader = isEvent
-  ? [
-      '| Date | Users/s | Result | Users | Sold out after s | Oversold | p95 book 201 ms | p95 book 409 ms | p95 seat map ms | Errors | CPU backend | CPU db | Note |',
-      '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|',
-    ]
-  : [
-      '| Date | Stable req/s | vs previous | p90 ms | p95 ms | p99 ms | Errors | Target | CPU backend | CPU db | Note |',
-      '|---|---:|---:|---:|---:|---:|---:|---|---|---|---|',
-    ];
-// Change of the stable rate against the previous result for the same test
-const change = final && previous ? (final.rate - previous.rate) / previous.rate : null;
-const changeCell = change == null ? '-' : `${change >= 0 ? '+' : ''}${(change * 100).toFixed(1)}%`;
-const eventStep = steps.find((s) => s.phase === 'event');
-const p95Of = (label) => eventStep?.byRequest.find((r) => r.label === label)?.p95Ms ?? '-';
-const eventRow = eventStep
-  ? `| ${startedAt.toISOString().slice(0, 10)} | ${eventStep.rate} | ${verdict(eventStep)} | ${eventStep.sale?.users ?? '-'} | ` +
-    `${cell(eventStep.sale?.soldOutAfterS)} | ${cell(eventStep.sale?.oversold)} | ${p95Of('book 201')} | ${p95Of('book 409')} | ` +
-    `${p95Of('seatmap')} | ${pct(eventStep.errorRate)} | ${cpuCell(eventStep.metrics.cpuBackend, result.limits.vm)} | ` +
-    `${cpuCell(eventStep.metrics.cpuDb, result.limits.vm)} | ${note} |`
-  : null;
-const row = isEvent
-  ? eventRow
-  : `| ${startedAt.toISOString().slice(0, 10)} | ${final ? final.rate : 'none'} | ${changeCell} | ` +
-    `${final?.p90Ms ?? '-'} | ${final?.p95Ms ?? '-'} | ${final?.p99Ms ?? '-'} | ${final ? pct(final.errorRate) : '-'} | ` +
-    `p90/p95/p99 <= ${config.p90Ms}/${config.p95Ms}/${config.p99Ms} ms | ${cpuCell(final?.metrics.cpuBackend, result.limits.vm)} | ${cpuCell(final?.metrics.cpuDb, result.limits.vm)} | ` +
-    `${note} |`;
-
-const history = existsSync(historyFile)
-  ? readFileSync(historyFile, 'utf8').replace(/\n+$/, '').split('\n')
-  : [
-      '# Load test results',
-      '',
-      'Capacity tests: highest rate sustained for the full confirm run within the target.',
-      'Event tests (flash-sale): one run at a fixed arrival of users; passes with no oversell and errors < 1%.',
-      'Generated by `node loadtest/find-capacity.mjs <test> [note]`.',
-      'CPU columns are average cores used during the confirm run (limit in brackets).',
-      'App (PostgreSQL + backend) in an LXD VM with 1 vCPU (pinned to one host core) and 2 GB RAM; k6 and monitoring',
-      'run on the host, on other cores.',
-    ];
-const sectionAt = history.findIndex((line) => new RegExp(`^## ${test}([: ]|$)`).test(line));
-if (sectionAt === -1) {
-  history.push('', `## ${test}`, '', ...tableHeader, row);
-} else {
-  const nextSection = history.findIndex((line, i) => i > sectionAt && line.startsWith('## '));
-  const sectionEnd = nextSection === -1 ? history.length : nextSection;
-  const headerAt = history.findIndex((line, i) => i > sectionAt && i < sectionEnd && line.startsWith('| Date '));
-  if (headerAt === -1) {
-    // Section without a table yet (e.g. only a summary): add one at its end
-    const insertAt = sectionEnd - (nextSection === -1 ? 0 : 1);
-    history.splice(insertAt, 0, '', ...tableHeader, row);
-  } else {
-    let tableEnd = headerAt;
-    while (tableEnd + 1 < history.length && history[tableEnd + 1].startsWith('|')) tableEnd++;
-    history.splice(tableEnd + 1, 0, row);
-  }
-}
-writeFileSync(historyFile, history.join('\n') + '\n');
-
-if (isEvent) console.log(`\nEvent ${final ? 'passed' : 'failed'}: ${target}`);
+if (isEvent) console.log(final ? `\nEvent passed: ${target}` : `\nEvent failed on: ${steps.at(-1).pass === false ? failures(steps.at(-1), config).join(', ') : '?'}`);
 else {
   console.log(
     final

@@ -169,8 +169,12 @@ The script runs k6 in steps of increasing rate and reports the highest rate that
    again. Only the confirmed rate is reported.
 
 After each step the script queries Prometheus and records where the time went per request, how saturated
-each resource was, and how many SQL statements each request ran. The result is appended to
-`results/RESULTS.md`, and the full details are saved in `results/runs/`.
+each resource was, and how many SQL statements each request ran. The run is saved as
+`results/runs/<id>.json`; `results.mjs` then regenerates its report (`runs/<id>.md`) and
+`results/RESULTS.md` from all saved runs, so changing the report format and running
+`node loadtest/results.mjs` updates every past run too. Rows of runs whose JSON is not on this machine
+(`runs/` is git-ignored) are kept as they are. Each failed step lists the criteria it missed;
+RESULTS.md describes every test, its pass criteria, and what limited each run.
 
 After booking runs, `loadtest/check.sh` confirms that seats and bookings agree (every count 0).
 
@@ -256,11 +260,12 @@ rate and duration means cheaper requests.
 | `lib.js`                 | Shared k6 helpers: options and per-request metrics, Zipf, seat and booking id formulas |
 | `seed.sh`, `seed.sql`    | Seed the dataset and write `data/seed.json`                                         |
 | `check.sh`               | Seat and booking consistency check (all counts must be 0)                           |
-| `find-capacity.mjs`      | Capacity search; writes `results/RESULTS.md` and `results/runs/`                    |
+| `find-capacity.mjs`      | Capacity search; saves `results/runs/<id>.json`                                     |
+| `results.mjs`            | Generates the run reports and `results/RESULTS.md` from `results/runs/*.json`       |
 | `profile.sh`             | CPU profiling with async-profiler; writes `results/profiles/`                       |
 | `diagnose.sh`            | Time breakdown from Postgres, the VM kernel and the JVM; writes `results/diagnose/` |
-| `results/RESULTS.md`     | History of all capacity runs, one table per test (in git)                           |
-| `results/runs/`          | Per run: every step with latency, time breakdown and saturation (git-ignored)       |
+| `results/RESULTS.md`     | History of all runs, one section per test with what it does and its pass criteria   |
+| `results/runs/`          | Per run: `.json` record and `.md` report with every step, time breakdown, SQL and saturation (git-ignored) |
 | `results/profiles/`      | Per profile: flame graph and summaries (git-ignored)                                |
 | `data/`                  | `seed.json` written by `seed.sh` (git-ignored)                                      |
 | `../monitoring/`         | Prometheus scrape config (VM backend, exporter, LXD) and `pg_stat_statements` setup |
