@@ -35,7 +35,8 @@ public class ShowSeatService implements InventoryApi {
         showSeatRepository.saveAll(showSeats);
     }
 
-    @Transactional(readOnly = true)
+    // No transaction: a single SELECT runs in its own implicit one (saves BEGIN/COMMIT on a hot path).
+    // Add @Transactional(readOnly = true) back if this ever runs more than one query.
     public SeatMapResponse getSeatMap(Long showId) {
         List<SeatMapSeat> seats = showSeatRepository.findSeatMap(showId);
 
