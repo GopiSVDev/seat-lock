@@ -10,7 +10,14 @@ import java.util.List;
 
 public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
 
-    List<ShowSeat> findByShowIdOrderByIdAsc(Long showId);
+    @Query("""
+            select new com.seatlock.backend.inventory.internal.repository.SeatMapSeat(
+                s.id, s.rowLabel, s.seatNumber, s.seatType, s.status)
+            from ShowSeat s
+            where s.showId = :showId
+            order by s.id
+            """)
+    List<SeatMapSeat> findSeatMap(Long showId);
 
     @Modifying
     @Query("""

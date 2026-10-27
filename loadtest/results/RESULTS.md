@@ -24,6 +24,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 | Date | Stable req/s | vs previous | p90 ms | p95 ms | p99 ms | Errors | Limited by | CPU backend | CPU db | Note | Run |
 |---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|
 | 2026-10-23 | 710 | - | 4.3 | 10.8 | 29.7 | 0.00% | 750 req/s (confirm, 2m): p90 316 > 150 ms, p95 617.1 > 200 ms, p99 1308.9 > 500 ms | 0.49 (1) | 0.271 (1) | baseline | [report](runs/2026-10-23-02-12-seatmap.md) |
+| 2026-10-27 | 850 | +19.7% | 24.4 | 40.7 | 98.2 | 0.00% | 860 req/s (ramp, 30s): p90 567.4 > 150 ms, p95 817.4 > 200 ms, p99 1480.8 > 500 ms | 0.528 (1) | 0.296 (1) | dto projection | [report](runs/2026-10-27-01-20-seatmap.md) |
 
 ## book
 

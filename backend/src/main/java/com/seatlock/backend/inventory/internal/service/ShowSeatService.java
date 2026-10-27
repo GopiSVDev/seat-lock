@@ -5,6 +5,7 @@ import com.seatlock.backend.inventory.BookedSeat;
 import com.seatlock.backend.inventory.InventoryApi;
 import com.seatlock.backend.inventory.internal.domain.SeatType;
 import com.seatlock.backend.inventory.internal.domain.ShowSeat;
+import com.seatlock.backend.inventory.internal.repository.SeatMapSeat;
 import com.seatlock.backend.inventory.internal.repository.ShowSeatRepository;
 import com.seatlock.backend.inventory.internal.web.dto.SeatMapResponse;
 import com.seatlock.backend.shared.exception.ConflictException;
@@ -36,13 +37,13 @@ public class ShowSeatService implements InventoryApi {
 
     @Transactional(readOnly = true)
     public SeatMapResponse getSeatMap(Long showId) {
-        List<ShowSeat> showSeats = showSeatRepository.findByShowIdOrderByIdAsc(showId);
+        List<SeatMapSeat> seats = showSeatRepository.findSeatMap(showId);
 
-        if (showSeats.isEmpty()) {
+        if (seats.isEmpty()) {
             throw new NotFoundException("Show", showId);
         }
 
-        return SeatMapResponse.from(showId, showSeats);
+        return SeatMapResponse.from(showId, seats);
     }
 
     @Override
