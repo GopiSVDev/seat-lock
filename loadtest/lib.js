@@ -93,7 +93,7 @@ export function firstFreeBooking(seed) {
     const { showId, first } = seatPair(seed, n);
     const rows = http.get(`${BASE_URL}/shows/${showId}/seats`, { responseType: 'text', tags: { name: 'setup' } })
       .json('rows');
-    return rows.some((row) => row.seats.some((seat) => seat.showSeatId === first && seat.status === 'BOOKED'));
+    return rows.some((row) => row.seats.some((seat) => seat.id === first && seat.status === 'BOOKED'));
   };
   let lo = 0;
   let hi = seatPair(seed, 0).total;

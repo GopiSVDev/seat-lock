@@ -17,7 +17,7 @@ SHOW_ID=$(curl -sf -X POST "$BASE_URL/shows" -H 'Content-Type: application/json'
   | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
 SEAT_ID=$(curl -sf "$BASE_URL/shows/$SHOW_ID/seats" \
-  | grep -o '"showSeatId":[0-9]*' | head -1 | cut -d: -f2)
+  | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
 echo "Show $SHOW_ID, showSeatId $SEAT_ID, firing $REQUESTS concurrent bookings..."
 echo

@@ -84,10 +84,10 @@ function pickSeats(rows, size) {
       const start = from - size + 1;
       if (run >= size && (best < 0 || Math.abs(start - centre) < Math.abs(best - centre))) best = start;
     }
-    if (best >= 0) return row.seats.slice(best, best + size).map((seat) => seat.showSeatId);
+    if (best >= 0) return row.seats.slice(best, best + size).map((seat) => seat.id);
   }
   const free = rows.flatMap((row) => row.seats).filter((seat) => seat.status === 'AVAILABLE');
-  return free.slice(0, size).map((seat) => seat.showSeatId);
+  return free.slice(0, size).map((seat) => seat.id);
 }
 
 export default function (data) {

@@ -294,7 +294,8 @@ export function writeResultsPage(resultsDir) {
         return line;
       }
       const cells = isEvent ? eventRow(run, latest) : capacityRow(run, previousRate, latest);
-      previousRate = run.final?.rate ?? previousRate;
+      // A reverted experiment is not the baseline for the next run
+      if (!run.reverted) previousRate = run.final?.rate ?? previousRate;
       return cells && `| ${cells.join(' | ')} |`;
     });
     lines.push(

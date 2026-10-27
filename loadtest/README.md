@@ -175,6 +175,8 @@ each resource was, and how many SQL statements each request ran. The run is save
 `node loadtest/results.mjs` updates every past run too. Rows of runs whose JSON is not on this machine
 (`runs/*.json` is git-ignored) are kept as they are. Each failed step lists the criteria it missed;
 RESULTS.md describes every test, its pass criteria, and what limited each run.
+For a change that was reverted, set `"reverted": true` in its run JSON and note why: "vs previous" then
+compares the next run with the last kept result.
 
 After booking runs, `loadtest/check.sh` confirms that seats and bookings agree (every count 0).
 

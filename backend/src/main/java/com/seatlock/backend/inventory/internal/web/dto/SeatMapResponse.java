@@ -15,19 +15,21 @@ public record SeatMapResponse(
         List<Row> rows
 ) {
 
-    public record Row(String label, List<SeatInfo> seats) {
+    // Screens are laid out row by row with one seat type per row
+    public record Row(String label, SeatType seatType, List<SeatInfo> seats) {
     }
 
-    public record SeatInfo(Long showSeatId, int number, SeatType seatType, ShowSeatStatus status) {
+    public record SeatInfo(Long id, int number, ShowSeatStatus status) {
     }
 
     public static SeatMapResponse from(Long showId, List<SeatMapSeat> seats) {
         List<Row> rows = seats.stream()
-                .collect(Collectors.groupingBy(SeatMapSeat::rowLabel, LinkedHashMap::new,
-                        Collectors.mapping(seat -> new SeatInfo(seat.id(), seat.seatNumber(),
-                                seat.seatType(), seat.status()), Collectors.toList())))
+                .collect(Collectors.groupingBy(SeatMapSeat::rowLabel, LinkedHashMap::new, Collectors.toList()))
                 .entrySet().stream()
-                .map(entry -> new Row(entry.getKey(), entry.getValue()))
+                .map(entry -> new Row(entry.getKey(), entry.getValue().getFirst().seatType(),
+                        entry.getValue().stream()
+                                .map(seat -> new SeatInfo(seat.id(), seat.seatNumber(), seat.status()))
+                                .toList()))
                 .toList();
 
         long available = seats.stream().filter(seat -> seat.status() == ShowSeatStatus.AVAILABLE).count();
