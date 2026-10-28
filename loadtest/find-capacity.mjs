@@ -23,8 +23,9 @@
 //                RESOLUTION req/s (rates are multiples of it). Coarse steps are short; once the gap is within PRECISION (5%)
 //                steps get longer, because a small overload needs time to build a visible queue.
 //                (warm-up + ramp + refine stop after SEARCH_BUDGET_MINUTES)
-//   4. confirm   hold the best rate for CONFIRM_DURATION (2 min); if it misses, lower it by BACKOFF (5%)
-//                and try again
+//   4. confirm   hold the best rate for CONFIRM_DURATION (2 min); if it misses, try halfway between it
+//                and BACKOFF (5%) lower, then halve that gap again (e.g. 1310 fails → 1270 → 1250 → 1240,
+//                then a new 5% window below 1240), up to MAX_CONFIRM_ATTEMPTS
 //
 // A step passes when: p90 <= P90_MS, p95 <= P95_MS, p99 <= P99_MS (over all requests, and p95/p99 for each
 // request type, so slow bookings can't hide behind fast reads), error rate < MAX_ERROR_RATE and
@@ -286,7 +287,9 @@ function collectMetrics(duration, endSeconds, k6AvgMs) {
     heapMaxMb: `max_over_time(sum(jvm_memory_used_bytes{area="heap"})[${w}:5s]) / ${mb}`,
     // process_cpu_usage is the JVM's share of all CPUs; times the CPU count = cores used
     cpuBackend: `avg_over_time(max(process_cpu_usage)[${w}:5s]) * max(system_cpu_count)`,
-    cpuVm: `sum(rate(lxd_cpu_seconds_total{${vm},mode!~"idle|iowait"}[${w}]))`,
+    // LXD updates its counters every ~10 s, so rate() over a short step is off by 10-20%;
+    // busy / total time of the same counter is exact, times the CPU count = cores used
+    cpuVm: `sum(increase(lxd_cpu_seconds_total{${vm},mode!~"idle|iowait"}[${w}])) / sum(increase(lxd_cpu_seconds_total{${vm}}[${w}])) * count(count by (cpu) (lxd_cpu_seconds_total{${vm}}))`,
     memVmMb: `max_over_time((sum(lxd_memory_MemTotal_bytes{${vm}}) - sum(lxd_memory_MemAvailable_bytes{${vm}}))[${w}:5s]) / ${mb}`,
     dbCacheHitPct: `100 * sum(increase(pg_stat_database_blks_hit{${db}}[${w}])) / (sum(increase(pg_stat_database_blks_hit{${db}}[${w}])) + sum(increase(pg_stat_database_blks_read{${db}}[${w}])))`,
   };
@@ -412,13 +415,17 @@ if (isEvent) {
 
   if (!narrowEnough()) console.log(`Search budget used up; confirming best passing rate ${lo} req/s`);
 
-  for (let attempt = 0; lo > 0 && attempt < config.maxConfirmAttempts; attempt++) {
-    const step = runStep('confirm', lo, config.confirmDuration);
+  // After a failed confirm, try halfway down to the BACKOFF rate first; a flat 5% step hides small gains
+  let rate = lo;
+  let floor = gridDown(lo * config.backoff);
+  for (let attempt = 0; rate > 0 && attempt < config.maxConfirmAttempts; attempt++) {
+    const step = runStep('confirm', rate, config.confirmDuration);
     if (step.pass) {
       final = step;
       break;
     }
-    lo = gridDown(lo * config.backoff);
+    if (rate <= floor) floor = gridDown(rate * config.backoff);
+    rate = Math.max(gridDown((floor + rate) / 2), floor);
   }
 }
 

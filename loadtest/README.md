@@ -41,6 +41,8 @@ never shares a core with the app. Keep the laptop otherwise idle and plugged in 
 
 Backend CPU comes from the JVM (`process_cpu_usage`). Postgres has no separate CPU number: the run file
 shows VM CPU minus backend CPU, which is Postgres plus Docker and the OS.
+VM CPU is busy time divided by total time of LXD's CPU counter over the step. LXD updates the counter only
+every ~10 s, so a plain `rate()` over a 30 s step read 10-20% too high (runs before 2026-10-28-01-23).
 
 ## Pass criteria
 
@@ -165,8 +167,9 @@ The script runs k6 in steps of increasing rate and reports the highest rate that
    very first run starts at 50 and doubles). Steps are 30 s.
 3. **Refine**: binary search between the last passing and the first failing rate, on a 10 req/s grid
    (1 req/s for `show-create`). Steps get longer (1 minute) once within 5% of the limit.
-4. **Confirm**: holds the best rate for 2 minutes. If it fails, the rate is lowered by 5% and confirmed
-   again. Only the confirmed rate is reported.
+4. **Confirm**: holds the best rate for 2 minutes. If it fails, the next try is halfway between it and
+   5% lower, then halfway again (1310 fails → 1270 → 1250 → 1240), so a small gain isn't hidden behind a
+   flat 5% step. Only the confirmed rate is reported.
 
 After each step the script queries Prometheus and records where the time went per request, how saturated
 each resource was, and how many SQL statements each request ran. The run is saved as
