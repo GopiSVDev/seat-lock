@@ -6,6 +6,8 @@ import exec from 'k6/execution';
 export const BASE_URL = __ENV.BASE_URL || 'http://10.24.21.250:8080';
 export const RATE = Number(__ENV.RATE || 50);
 export const JSON_HEADERS = { 'Content-Type': 'application/json' };
+// Browsers always ask for gzip; k6 only does when told (it decompresses the body itself)
+export const GET_HEADERS = { 'Accept-Encoding': 'gzip' };
 // Shows on sale at the same time; bookings spread over them (SHOW_WINDOW)
 const SHOW_WINDOW = Number(__ENV.SHOW_WINDOW || 500);
 

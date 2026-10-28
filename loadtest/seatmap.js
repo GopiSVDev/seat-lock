@@ -10,13 +10,13 @@
 
 import http from 'k6/http';
 import { check } from 'k6';
-import { arrivalOptions, popularShow, BASE_URL } from './lib.js';
+import { arrivalOptions, popularShow, BASE_URL, GET_HEADERS } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
 
 export const options = arrivalOptions('seatmap', ['seatmap']);
 
 export default function () {
-  const res = http.get(`${BASE_URL}/shows/${popularShow(seed)}/seats`, { tags: { name: 'seatmap' } });
+  const res = http.get(`${BASE_URL}/shows/${popularShow(seed)}/seats`, { headers: GET_HEADERS, tags: { name: 'seatmap' } });
   check(res, { 'status is 200': (r) => r.status === 200 });
 }

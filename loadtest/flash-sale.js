@@ -23,7 +23,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import exec from 'k6/execution';
 import { Counter, Trend } from 'k6/metrics';
-import { baseOptions, BASE_URL, JSON_HEADERS, RATE } from './lib.js';
+import { baseOptions, BASE_URL, GET_HEADERS, JSON_HEADERS, RATE } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
 const THINK_MAX_S = Number(__ENV.THINK_MAX_S ?? 3);
@@ -92,7 +92,7 @@ function pickSeats(rows, size) {
 
 export default function (data) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { responseType: 'text', tags: { name: 'seatmap' } });
+    const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { headers: GET_HEADERS, responseType: 'text', tags: { name: 'seatmap' } });
     if (!check(map, { 'seat map 200': (r) => r.status === 200 })) return;
     if (map.json('availableSeats') === 0) {
       usersSoldOut.add(1);
