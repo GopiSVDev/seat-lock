@@ -32,6 +32,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 | 2026-10-28 | 1230 | +26.8% | 55.6 | 93.6 | 157.7 | 0.00% | 1240 req/s (refine, 1m): p90 166.5 > 150 ms | 0.578 (1) | 0.252 (1) | seat order + no show-sql | [report](runs/2026-10-28-00-43-seatmap.md) |
 | 2026-10-28 | 1240 | +0.8% | 9.9 | 25.6 | 71 | 0.00% | 1310 req/s (confirm, 2m): p90 156.8 > 150 ms, p95 204.8 > 200 ms | 0.534 (1) | 0.291 (1) | seat map via JdbcClient (true limit ~1300: 1310 passed 1m, failed 2m confirm narrowly) | [report](runs/2026-10-28-01-23-seatmap.md) |
 | 2026-10-28 | 1280 | +3.2% | 89.5 | 119.8 | 173.9 | 0.00% | 1290 req/s (refine, 30s): p90 253.8 > 150 ms, p95 278.1 > 200 ms | 0.626 (1) | 0.352 (1) | gzip seat map (reverted: deflate CPU > send savings on 1 core) | [report](runs/2026-10-28-01-52-seatmap.md) |
+| 2026-10-28 | 1320 | +6.5% | 34.6 | 55.7 | 95.2 | 0.00% | 1360 req/s (confirm, 2m): p90 261.8 > 150 ms, p95 332.6 > 200 ms | 0.566 (1) | 0.289 (1) | threads 10, pool 5 (vs true ~1300 before: +2-4%; conn hold at the knee 1.9 → 0.6 ms) | [report](runs/2026-10-28-02-18-seatmap.md) |
 
 ## book
 
