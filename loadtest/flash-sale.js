@@ -120,6 +120,7 @@ export default function (data) {
 }
 
 export function teardown(data) {
+  sleep(2); // the seat map is cached for 1 s
   const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { responseType: 'text', tags: { name: 'setup' } });
   seatsSold.add(map.json('totalSeats') - map.json('availableSeats'));
   seatsTotal.add(map.json('totalSeats'));

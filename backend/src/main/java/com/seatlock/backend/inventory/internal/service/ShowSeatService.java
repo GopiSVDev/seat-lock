@@ -12,6 +12,7 @@ import com.seatlock.backend.inventory.internal.web.dto.SeatMapResponse;
 import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,8 @@ public class ShowSeatService implements InventoryApi {
 
     // No transaction: a single SELECT runs in its own implicit one (saves BEGIN/COMMIT on a hot path).
     // Add @Transactional(readOnly = true) back if this ever runs more than one query.
+    // Cached 1 s (spring.cache.caffeine.spec), so the map can be that stale; booking re-checks every seat.
+    @Cacheable(cacheNames = "seatMaps", sync = true)
     public SeatMapResponse getSeatMap(Long showId) {
         List<SeatMapSeat> seats = seatMapRepository.findSeatMap(showId);
 
