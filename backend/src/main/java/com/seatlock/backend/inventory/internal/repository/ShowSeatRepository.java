@@ -6,18 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.Collection;
-import java.util.List;
 
 public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
-
-    @Query("""
-            select new com.seatlock.backend.inventory.internal.repository.SeatMapSeat(
-                s.id, s.rowLabel, s.seatNumber, s.seatType, s.status)
-            from ShowSeat s
-            where s.showId = :showId
-            order by s.seatId
-            """)
-    List<SeatMapSeat> findSeatMap(Long showId);
 
     @Modifying
     @Query("""

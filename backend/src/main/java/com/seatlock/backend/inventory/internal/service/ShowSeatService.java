@@ -5,6 +5,7 @@ import com.seatlock.backend.inventory.BookedSeat;
 import com.seatlock.backend.inventory.InventoryApi;
 import com.seatlock.backend.inventory.internal.domain.SeatType;
 import com.seatlock.backend.inventory.internal.domain.ShowSeat;
+import com.seatlock.backend.inventory.internal.repository.SeatMapRepository;
 import com.seatlock.backend.inventory.internal.repository.SeatMapSeat;
 import com.seatlock.backend.inventory.internal.repository.ShowSeatRepository;
 import com.seatlock.backend.inventory.internal.web.dto.SeatMapResponse;
@@ -24,6 +25,7 @@ import java.util.Set;
 public class ShowSeatService implements InventoryApi {
 
     private final ShowSeatRepository showSeatRepository;
+    private final SeatMapRepository seatMapRepository;
 
     @EventListener
     public void on(ShowScheduled event) {
@@ -38,7 +40,7 @@ public class ShowSeatService implements InventoryApi {
     // No transaction: a single SELECT runs in its own implicit one (saves BEGIN/COMMIT on a hot path).
     // Add @Transactional(readOnly = true) back if this ever runs more than one query.
     public SeatMapResponse getSeatMap(Long showId) {
-        List<SeatMapSeat> seats = showSeatRepository.findSeatMap(showId);
+        List<SeatMapSeat> seats = seatMapRepository.findSeatMap(showId);
 
         if (seats.isEmpty()) {
             throw new NotFoundException("Show", showId);
