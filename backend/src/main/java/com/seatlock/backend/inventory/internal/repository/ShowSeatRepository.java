@@ -15,7 +15,7 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
                 s.id, s.rowLabel, s.seatNumber, s.seatType, s.status)
             from ShowSeat s
             where s.showId = :showId
-            order by s.id
+            order by s.seatId
             """)
     List<SeatMapSeat> findSeatMap(Long showId);
 

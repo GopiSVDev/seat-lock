@@ -28,6 +28,8 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 | 2026-10-27 | 830 | -2.4% | 7.6 | 18 | 43 | 0.00% | 880 req/s (confirm, 2m): p90 772.4 > 150 ms, p95 1066.1 > 200 ms, p99 1701.8 > 500 ms | 0.475 (1) | 0.316 (1) | response buffer (reverted: no measurable gain) | [report](runs/2026-10-27-01-51-seatmap.md) |
 | 2026-10-27 | 900 | +5.9% | 41.2 | 91.1 | 239.1 | 0.00% | 910 req/s (ramp, 30s): p90 262.3 > 150 ms, p95 612.3 > 200 ms, p99 1173.8 > 500 ms | 0.519 (1) | 0.308 (1) | leaner seat map json | [report](runs/2026-10-27-02-30-seatmap.md) |
 | 2026-10-27 | 990 | +10.0% | 23.2 | 45.8 | 169.1 | 0.00% | 1000 req/s (ramp, 30s): p90 227.1 > 150 ms, p95 459.1 > 200 ms, p99 982 > 500 ms | 0.503 (1) | 0.372 (1) | no transaction on seat map | [report](runs/2026-10-27-02-52-seatmap.md) |
+| 2026-10-27 | 970 | -2.0% | 5.2 | 12.6 | 34.3 | 0.00% | 1030 req/s (confirm, 2m): p90 152.9 > 150 ms, p95 207.1 > 200 ms | 0.446 (1) | 0.337 (1) | tomcat threads 30 (throughput same within noise, overload p99 ~halved) | [report](runs/2026-10-27-03-15-seatmap.md) |
+| 2026-10-28 | 1230 | +26.8% | 55.6 | 93.6 | 157.7 | 0.00% | 1240 req/s (refine, 1m): p90 166.5 > 150 ms | 0.578 (1) | 0.252 (1) | seat order + no show-sql | [report](runs/2026-10-28-00-43-seatmap.md) |
 
 ## book
 
