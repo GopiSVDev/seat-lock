@@ -19,7 +19,7 @@ import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
 import {
-  arrivalOptions, bookingRequest, firstFreeBooking, popularShow, randomInt, zipfIndex, BASE_URL, JSON_HEADERS,
+  arrivalOptions, bookingRequest, firstFreeBooking, popularShow, randomInt, zipfIndex, BASE_URL, GET_HEADERS, JSON_HEADERS,
 } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
@@ -32,7 +32,7 @@ export function setup() {
 }
 
 function get(path, name) {
-  const res = http.get(`${BASE_URL}${path}`, { tags: { name } });
+  const res = http.get(`${BASE_URL}${path}`, { headers: GET_HEADERS, tags: { name } });
   check(res, { 'status is 200': (r) => r.status === 200 });
 }
 

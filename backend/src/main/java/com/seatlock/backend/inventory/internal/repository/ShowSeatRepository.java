@@ -6,11 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.Collection;
-import java.util.List;
 
 public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
-
-    List<ShowSeat> findByShowIdOrderByIdAsc(Long showId);
 
     @Modifying
     @Query("""

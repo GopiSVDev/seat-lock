@@ -44,8 +44,8 @@ CLAUDE.md
 ### Load testing ###
 # Downloaded by loadtest/profile.sh
 loadtest/.tools/
-# Details stay local; only the summary (results/RESULTS.md) is committed
-loadtest/results/runs/
+# Run reports (results/runs/*.md) and RESULTS.md are committed; the raw run data stays local
+loadtest/results/runs/*.json
 loadtest/results/profiles/
 loadtest/results/diagnose/
 loadtest/results/archive/

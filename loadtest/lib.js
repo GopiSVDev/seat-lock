@@ -6,6 +6,8 @@ import exec from 'k6/execution';
 export const BASE_URL = __ENV.BASE_URL || 'http://10.24.21.250:8080';
 export const RATE = Number(__ENV.RATE || 50);
 export const JSON_HEADERS = { 'Content-Type': 'application/json' };
+// Browsers always ask for gzip; k6 only does when told (it decompresses the body itself)
+export const GET_HEADERS = { 'Accept-Encoding': 'gzip' };
 // Shows on sale at the same time; bookings spread over them (SHOW_WINDOW)
 const SHOW_WINDOW = Number(__ENV.SHOW_WINDOW || 500);
 
@@ -93,7 +95,7 @@ export function firstFreeBooking(seed) {
     const { showId, first } = seatPair(seed, n);
     const rows = http.get(`${BASE_URL}/shows/${showId}/seats`, { responseType: 'text', tags: { name: 'setup' } })
       .json('rows');
-    return rows.some((row) => row.seats.some((seat) => seat.showSeatId === first && seat.status === 'BOOKED'));
+    return rows.some((row) => row.seats.some((seat) => seat.id === first && seat.status === 'BOOKED'));
   };
   let lo = 0;
   let hi = seatPair(seed, 0).total;

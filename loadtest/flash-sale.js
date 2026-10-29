@@ -23,7 +23,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import exec from 'k6/execution';
 import { Counter, Trend } from 'k6/metrics';
-import { baseOptions, BASE_URL, JSON_HEADERS, RATE } from './lib.js';
+import { baseOptions, BASE_URL, GET_HEADERS, JSON_HEADERS, RATE } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
 const THINK_MAX_S = Number(__ENV.THINK_MAX_S ?? 3);
@@ -84,15 +84,15 @@ function pickSeats(rows, size) {
       const start = from - size + 1;
       if (run >= size && (best < 0 || Math.abs(start - centre) < Math.abs(best - centre))) best = start;
     }
-    if (best >= 0) return row.seats.slice(best, best + size).map((seat) => seat.showSeatId);
+    if (best >= 0) return row.seats.slice(best, best + size).map((seat) => seat.id);
   }
   const free = rows.flatMap((row) => row.seats).filter((seat) => seat.status === 'AVAILABLE');
-  return free.slice(0, size).map((seat) => seat.showSeatId);
+  return free.slice(0, size).map((seat) => seat.id);
 }
 
 export default function (data) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { responseType: 'text', tags: { name: 'seatmap' } });
+    const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { headers: GET_HEADERS, responseType: 'text', tags: { name: 'seatmap' } });
     if (!check(map, { 'seat map 200': (r) => r.status === 200 })) return;
     if (map.json('availableSeats') === 0) {
       usersSoldOut.add(1);
@@ -120,6 +120,7 @@ export default function (data) {
 }
 
 export function teardown(data) {
+  sleep(2); // the seat map is cached for 1 s
   const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { responseType: 'text', tags: { name: 'setup' } });
   seatsSold.add(map.json('totalSeats') - map.json('availableSeats'));
   seatsTotal.add(map.json('totalSeats'));

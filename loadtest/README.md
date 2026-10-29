@@ -41,6 +41,8 @@ never shares a core with the app. Keep the laptop otherwise idle and plugged in 
 
 Backend CPU comes from the JVM (`process_cpu_usage`). Postgres has no separate CPU number: the run file
 shows VM CPU minus backend CPU, which is Postgres plus Docker and the OS.
+VM CPU is busy time divided by total time of LXD's CPU counter over the step. LXD updates the counter only
+every ~10 s, so a plain `rate()` over a 30 s step read 10-20% too high (runs before 2026-10-28-01-23).
 
 ## Pass criteria
 
@@ -165,12 +167,19 @@ The script runs k6 in steps of increasing rate and reports the highest rate that
    very first run starts at 50 and doubles). Steps are 30 s.
 3. **Refine**: binary search between the last passing and the first failing rate, on a 10 req/s grid
    (1 req/s for `show-create`). Steps get longer (1 minute) once within 5% of the limit.
-4. **Confirm**: holds the best rate for 2 minutes. If it fails, the rate is lowered by 5% and confirmed
-   again. Only the confirmed rate is reported.
+4. **Confirm**: holds the best rate for 2 minutes. If it fails, the next try is halfway between it and
+   5% lower, then halfway again (1310 fails → 1270 → 1250 → 1240), so a small gain isn't hidden behind a
+   flat 5% step. Only the confirmed rate is reported.
 
 After each step the script queries Prometheus and records where the time went per request, how saturated
-each resource was, and how many SQL statements each request ran. The result is appended to
-`results/RESULTS.md`, and the full details are saved in `results/runs/`.
+each resource was, and how many SQL statements each request ran. The run is saved as
+`results/runs/<id>.json`; `results.mjs` then regenerates its report (`runs/<id>.md`) and
+`results/RESULTS.md` from all saved runs, so changing the report format and running
+`node loadtest/results.mjs` updates every past run too. Rows of runs whose JSON is not on this machine
+(`runs/*.json` is git-ignored) are kept as they are. Each failed step lists the criteria it missed;
+RESULTS.md describes every test, its pass criteria, and what limited each run.
+For a change that was reverted, set `"reverted": true` in its run JSON and note why: "vs previous" then
+compares the next run with the last kept result.
 
 After booking runs, `loadtest/check.sh` confirms that seats and bookings agree (every count 0).
 
@@ -256,11 +265,12 @@ rate and duration means cheaper requests.
 | `lib.js`                 | Shared k6 helpers: options and per-request metrics, Zipf, seat and booking id formulas |
 | `seed.sh`, `seed.sql`    | Seed the dataset and write `data/seed.json`                                         |
 | `check.sh`               | Seat and booking consistency check (all counts must be 0)                           |
-| `find-capacity.mjs`      | Capacity search; writes `results/RESULTS.md` and `results/runs/`                    |
+| `find-capacity.mjs`      | Capacity search; saves `results/runs/<id>.json`                                     |
+| `results.mjs`            | Generates the run reports and `results/RESULTS.md` from `results/runs/*.json`       |
 | `profile.sh`             | CPU profiling with async-profiler; writes `results/profiles/`                       |
 | `diagnose.sh`            | Time breakdown from Postgres, the VM kernel and the JVM; writes `results/diagnose/` |
-| `results/RESULTS.md`     | History of all capacity runs, one table per test (in git)                           |
-| `results/runs/`          | Per run: every step with latency, time breakdown and saturation (git-ignored)       |
+| `results/RESULTS.md`     | History of all runs, one section per test with what it does and its pass criteria   |
+| `results/runs/`          | Per run: `.md` report with every step, time breakdown, SQL and saturation (in git) and the `.json` record it is generated from (git-ignored) |
 | `results/profiles/`      | Per profile: flame graph and summaries (git-ignored)                                |
 | `data/`                  | `seed.json` written by `seed.sh` (git-ignored)                                      |
 | `../monitoring/`         | Prometheus scrape config (VM backend, exporter, LXD) and `pg_stat_statements` setup |
