@@ -1,13 +1,22 @@
 // Shared helpers for the k6 scenarios. Ids follow the formulas in seed.sql.
 
 import http from 'k6/http';
+import { check } from 'k6';
 import exec from 'k6/execution';
+import { Counter } from 'k6/metrics';
 
 export const BASE_URL = __ENV.BASE_URL || 'http://10.24.21.250:8080';
+// CDN edge for the seat map layout: nginx on the laptop (loadtest/cdn), asks BASE_URL on a miss
+export const CDN_URL = __ENV.CDN_URL || 'http://localhost:8090';
 export const RATE = Number(__ENV.RATE || 50);
 export const JSON_HEADERS = { 'Content-Type': 'application/json' };
+// Browsers always ask for gzip; k6 only does when told (it decompresses the body itself)
+export const GET_HEADERS = { 'Accept-Encoding': 'gzip' };
 // Shows on sale at the same time; bookings spread over them (SHOW_WINDOW)
 const SHOW_WINDOW = Number(__ENV.SHOW_WINDOW || 500);
+// Layout requests answered by the CDN edge vs passed on to the app (X-Cache-Status from nginx)
+const cdnHits = new Counter('cdn_hits');
+const cdnMisses = new Counter('cdn_misses');
 
 // Options shared by all scenarios. Requests of the scenario itself carry the tag load:yes, so setup()
 // and teardown() requests stay out of the judged numbers. The always-true thresholds only make k6
@@ -91,9 +100,7 @@ export function bookingRequest(seed, n) {
 export function firstFreeBooking(seed) {
   const booked = (n) => {
     const { showId, first } = seatPair(seed, n);
-    const rows = http.get(`${BASE_URL}/shows/${showId}/seats`, { responseType: 'text', tags: { name: 'setup' } })
-      .json('rows');
-    return rows.some((row) => row.seats.some((seat) => seat.showSeatId === first && seat.status === 'BOOKED'));
+    return availability(showId, 'setup').unavailable.includes(first);
   };
   let lo = 0;
   let hi = seatPair(seed, 0).total;
@@ -103,4 +110,40 @@ export function firstFreeBooking(seed) {
     else hi = mid;
   }
   return lo;
+}
+
+// Seat map, split like the API: layout (immutable, served by the CDN edge) + availability (ids of seats
+// that can't be booked, always from the app). Parsed body, or null if the request failed (counted by the check).
+export function layout(showId, name) {
+  const res = http.get(`${CDN_URL}/shows/${showId}/layout`, cdnParams(name, 'text'));
+  countCdn(res);
+  return check(res, { [`${name} 200`]: (r) => r.status === 200 }) ? res.json() : null;
+}
+
+export function availability(showId, name) {
+  const res = http.get(`${BASE_URL}/shows/${showId}/availability`, { headers: GET_HEADERS, responseType: 'text', tags: { name } });
+  return check(res, { [`${name} 200`]: (r) => r.status === 200 }) ? res.json() : null;
+}
+
+// A user opening a seat map in a browser: layout from the CDN, availability from the app.
+// Bodies are discarded; only the requests matter here.
+export function viewSeatMap(showId) {
+  const res = http.get(`${CDN_URL}/shows/${showId}/layout`, cdnParams('layout'));
+  countCdn(res);
+  check(res, { 'layout 200': (r) => r.status === 200 });
+  const avail = http.get(`${BASE_URL}/shows/${showId}/availability`, { headers: GET_HEADERS, tags: { name: 'availability' } });
+  check(avail, { 'availability 200': (r) => r.status === 200 });
+}
+
+// CDN requests carry load:cdn instead of load:yes, so the judged totals (rate, errors, CPU per request)
+// stay about the app; their latency is still reported (and judged) per request name.
+function cdnParams(name, responseType) {
+  const params = { headers: GET_HEADERS, tags: { name, load: 'cdn' } };
+  if (responseType) params.responseType = responseType;
+  return params;
+}
+
+function countCdn(res) {
+  if (res.headers['X-Cache-Status'] === 'HIT') cdnHits.add(1);
+  else cdnMisses.add(1);
 }

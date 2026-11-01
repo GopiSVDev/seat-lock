@@ -1,0 +1,21 @@
+# VM only: postgres and backend on the VM's network directly (host networking), so requests skip
+# Docker's bridge, veth and NAT/conntrack on every packet. Local dev keeps docker-compose.yml alone.
+#   docker compose -f docker-compose.yml -f docker-compose.vm.yml up -d postgres backend
+# Same ports as the base file (BACKEND_PORT, POSTGRES_PORT), now bound on the VM itself.
+# NET_RAW dropped: with the host's network, raw sockets could capture the VM's traffic.
+services:
+  postgres:
+    network_mode: host
+    ports: !reset []
+    cap_drop: [NET_RAW]
+    environment:
+      # Postgres, pg_isready and psql all default to PGPORT: listen on the published port directly
+      PGPORT: ${POSTGRES_PORT:?POSTGRES_PORT is not set}
+
+  backend:
+    network_mode: host
+    ports: !reset []
+    cap_drop: [NET_RAW]
+    environment:
+      # No Docker DNS on the host network: Postgres is on the same machine
+      DB_URL: jdbc:postgresql://localhost:${POSTGRES_PORT:?POSTGRES_PORT is not set}/${POSTGRES_DB:?POSTGRES_DB is not set}

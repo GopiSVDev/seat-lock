@@ -92,6 +92,28 @@ services:
       DATA_SOURCE_USER: ${POSTGRES_USER:?POSTGRES_USER is not set}
       DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
 
+  # --- Load test CDN edge: caches the seat map layout in front of the VM (loadtest/cdn) ---
+  # docker compose --profile cdn up -d cdn      (restart it for a cold CDN)
+  # Pinned to CPUs 8-9, so k6 runs on 0-7 and the VM keeps CPU 10.
+  cdn:
+    image: nginx:1.28.0-alpine
+    container_name: seat-lock-cdn
+    profiles: [cdn]
+    restart: unless-stopped
+    network_mode: host
+    cpuset: "8-9"
+    environment:
+      VM_IP: ${VM_IP:?VM_IP is not set}
+      BACKEND_PORT: ${BACKEND_PORT:?BACKEND_PORT is not set}
+      # Render the template outside conf.d, so the image's default server (port 80) isn't loaded
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx/edge
+    volumes:
+      - ./loadtest/cdn/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./loadtest/cdn/edge.conf.template:/etc/nginx/templates/edge.conf.template:ro
+    tmpfs:
+      - /etc/nginx/edge
+      - /var/cache/nginx/edge:size=256m
+
 volumes:
   postgres_data:
   prometheus_data:
