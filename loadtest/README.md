@@ -135,6 +135,9 @@ Ids are explicit and follow formulas the scripts rely on (documented at the top 
   sudo lxc exec seat-lock -- sh -c 'apt-get update && apt-get install -y curl procps btop && curl -fsSL https://get.docker.com | sh'
   # no package updates in the background during runs
   sudo lxc exec seat-lock -- systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
+  # Postgres runs as its own user and reads monitoring/postgres/init.sql from /root/seat-lock on first
+  # start; /root is 700 on Debian, so let other users pass through it (not list it)
+  sudo lxc exec seat-lock -- chmod 711 /root
   ```
 - In `.env`: `VM_IP=10.24.21.250` (postgres-exporter connects to the VM's Postgres with it),
   `DB_POOL_SIZE` and `TOMCAT_MAX_THREADS` (Spring's defaults are 10 and 200).
