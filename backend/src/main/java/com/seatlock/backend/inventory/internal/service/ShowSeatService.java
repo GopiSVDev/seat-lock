@@ -65,17 +65,18 @@ public class ShowSeatService implements InventoryApi {
     @Transactional
     public List<BookedSeat> bookSeats(Long showId, List<Long> showSeatIds) {
         Set<Long> requested = new HashSet<>(showSeatIds);
-        int booked = showSeatRepository.bookIfAvailable(showId, requested);
-        List<ShowSeat> showSeats = showSeatRepository.findAllById(requested);
+        List<BookedSeat> booked = showSeatRepository.bookIfAvailable(showId, requested);
 
-        if (booked != requested.size()) {
-            boolean allValid = showSeats.size() == requested.size() && showSeats.stream().allMatch(seat -> seat.getShowId().equals(showId));
-
-            if (!allValid) throw new NotFoundException("Seats for show", showId);
-
-            throw new ConflictException("One or more seats are already booked");
+        if (booked.size() == requested.size()) {
+            return booked;
         }
 
-        return showSeats.stream().map(seat -> new BookedSeat(seat.getId(), seat.getLabel())).toList();
+        // Failure only: tell unknown seats from booked ones (the exception rolls back the partial update)
+        List<ShowSeat> showSeats = showSeatRepository.findAllById(requested);
+        boolean allValid = showSeats.size() == requested.size() && showSeats.stream().allMatch(seat -> seat.getShowId().equals(showId));
+
+        if (!allValid) throw new NotFoundException("Seats for show", showId);
+
+        throw new ConflictException("One or more seats are already booked");
     }
 }
