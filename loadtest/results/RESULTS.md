@@ -43,6 +43,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 | Date | Stable req/s | vs previous | p90 ms | p95 ms | p99 ms | Errors | Limited by | CPU backend | CPU db | Note | Run |
 |---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|
 | 2026-10-23 | 470 | - | 57.1 | 91.7 | 196.5 | 0.00% | 480 req/s (refine, 30s): p90 457.8 > 150 ms, p95 597.3 > 200 ms, p99 1178.2 > 500 ms | 0.369 (1) | 0.584 (1) | baseline | [report](runs/2026-10-23-02-30-book.md) |
+| 2026-11-01 | 570 | +21.3% | 17.1 | 35.5 | 72.7 | 0.00% | 590 req/s (confirm, 2m): p95 208.2 > 200 ms, p99 554.7 > 500 ms | 0.362 (1) | 0.433 (1) | re-baseline: host net, threads 10/pool 5, no show-sql | [report](runs/2026-11-01-07-17-book.md) |
 
 ## mixed
 
