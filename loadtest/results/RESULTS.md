@@ -46,6 +46,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 | 2026-11-01 | 570 | +21.3% | 17.1 | 35.5 | 72.7 | 0.00% | 590 req/s (confirm, 2m): p95 208.2 > 200 ms, p99 554.7 > 500 ms | 0.362 (1) | 0.433 (1) | re-baseline: host net, threads 10/pool 5, no show-sql | [report](runs/2026-11-01-07-17-book.md) |
 | 2026-11-01 | 760 | +33.3% | 83.2 | 114.9 | 333.6 | 0.00% | 770 req/s (refine, 1m): p90 368.4 > 150 ms, p95 493 > 200 ms, p99 526.4 > 500 ms | 0.41 (1) | 0.482 (1) | update returning instead of re-select | [report](runs/2026-11-01-07-56-book.md) |
 | 2026-11-01 | 800 | +5.3% | 63.2 | 98.9 | 160.9 | 0.00% | 810 req/s (refine, 30s): p90 417.1 > 150 ms, p95 593.1 > 200 ms, p99 686.9 > 500 ms | 0.405 (1) | 0.491 (1) | batch booking seat inserts (sequence ids) | [report](runs/2026-11-01-08-19-book.md) |
+| 2026-11-01 | 870 | +8.8% | 27.4 | 40.3 | 71.9 | 0.00% | 900 req/s (confirm, 2m): p95 215.9 > 200 ms | 0.428 (1) | 0.497 (1) | pool 5 → 10 (threads 10) | [report](runs/2026-11-01-08-37-book.md) |
 
 ## mixed
 
