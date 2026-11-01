@@ -282,6 +282,7 @@ export function writeResultsPage(resultsDir) {
   const tests = [...new Set([...runs.map((r) => r.test), ...kept.map((k) => k.test)])].sort(
     (a, b) => order(a) - order(b) || a.localeCompare(b),
   );
+  const sideRuns = [];
   const lines = [
     '# Load test results',
     '',
@@ -313,9 +314,16 @@ export function writeResultsPage(resultsDir) {
         previousRate = stableRate ?? previousRate;
         return line;
       }
+      const change = changeVs(run, previousRate, isEvent);
+      // Reverted runs and changes within the noise are listed apart. A reverted run is not the baseline for the
+      // next run; a small kept change is (it is in the code)
+      if (run.reverted || (change != null && Math.abs(change) <= SMALL_CHANGE)) {
+        sideRuns.push(sideRow(run, change, isEvent));
+        if (!run.reverted) previousRate = run.final?.rate ?? previousRate;
+        return null;
+      }
       const cells = isEvent ? eventRow(run, latest) : capacityRow(run, previousRate, latest);
-      // A reverted experiment is not the baseline for the next run
-      if (!run.reverted) previousRate = run.final?.rate ?? previousRate;
+      previousRate = run.final?.rate ?? previousRate;
       return cells && `| ${cells.join(' | ')} |`;
     });
     lines.push(
@@ -328,10 +336,48 @@ export function writeResultsPage(resultsDir) {
       ...rows.filter(Boolean),
     );
   }
+  if (sideRuns.length) {
+    lines.push(
+      '',
+      SIDE_HEADING,
+      '',
+      `Runs left out of the tables above: experiments that were reverted, and kept changes within ±${SMALL_CHANGE * 100}%`,
+      '(capacity search noise). **vs previous** compares with the kept run before it; kept runs listed here are',
+      'still the baseline for the next "vs previous" above.',
+      '',
+      '| Date | Test | Result | vs previous | Status | Experiment | Why reverted | Run |',
+      '|---|---|---:|---:|---|---|---|---|',
+      ...sideRuns.map((cells) => `| ${cells.join(' | ')} |`),
+    );
+  }
   writeFileSync(join(resultsDir, 'RESULTS.md'), lines.join('\n') + '\n');
 }
 
 const TEST_MODES = { 'flash-sale': 'event' };
+const SIDE_HEADING = '## Reverted or within ±5%';
+const SMALL_CHANGE = 0.05;
+
+function changeVs(run, previousRate, isEvent) {
+  const rate = run.final?.rate;
+  return !isEvent && rate && previousRate ? (rate - previousRate) / previousRate : null;
+}
+
+// Note convention for reverted runs: "<experiment> (reverted: <why>)"
+function sideRow(run, change, isEvent) {
+  const [, experiment, why] = run.note.match(/^(.*?)\s*\(reverted: (.*)\)$/) ?? [, run.note, '-'];
+  const event = isEvent && run.steps.find((x) => x.phase === 'event');
+  const rate = run.final?.rate;
+  return [
+    run.startedAt.slice(0, 10),
+    run.test,
+    event ? verdict(event) : rate ? `${rate} req/s` : 'none',
+    change == null ? '-' : `${change >= 0 ? '+' : ''}${(change * 100).toFixed(1)}%`,
+    run.reverted ? 'reverted' : 'kept',
+    experiment,
+    why,
+    `[report](runs/${run.id}.md)`,
+  ];
+}
 
 // Rows already in RESULTS.md for runs whose JSON is not on this machine (runs/*.json is git-ignored): kept as they are,
 // along with each test's Pass line for tests with no saved run left
@@ -341,6 +387,7 @@ function keptRows(historyFile, savedIds) {
   if (!existsSync(historyFile)) return { kept, passLines };
   let test = null;
   for (const line of readFileSync(historyFile, 'utf8').split('\n')) {
+    if (line === SIDE_HEADING) break;
     test = line.match(/^## (\S+)/)?.[1] ?? test;
     if (test && line.startsWith('Pass: ')) passLines.set(test, line);
     const id = line.match(/\]\(runs\/([^)]+)\.md\)/)?.[1];
