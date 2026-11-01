@@ -37,6 +37,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 | 2026-10-28 | 2130 | +9.2% | 44.2 | 78.7 | 152.6 | 0.00% | 2190 req/s (confirm, 2m): p90 249.4 > 150 ms, p95 489.1 > 200 ms, p99 673.5 > 500 ms | 0.673 (1) | 0.171 (1) | cache serialized seat map json | [report](runs/2026-10-28-03-17-seatmap.md) |
 | 2026-11-01 | 3430 | +61.0% | 18.5 | 72.1 | 235.3 | 0.00% | 3440 req/s (ramp, 30s): p90 249 > 150 ms, p95 323 > 200 ms, availability p95 323 > 200 ms | 0.588 (1) | 0.241 (1) | layout/availability split + CDN edge | [report](runs/2026-11-01-01-51-seatmap.md) |
 | 2026-11-01 | 4150 | +21.0% | 24.9 | 52.8 | 104.3 | 0.00% | 4260 req/s (confirm, 2m): p90 177 > 150 ms, p95 226.3 > 200 ms, availability p95 226.3 > 200 ms | 0.634 (1) | 0.246 (1) | host networking (no Docker NAT) | [report](runs/2026-11-01-02-42-seatmap.md) |
+| 2026-11-01 | 3980 | -4.1% | 7.9 | 34.8 | 167.5 | 0.00% | 3990 req/s (refine, 1m): p95 330.9 > 200 ms, p99 522.8 > 500 ms, availability p95 330.9 > 200 ms +1 more | 0.592 (1) | 0.218 (1) | JVM heap fixed + young gen half (NewRatio=1) | [report](runs/2026-11-01-03-35-seatmap.md) |
 
 ## book
 
