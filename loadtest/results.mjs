@@ -28,6 +28,21 @@ export const TESTS = {
     'Runs once, after warming up the JVM with `mixed`.',
 };
 
+// What runs from before the seat map split (2026-11-01) sent; their reports keep describing that
+const SEAT_MAP_SPLIT = '2026-11-01';
+const BEFORE_SPLIT = {
+  seatmap:
+    '`GET /shows/{id}/seats` on 250-seat shows; a few popular shows get most requests (Zipf). ' +
+    'The read a user makes before booking.',
+  mixed:
+    'Browsing and booking together: 30% seat map, 20% show, 15% movie, 5% theatre, 5% screen, ' +
+    '10% get booking, 15% book (bookings never collide).',
+};
+
+function testText(test, startedAt) {
+  return (startedAt < SEAT_MAP_SPLIT && BEFORE_SPLIT[test]) || TESTS[test];
+}
+
 export function targetText(config) {
   const limits = `errors < ${pct(config.maxErrorRate)}, dropped < 1%`;
   return config.mode === 'event'
@@ -121,7 +136,7 @@ export function writeRunReport(run, runsDir) {
       run.note ? `> ${run.note}\n` : '',
       `- Date: ${run.startedAt}`,
       `- Commit: ${run.commit}${run.uncommittedChanges ? ' (+changes)' : ''}`,
-      ...(TESTS[test] ? [`- Test: ${TESTS[test]}`] : []),
+      ...(testText(test, run.startedAt) ? [`- Test: ${testText(test, run.startedAt)}`] : []),
       `- Pass: ${targetText(config)}`,
       isEvent
         ? `- Failed on: ${eventStep && eventStep.pass === false ? failures(eventStep, config).join(', ') : '-'}`

@@ -165,8 +165,10 @@ async-profiler is downloaded automatically by `profile.sh` into `loadtest/.tools
    tar -c $(git ls-files -co --exclude-standard) .env | sudo lxc exec seat-lock -- sh -c 'mkdir -p /root/seat-lock && tar -x -C /root/seat-lock'
    docker compose build backend
    docker save seat-lock-backend | sudo lxc exec seat-lock -- docker load
-   sudo lxc exec seat-lock -- sh -c 'cd /root/seat-lock && docker compose up -d postgres backend'
+   sudo lxc exec seat-lock -- sh -c 'cd /root/seat-lock && docker compose -f docker-compose.yml -f docker-compose.vm.yml up -d postgres backend'
    ```
+   `docker-compose.vm.yml` puts postgres and backend on the VM's network directly (host networking: no
+   Docker bridge/NAT per packet, `NET_RAW` dropped). Ports stay `BACKEND_PORT` and `POSTGRES_PORT`.
 3. Seed the dataset: `loadtest/seed.sh`. Reseed when `book`/`mixed` run out of seats and after
    `show-create`. `seatmap` and `flash-sale` don't need a reseed.
 
@@ -182,6 +184,8 @@ The script runs k6 in steps of increasing rate and reports the highest rate that
 
 1. **Warm-up** (not judged): 50, 100 and 200 req/s for 30 s each, then 1-minute steps at 300 req/s until
    the backend's CPU per request changes by less than 5% between two steps (the JIT has finished).
+   When the ramp starts far above that, 30 s steps at 50% and 75% of the ramp start lead up to it, so the
+   first judged step isn't a cold jump from 300 req/s.
 2. **Ramp**: starts at about 90% of the previous result for the same test and grows 1.1× per step (the
    very first run starts at 50 and doubles). Steps are 30 s.
 3. **Refine**: binary search between the last passing and the first failing rate, on a 10 req/s grid

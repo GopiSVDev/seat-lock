@@ -15,7 +15,9 @@
 //                flooded), then 1-minute steps at WARMUP_RATE until the backend's CPU cost per
 //                request changes less than WARMUP_TOLERANCE (5%) between two steps, i.e. the JIT
 //                has finished optimizing. After a restart this takes several minutes;
-//                on an already-warm backend it stops after two steps.
+//                on an already-warm backend it stops after two steps. When the ramp starts far above the
+//                warm-up rate, two more 30s steps at 50% and 75% of the ramp start lead up to it (also not
+//                judged), so the first judged step isn't a cold jump (300 -> 3080 once failed a rate 4150 passed).
 //   2. ramp      raise the rate step by step until a step misses the target. If this test has a
 //                previous result, it starts at ~90% of it and grows 1.1x per step; otherwise it
 //                starts at 50 and doubles. START_RATE / GROWTH override both.
@@ -372,6 +374,21 @@ function cpuMsPerRequest(step) {
 
 function warmUp() {
   for (const rate of [50, 100, 200].filter((r) => r < config.warmupRate)) runStep('warmup', rate, '30s', warmupScript);
+  warmUpRate();
+  if (!isEvent) leadUp();
+}
+
+// Steps between the warm-up rate and the ramp start: a jump from 300 to thousands of req/s (heap, connections,
+// queues all sized for low load) can fail a step the backend passes once it's there
+function leadUp() {
+  for (const share of [0.5, 0.75]) {
+    const rate = gridDown(config.startRate * share);
+    if (rate > config.warmupRate) runStep('warmup', rate, '30s');
+  }
+}
+
+// Steps at WARMUP_RATE until the JIT has finished optimizing (CPU per request stops changing)
+function warmUpRate() {
   let previous = null;
   for (let i = 0; i < config.warmupMaxSteps; i++) {
     const cost = cpuMsPerRequest(runStep('warmup', config.warmupRate, config.warmupDuration, warmupScript));
