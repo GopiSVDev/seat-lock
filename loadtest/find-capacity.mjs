@@ -38,7 +38,9 @@
 // Results go to loadtest/results/: runs/<id>.json is the record; runs/<id>.md and RESULTS.md are generated
 // from all saved runs by results.mjs (node loadtest/results.mjs rebuilds them).
 //
-// The app runs in the LXD VM (VM name, BASE_URL); k6 and Prometheus run on the laptop.
+// The app runs in the LXD VM (VM name, BASE_URL); k6 and Prometheus run on the laptop. Tests that read the
+// seat map get its layout through the CDN edge (CDN_URL, nginx on the laptop, docker compose --profile cdn):
+// its requests aren't part of the judged totals (tag load:cdn), its hit rate is saved per step.
 // Backend CPU comes from the JVM, VM CPU and memory from LXD's metrics endpoint.
 
 import { spawnSync, execSync } from 'node:child_process';
@@ -82,6 +84,7 @@ const config = {
   warmupMaxSteps: Number(env('WARMUP_MAX_STEPS', 8)),
   cooldownSeconds: Number(env('COOLDOWN_SECONDS', 10)),
   baseUrl: env('BASE_URL', 'http://10.24.21.250:8080'),
+  cdnUrl: env('CDN_URL', 'http://localhost:8090'),
   vm: env('VM', 'seat-lock'),
   prometheusUrl: env('PROMETHEUS_URL', 'http://localhost:9090/api/v1/write'),
   prometheusQueryUrl: env('PROMETHEUS_QUERY_URL', 'http://localhost:9090/api/v1/query'),
@@ -93,6 +96,13 @@ const warmupScript = join(here, `${config.warmupTest}.js`);
 const isEvent = config.mode === 'event';
 if (!test || !existsSync(script) || !existsSync(warmupScript)) {
   console.error('usage: node loadtest/find-capacity.mjs <test> [note]   (e.g. book)');
+  process.exit(1);
+}
+
+// Without the CDN edge every layout request fails, but outside the judged totals: refuse to start
+const usesCdn = [script, warmupScript].some((f) => /viewSeatMap|layout\(/.test(readFileSync(f, 'utf8')));
+if (usesCdn && sh(`curl -s -o /dev/null -w '%{http_code}' ${config.cdnUrl}/shows/1/layout`) !== '200') {
+  console.error(`CDN edge not answering at ${config.cdnUrl}: docker compose --profile cdn up -d cdn`);
   process.exit(1);
 }
 
@@ -165,6 +175,9 @@ function runStep(phase, rate, duration, stepScript = script) {
     droppedRate: iterations + dropped > 0 ? dropped / (iterations + dropped) : 0,
     byRequest: requestBreakdown(m),
   };
+  // Layout requests answered by the CDN edge (the rest went on to the app)
+  const cdnRequests = (m.cdn_hits?.count ?? 0) + (m.cdn_misses?.count ?? 0);
+  if (cdnRequests > 0) step.cdnHitPct = round((100 * (m.cdn_hits?.count ?? 0)) / cdnRequests);
   // Seats confirmed to clients vs seats marked sold afterwards (flash-sale); a difference is an oversell
   if (m.seats_sold) {
     step.sale = {
@@ -203,7 +216,10 @@ function runStep(phase, rate, duration, stepScript = script) {
       `sql ${t.dbStatementsPerRequest ?? '?'}/req`,
   );
   if (step.byRequest.length > 1) {
-    console.log(`${' '.repeat(37)}${step.byRequest.map((r) => `${r.label} p95 ${r.p95Ms}/p99 ${r.p99Ms}ms`).join('  ')}`);
+    console.log(
+      `${' '.repeat(37)}${step.byRequest.map((r) => `${r.label} p95 ${r.p95Ms}/p99 ${r.p99Ms}ms`).join('  ')}` +
+        (step.cdnHitPct == null ? '' : `  |  CDN hit ${step.cdnHitPct}%`),
+    );
   }
   const sale = step.sale;
   if (sale) {

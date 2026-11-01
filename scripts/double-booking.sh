@@ -16,7 +16,7 @@ SHOW_ID=$(curl -sf -X POST "$BASE_URL/shows" -H 'Content-Type: application/json'
   -d "{\"movieId\":$MOVIE_ID,\"screenId\":$SCREEN_ID,\"startTime\":\"$START_TIME\",\"language\":\"English\",\"format\":\"TWO_D\"}" \
   | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
-SEAT_ID=$(curl -sf "$BASE_URL/shows/$SHOW_ID/seats" \
+SEAT_ID=$(curl -sf "$BASE_URL/shows/$SHOW_ID/layout" \
   | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
 echo "Show $SHOW_ID, showSeatId $SEAT_ID, firing $REQUESTS concurrent bookings..."

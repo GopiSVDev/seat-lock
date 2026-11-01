@@ -1,0 +1,24 @@
+upstream origin {
+    server ${VM_IP}:${BACKEND_PORT};
+    keepalive 32;
+}
+
+server {
+    listen 8090;
+
+    # Only the layout: availability changes every second, so clients get it from the app directly.
+    # How long to keep a copy comes from the app's Cache-Control; responses without one (404) aren't cached.
+    location ~ ^/shows/[0-9]+/layout$ {
+        proxy_pass http://origin;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_cache edge;
+        # Concurrent misses for one show wait for a single origin request (CDN request collapsing)
+        proxy_cache_lock on;
+        add_header X-Cache-Status $upstream_cache_status always;
+    }
+
+    location / {
+        return 404;
+    }
+}

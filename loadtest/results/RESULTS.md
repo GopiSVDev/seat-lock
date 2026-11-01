@@ -17,7 +17,7 @@ A row's report link has every step of that run: latency, where the time went, SQ
 
 ## seatmap
 
-`GET /shows/{id}/seats` on 250-seat shows; a few popular shows get most requests (Zipf). The read a user makes before booking.
+Seat map views of 250-seat shows; a few popular shows get most views (Zipf). The read a user makes before booking. Since 2026-11-01 a view is `GET /shows/{id}/availability` from the app plus `GET /shows/{id}/layout` through a CDN edge (nginx on the laptop; only misses reach the app, hit rate in the run report); before, one `GET /shows/{id}/seats`. Rate = views/s; judged req/s = requests to the app.
 
 Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type), errors < 1.00%, dropped < 1%.
 
@@ -35,6 +35,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 | 2026-10-28 | 1320 | +6.5% | 34.6 | 55.7 | 95.2 | 0.00% | 1360 req/s (confirm, 2m): p90 261.8 > 150 ms, p95 332.6 > 200 ms | 0.566 (1) | 0.289 (1) | threads 10, pool 5 (vs true ~1300 before: +2-4%; conn hold at the knee 1.9 → 0.6 ms) | [report](runs/2026-10-28-02-18-seatmap.md) |
 | 2026-10-28 | 1950 | +47.7% | 56.3 | 89.2 | 155.8 | 0.00% | 1960 req/s (refine, 1m): p90 228.8 > 150 ms, p95 276.5 > 200 ms | 0.679 (1) | 0.19 (1) | seat map cache 1s | [report](runs/2026-10-28-02-46-seatmap.md) |
 | 2026-10-28 | 2130 | +9.2% | 44.2 | 78.7 | 152.6 | 0.00% | 2190 req/s (confirm, 2m): p90 249.4 > 150 ms, p95 489.1 > 200 ms, p99 673.5 > 500 ms | 0.673 (1) | 0.171 (1) | cache serialized seat map json | [report](runs/2026-10-28-03-17-seatmap.md) |
+| 2026-11-01 | 3430 | +61.0% | 18.5 | 72.1 | 235.3 | 0.00% | 3440 req/s (ramp, 30s): p90 249 > 150 ms, p95 323 > 200 ms, availability p95 323 > 200 ms | 0.588 (1) | 0.241 (1) | layout/availability split + CDN edge | [report](runs/2026-11-01-01-51-seatmap.md) |
 
 ## book
 
@@ -48,7 +49,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 
 ## mixed
 
-Browsing and booking together: 30% seat map, 20% show, 15% movie, 5% theatre, 5% screen, 10% get booking, 15% book (bookings never collide).
+Browsing and booking together: 30% seat map view, 20% show, 15% movie, 5% theatre, 5% screen, 10% get booking, 15% book (bookings never collide).
 
 Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type), errors < 1.00%, dropped < 1%.
 

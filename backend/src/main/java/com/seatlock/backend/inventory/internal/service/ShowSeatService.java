@@ -5,10 +5,12 @@ import com.seatlock.backend.inventory.BookedSeat;
 import com.seatlock.backend.inventory.InventoryApi;
 import com.seatlock.backend.inventory.internal.domain.SeatType;
 import com.seatlock.backend.inventory.internal.domain.ShowSeat;
+import com.seatlock.backend.inventory.internal.repository.LayoutSeat;
+import com.seatlock.backend.inventory.internal.repository.SeatAvailability;
 import com.seatlock.backend.inventory.internal.repository.SeatMapRepository;
-import com.seatlock.backend.inventory.internal.repository.SeatMapSeat;
 import com.seatlock.backend.inventory.internal.repository.ShowSeatRepository;
-import com.seatlock.backend.inventory.internal.web.dto.SeatMapResponse;
+import com.seatlock.backend.inventory.internal.web.dto.SeatAvailabilityResponse;
+import com.seatlock.backend.inventory.internal.web.dto.SeatLayoutResponse;
 import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -37,16 +39,26 @@ public class ShowSeatService implements InventoryApi {
         showSeatRepository.saveAll(showSeats);
     }
 
-    // No transaction: a single SELECT runs in its own implicit one (saves BEGIN/COMMIT on a hot path).
-    // Add @Transactional(readOnly = true) back if this ever runs more than one query.
-    public SeatMapResponse getSeatMap(Long showId) {
-        List<SeatMapSeat> seats = seatMapRepository.findSeatMap(showId);
+    // No transaction on the seat map reads: a single SELECT runs in its own implicit one (saves BEGIN/COMMIT
+    // on a hot path). Add @Transactional(readOnly = true) back if one of them ever runs more than one query.
+    public SeatLayoutResponse getLayout(Long showId) {
+        List<LayoutSeat> seats = seatMapRepository.findLayout(showId);
 
         if (seats.isEmpty()) {
             throw new NotFoundException("Show", showId);
         }
 
-        return SeatMapResponse.from(showId, seats);
+        return SeatLayoutResponse.from(showId, seats);
+    }
+
+    public SeatAvailabilityResponse getAvailability(Long showId) {
+        SeatAvailability availability = seatMapRepository.findAvailability(showId);
+
+        if (availability.totalSeats() == 0) {
+            throw new NotFoundException("Show", showId);
+        }
+
+        return SeatAvailabilityResponse.from(showId, availability);
     }
 
     @Override

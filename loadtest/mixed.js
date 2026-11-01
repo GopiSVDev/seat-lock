@@ -1,6 +1,7 @@
-// Mixed test: the traffic of people browsing and booking, one request per iteration.
+// Mixed test: the traffic of people browsing and booking, one request to the app per iteration (a seat map
+// view also fetches the layout from the CDN edge, see seatmap.js).
 // The mix is fixed by iteration number, so every run sends exactly the same shares:
-//   30% GET /shows/{id}/seats   seat map, Zipf-popular shows
+//   30% seat map view           layout (CDN) + availability, Zipf-popular shows
 //   20% GET /shows/{id}         show details, Zipf-popular shows
 //   15% GET /movies/{id}        Zipf-popular movies
 //    5% GET /theatres/{id}
@@ -8,10 +9,11 @@
 //   10% GET /bookings/{id}      seeded bookings
 //   15% POST /bookings          2 seats, no contention (same seat order as book.js)
 // Latency is reported per request type, so slow bookings can't hide behind fast reads.
-//   node loadtest/find-capacity.mjs mixed
+//   docker compose --profile cdn up -d cdn
+//   taskset -c 0-7 node loadtest/find-capacity.mjs mixed
 //
 // Single run by hand:
-//   RATE=200 DURATION=1m k6 run loadtest/mixed.js
+//   RATE=200 DURATION=1m taskset -c 0-7 k6 run loadtest/mixed.js
 //
 // Env: RATE (req/s, default 50), DURATION (default 1m), BASE_URL (default http://10.24.21.250:8080, the LXD VM)
 
@@ -19,13 +21,14 @@ import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
 import {
-  arrivalOptions, bookingRequest, firstFreeBooking, popularShow, randomInt, zipfIndex, BASE_URL, GET_HEADERS, JSON_HEADERS,
+  arrivalOptions, bookingRequest, firstFreeBooking, popularShow, randomInt, viewSeatMap, zipfIndex, BASE_URL, GET_HEADERS,
+  JSON_HEADERS,
 } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
 const BOOK_FROM = 85; // buckets 85-99 book
 
-export const options = arrivalOptions('mixed', ['seatmap', 'show', 'movie', 'theatre', 'screen', 'booking', 'book']);
+export const options = arrivalOptions('mixed', ['layout', 'availability', 'show', 'movie', 'theatre', 'screen', 'booking', 'book']);
 
 export function setup() {
   return { start: firstFreeBooking(seed) };
@@ -39,7 +42,7 @@ function get(path, name) {
 export default function (data) {
   const i = exec.scenario.iterationInTest;
   const bucket = i % 100;
-  if (bucket < 30) get(`/shows/${popularShow(seed)}/seats`, 'seatmap');
+  if (bucket < 30) viewSeatMap(popularShow(seed));
   else if (bucket < 50) get(`/shows/${popularShow(seed)}`, 'show');
   else if (bucket < 65) get(`/movies/${zipfIndex(seed.movies) + 1}`, 'movie');
   else if (bucket < 70) get(`/theatres/${randomInt(1, seed.theatres)}`, 'theatre');

@@ -35,9 +35,18 @@ Everything else runs on the laptop, outside the budget:
 | Prometheus           | laptop (Docker, host network) | Scrapes the backend in the VM, postgres-exporter and LXD |
 | postgres-exporter    | laptop (Docker, host network) | `pg_stat_statements` of the VM's Postgres                |
 | LXD metrics endpoint | laptop (LXD itself)           | VM CPU and memory, from outside the VM                   |
+| CDN edge (nginx)     | laptop (Docker, host network) | Serves the seat map layout; only misses reach the VM     |
 
-The VM's vCPU is pinned to host CPU 10 and k6 runs on CPUs 0-9 with `taskset`, so the load generator
-never shares a core with the app. Keep the laptop otherwise idle and plugged in during runs.
+The VM's vCPU is pinned to host CPU 10, the CDN edge to CPUs 8-9 (compose `cpuset`) and k6 runs on CPUs
+0-7 with `taskset`, so neither shares a core with the app.
+
+The seat map is split into an immutable layout and a small availability payload (since 2026-11-01). In
+production the layout sits behind a CDN (`Cache-Control: public, max-age=86400, immutable`), so the test
+puts one CDN edge in front of the VM: nginx (`loadtest/cdn`) caches layouts and asks the VM on a miss,
+availability goes to the VM directly. CDN requests are tagged `load:cdn`, so the judged totals stay about the
+app; the run report shows the CDN's latency and hit rate per step. One edge with zero network distance: a
+real multi-region CDN misses a bit more (one miss per show per region per day). Its cache is a tmpfs, so
+`docker compose --profile cdn restart cdn` gives a cold CDN. Keep the laptop otherwise idle and plugged in during runs.
 
 Backend CPU comes from the JVM (`process_cpu_usage`). Postgres has no separate CPU number: the run file
 shows VM CPU minus backend CPU, which is Postgres plus Docker and the OS.
@@ -111,10 +120,18 @@ Ids are explicit and follow formulas the scripts rely on (documented at the top 
 
 - The VM, with the app running in it:
   ```bash
+  sudo snap install lxd && sudo lxd init --auto
+  sudo lxc network set lxdbr0 ipv4.address=10.24.21.1/24   # subnet for the fixed IP below
+  # with ufw active, DHCP on the bridge is blocked and the VM gets no IPv4 address
+  sudo ufw allow in on lxdbr0
+  sudo ufw route allow in on lxdbr0
+  sudo ufw route allow out on lxdbr0
   sudo lxc launch images:debian/13 seat-lock --vm -c limits.cpu=1 -c limits.memory=2GiB -d root,size=10GiB
   sudo lxc config device override seat-lock eth0 ipv4.address=10.24.21.250   # fixed IP
   sudo lxc stop seat-lock && sudo lxc config set seat-lock limits.cpu=10-10   # pin to CPU 10
   sudo lxc start seat-lock
+  # lxc exec needs the VM agent, which starts some seconds after boot
+  until sudo lxc exec seat-lock -- true 2>/dev/null; do sleep 2; done
   sudo lxc exec seat-lock -- sh -c 'apt-get update && apt-get install -y curl procps btop && curl -fsSL https://get.docker.com | sh'
   # no package updates in the background during runs
   sudo lxc exec seat-lock -- systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
@@ -128,6 +145,8 @@ Ids are explicit and follow formulas the scripts rely on (documented at the top 
   ```
 - Monitoring on the laptop: `docker compose --profile monitoring up -d prometheus postgres-exporter`
   (stop any other project's Prometheus first; both use ports 9090 and 9187).
+- CDN edge on the laptop (seatmap, mixed, flash-sale): `docker compose --profile cdn up -d cdn` (port 8090).
+  `find-capacity.mjs` refuses to start those tests without it.
 - [k6](https://k6.io) (tested with v2.3), Node.js 24 and `jq` on the laptop.
 - `seed.sh`, `check.sh`, `profile.sh` and `diagnose.sh` reach into the VM with `sudo lxc exec`, so they
   ask for the sudo password. `VM=local` points `seed.sh` and `check.sh` at the local compose stack.
@@ -154,9 +173,9 @@ async-profiler is downloaded automatically by `profile.sh` into `loadtest/.tools
 ### 2. Find the capacity
 
 ```bash
-taskset -c 0-9 node loadtest/find-capacity.mjs <test> "what changed"
+taskset -c 0-7 node loadtest/find-capacity.mjs <test> "what changed"
 # event test: warm-up, then one sale
-PEAK_USERS=200 taskset -c 0-9 node loadtest/find-capacity.mjs flash-sale "what changed"
+PEAK_USERS=200 taskset -c 0-7 node loadtest/find-capacity.mjs flash-sale "what changed"
 ```
 
 The script runs k6 in steps of increasing rate and reports the highest rate that passes a sustained run:
@@ -186,7 +205,7 @@ After booking runs, `loadtest/check.sh` confirms that seats and bookings agree (
 ### Single run at a fixed rate
 
 ```bash
-RATE=200 DURATION=1m taskset -c 0-9 k6 run loadtest/book.js
+RATE=200 DURATION=1m taskset -c 0-7 k6 run loadtest/book.js
 ```
 
 All scripts read `RATE` (req/s), `DURATION` and `BASE_URL` (default `http://10.24.21.250:8080`, the VM).
@@ -196,8 +215,8 @@ All scripts read `RATE` (req/s), `DURATION` and `BASE_URL` (default `http://10.2
 `profile.sh` records a CPU profile of the backend with async-profiler while k6 runs at a fixed rate:
 
 ```bash
-taskset -c 0-9 loadtest/profile.sh <test> <rate> <seconds> "what changed"
-taskset -c 0-9 loadtest/profile.sh book 300 60 "baseline"
+taskset -c 0-7 loadtest/profile.sh <test> <rate> <seconds> "what changed"
+taskset -c 0-7 loadtest/profile.sh book 300 60 "baseline"
 ```
 
 - Always profile a test at the same rate and duration so profiles can be compared.

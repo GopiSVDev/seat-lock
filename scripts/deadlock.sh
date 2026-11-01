@@ -18,7 +18,7 @@ SHOW_ID=$(curl -sf -X POST "$BASE_URL/shows" -H 'Content-Type: application/json'
   -d "{\"movieId\":$MOVIE_ID,\"screenId\":$SCREEN_ID,\"startTime\":\"$START_TIME\",\"language\":\"English\",\"format\":\"TWO_D\"}" \
   | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
-SEAT_IDS=$(curl -sf "$BASE_URL/shows/$SHOW_ID/seats" \
+SEAT_IDS=$(curl -sf "$BASE_URL/shows/$SHOW_ID/layout" \
   | grep -o '"id":[0-9]*' | cut -d: -f2 | sort -n | head -"$SEATS")
 
 ASC=$(echo "$SEAT_IDS" | paste -sd,)

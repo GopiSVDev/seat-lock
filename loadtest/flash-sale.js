@@ -7,14 +7,15 @@
 //
 // setup() schedules the show on the Flash Arena screen. New users arrive from 0 up to RATE users/s
 // over RAMP, then RATE users/s until DURATION. Each user, like a real buyer:
-//   1. reads the seat map; if it shows no free seats, leaves (sold out)
+//   1. reads the seat map (layout from the CDN edge once per VU, availability from the app every time);
+//      if it shows no free seats, leaves (sold out)
 //   2. thinks for 0-THINK_MAX_S seconds, then books 1-4 adjacent free seats, centre seats first
 //   3. on 409 (someone was faster) starts again at 1, up to MAX_ATTEMPTS bookings
 // The longer users think, the staler their seat map and the more 409s, as in a real sale.
 //
 // Reported: users who booked / saw sold out / gave up, booking attempts, sold out after (last
 // successful booking, from the sale opening; only if every seat sold), and the oversell check: seats in 201 responses
-// (seats_booked) must equal BOOKED seats in the seat map afterwards (seats_sold).
+// (seats_booked) must equal unavailable seats in the availability afterwards (seats_sold).
 //
 // Env: RATE (peak new users/s, default 50), RAMP (default 10s), DURATION (default 1m),
 // THINK_MAX_S (default 3), MAX_ATTEMPTS (default 3), BASE_URL (default http://10.24.21.250:8080, the LXD VM)
@@ -23,7 +24,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import exec from 'k6/execution';
 import { Counter, Trend } from 'k6/metrics';
-import { baseOptions, BASE_URL, GET_HEADERS, JSON_HEADERS, RATE } from './lib.js';
+import { availability, baseOptions, layout, BASE_URL, JSON_HEADERS, RATE } from './lib.js';
 
 const seed = JSON.parse(open('./data/seed.json'));
 const THINK_MAX_S = Number(__ENV.THINK_MAX_S ?? 3);
@@ -42,7 +43,10 @@ const soldAfter = new Trend('booked_after_open', true);
 
 const toSeconds = (d) => (d.endsWith('m') ? Number(d.slice(0, -1)) * 60 : Number(d.replace(/s$/, '')));
 
-export const options = baseOptions('flash_sale', ['seatmap', 'book:201:409']);
+export const options = baseOptions('flash_sale', ['layout', 'availability', 'book:201:409']);
+
+// Per VU: the show's layout rows, fetched once (immutable)
+let layoutRows;
 Object.assign(options.scenarios.flash_sale, {
   executor: 'ramping-arrival-rate',
   startRate: 0,
@@ -74,31 +78,32 @@ function groupSize() {
 }
 
 // Adjacent free seats closest to the centre of a row, trying rows in random order; if no row has
-// enough adjacent seats, any free seats.
-function pickSeats(rows, size) {
+// enough adjacent seats, any free seats. taken = ids from the availability.
+function pickSeats(rows, taken, size) {
   for (const row of [...rows].sort(() => Math.random() - 0.5)) {
     const centre = (row.seats.length - size) / 2;
     let best = -1;
     for (let from = 0, run = 0; from < row.seats.length; from++) {
-      run = row.seats[from].status === 'AVAILABLE' ? run + 1 : 0;
+      run = taken.has(row.seats[from].id) ? 0 : run + 1;
       const start = from - size + 1;
       if (run >= size && (best < 0 || Math.abs(start - centre) < Math.abs(best - centre))) best = start;
     }
     if (best >= 0) return row.seats.slice(best, best + size).map((seat) => seat.id);
   }
-  const free = rows.flatMap((row) => row.seats).filter((seat) => seat.status === 'AVAILABLE');
+  const free = rows.flatMap((row) => row.seats).filter((seat) => !taken.has(seat.id));
   return free.slice(0, size).map((seat) => seat.id);
 }
 
 export default function (data) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { headers: GET_HEADERS, responseType: 'text', tags: { name: 'seatmap' } });
-    if (!check(map, { 'seat map 200': (r) => r.status === 200 })) return;
-    if (map.json('availableSeats') === 0) {
+    layoutRows ??= layout(data.showId, 'layout')?.rows;
+    const free = availability(data.showId, 'availability');
+    if (!layoutRows || !free) return;
+    if (free.availableSeats === 0) {
       usersSoldOut.add(1);
       return;
     }
-    const seats = pickSeats(map.json('rows'), groupSize());
+    const seats = pickSeats(layoutRows, new Set(free.unavailable), groupSize());
     sleep(Math.random() * THINK_MAX_S);
 
     const res = http.post(
@@ -120,8 +125,8 @@ export default function (data) {
 }
 
 export function teardown(data) {
-  sleep(2); // the seat map is cached for 1 s
-  const map = http.get(`${BASE_URL}/shows/${data.showId}/seats`, { responseType: 'text', tags: { name: 'setup' } });
-  seatsSold.add(map.json('totalSeats') - map.json('availableSeats'));
-  seatsTotal.add(map.json('totalSeats'));
+  sleep(2); // availability is cached for 1 s
+  const free = availability(data.showId, 'setup');
+  seatsSold.add(free.unavailable.length);
+  seatsTotal.add(free.availableSeats + free.unavailable.length);
 }

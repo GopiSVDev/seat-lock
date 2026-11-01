@@ -10,13 +10,15 @@ import { fileURLToPath } from 'node:url';
 // What each test sends, shown above its results (and in the order of RESULTS.md)
 export const TESTS = {
   seatmap:
-    '`GET /shows/{id}/seats` on 250-seat shows; a few popular shows get most requests (Zipf). ' +
-    'The read a user makes before booking.',
+    'Seat map views of 250-seat shows; a few popular shows get most views (Zipf). The read a user makes before booking. ' +
+    'Since 2026-11-01 a view is `GET /shows/{id}/availability` from the app plus `GET /shows/{id}/layout` through a ' +
+    'CDN edge (nginx on the laptop; only misses reach the app, hit rate in the run report); before, one ' +
+    '`GET /shows/{id}/seats`. Rate = views/s; judged req/s = requests to the app.',
   book:
     '`POST /bookings` for 2 seats; every request takes different seats, so bookings never collide. ' +
     'The cost of one booking: conditional UPDATE of the seats plus INSERT of the booking and its seats, in one transaction.',
   mixed:
-    'Browsing and booking together: 30% seat map, 20% show, 15% movie, 5% theatre, 5% screen, ' +
+    'Browsing and booking together: 30% seat map view, 20% show, 15% movie, 5% theatre, 5% screen, ' +
     '10% get booking, 15% book (bookings never collide).',
   'show-create':
     '`POST /shows` on a 250-seat screen, which also creates the 250 show seats in the same transaction. Admin path.',
@@ -160,7 +162,10 @@ export function writeRunReport(run, runsDir) {
       '| Phase | req/s | Result | Request | Count | Avg ms | p95 ms | p99 ms |',
       '|---|---:|---|---|---:|---:|---:|---:|',
       ...steps.flatMap((s) =>
-        s.byRequest.map((r) => `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${r.label} | ${r.count} | ${r.avgMs} | ${r.p95Ms} | ${r.p99Ms} |`),
+        s.byRequest.map((r) => {
+          const label = r.label === 'layout' && s.cdnHitPct != null ? `layout via CDN (hit ${s.cdnHitPct}%)` : r.label;
+          return `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${label} | ${r.count} | ${r.avgMs} | ${r.p95Ms} | ${r.p99Ms} |`;
+        }),
       ),
       '',
       ...(steps.some((s) => s.sale)
@@ -228,7 +233,7 @@ function eventRow(run, latest) {
     cell(s.sale?.gaveUp),
     cell(s.sale?.soldOutAfterS),
     cell(s.sale?.oversold),
-    p95Of('seatmap'),
+    p95Of(s.byRequest.some((r) => r.label === 'availability') ? 'availability' : 'seatmap'), // split since 2026-11-01
     p95Of('book 201'),
     p95Of('book 409'),
     pct(s.errorRate),
