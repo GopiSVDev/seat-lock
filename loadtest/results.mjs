@@ -56,6 +56,8 @@ export function targetText(config) {
 export function failures(step, config) {
   if (step.phase === 'warmup') return null;
   const missed = [];
+  // No requests at all is a broken step, not a pass (e.g. book ran out of seeded seats)
+  if (step.requests === 0) missed.push('no requests sent (seats used up? reseed)');
   if (step.errorRate >= config.maxErrorRate) missed.push(`errors ${pct(step.errorRate)} >= ${pct(config.maxErrorRate)}`);
   if (step.droppedRate >= 0.01) missed.push(`dropped ${pct(step.droppedRate)} >= 1%`);
   if ((step.sale?.oversold ?? 0) !== 0) missed.push(`oversold ${step.sale.oversold} seats`);
