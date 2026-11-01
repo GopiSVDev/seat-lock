@@ -12,10 +12,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BookingSeat {
 
-    // Sequence, not IDENTITY: lets Hibernate batch a booking's seats into one INSERT (see Booking)
+    // Created by BookingWriteRepository with its booking (see Booking); this mapping is for reads
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "booking_seat_seq")
-    @SequenceGenerator(name = "booking_seat_seq", schema = "booking", sequenceName = "booking_seat_seq", allocationSize = 50)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -31,11 +30,4 @@ public class BookingSeat {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BookingStatus status;
-
-    public BookingSeat(Booking booking, Long showSeatId, String seatLabel) {
-        this.booking = booking;
-        this.showSeatId = showSeatId;
-        this.seatLabel = seatLabel;
-        this.status = booking.getStatus();
-    }
 }

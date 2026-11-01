@@ -13,10 +13,9 @@ import java.time.Instant;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Booking {
 
-    // Sequence, not IDENTITY: ids are known before the INSERT, so Hibernate can batch inserts (50 ids per nextval)
+    // Created by BookingWriteRepository (plain SQL, one statement with its seats); this mapping is for reads
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "booking_seq")
-    @SequenceGenerator(name = "booking_seq", schema = "booking", sequenceName = "booking_seq", allocationSize = 50)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
@@ -31,11 +30,4 @@ public class Booking {
 
     @Column(nullable = false)
     private Instant createdAt;
-
-    public Booking(Long showId, String customerName) {
-        this.showId = showId;
-        this.customerName = customerName;
-        this.status = BookingStatus.CONFIRMED;
-        this.createdAt = Instant.now();
-    }
 }

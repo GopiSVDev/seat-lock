@@ -1,9 +1,10 @@
 package com.seatlock.backend.booking.internal.service;
 
 import com.seatlock.backend.booking.internal.domain.Booking;
-import com.seatlock.backend.booking.internal.domain.BookingSeat;
+import com.seatlock.backend.booking.internal.domain.BookingStatus;
 import com.seatlock.backend.booking.internal.repository.BookingRepository;
 import com.seatlock.backend.booking.internal.repository.BookingSeatRepository;
+import com.seatlock.backend.booking.internal.repository.BookingWriteRepository;
 import com.seatlock.backend.booking.internal.web.dto.BookingResponse;
 import com.seatlock.backend.booking.internal.web.dto.CreateBookingRequest;
 import com.seatlock.backend.inventory.BookedSeat;
@@ -13,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -22,18 +25,23 @@ public class BookingService {
     private final InventoryApi inventoryApi;
     private final BookingRepository bookingRepository;
     private final BookingSeatRepository bookingSeatRepository;
+    private final BookingWriteRepository bookingWriteRepository;
 
     @Transactional
     public BookingResponse create(CreateBookingRequest request) {
         List<BookedSeat> bookedSeats = inventoryApi.bookSeats(request.showId(), request.showSeatIds());
 
-        Booking booking = bookingRepository.save(new Booking(request.showId(), request.customerName()));
+        // Microseconds: what timestamptz stores, so this response matches GET /bookings/{id}
+        Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        Long id = bookingWriteRepository.insert(request.showId(), request.customerName(), BookingStatus.CONFIRMED,
+                createdAt, bookedSeats.stream().map(BookedSeat::showSeatId).toList(),
+                bookedSeats.stream().map(BookedSeat::label).toList());
 
-        List<BookingSeat> bookingSeats = bookingSeatRepository.saveAll(bookedSeats.stream()
-                .map(seat -> new BookingSeat(booking, seat.showSeatId(), seat.label()))
-                .toList());
-
-        return BookingResponse.from(booking, bookingSeats);
+        List<BookingResponse.Seat> seats = bookedSeats.stream()
+                .map(seat -> new BookingResponse.Seat(seat.showSeatId(), seat.label()))
+                .toList();
+        return new BookingResponse(id, request.showId(), request.customerName(), BookingStatus.CONFIRMED, createdAt,
+                seats);
     }
 
     @Transactional(readOnly = true)
