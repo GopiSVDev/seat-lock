@@ -13,8 +13,10 @@ import java.time.Instant;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Booking {
 
+    // Sequence, not IDENTITY: ids are known before the INSERT, so Hibernate can batch inserts (50 ids per nextval)
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "booking_seq")
+    @SequenceGenerator(name = "booking_seq", schema = "booking", sequenceName = "booking_seq", allocationSize = 50)
     private Long id;
 
     @Column(nullable = false)

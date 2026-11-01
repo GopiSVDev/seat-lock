@@ -12,8 +12,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BookingSeat {
 
+    // Sequence, not IDENTITY: lets Hibernate batch a booking's seats into one INSERT (see Booking)
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "booking_seat_seq")
+    @SequenceGenerator(name = "booking_seat_seq", schema = "booking", sequenceName = "booking_seat_seq", allocationSize = 50)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

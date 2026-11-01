@@ -71,8 +71,9 @@ SELECT setval(pg_get_serial_sequence('catalogue.movie', 'id'), (SELECT max(id) F
        setval(pg_get_serial_sequence('catalogue.seat', 'id'), (SELECT max(id) FROM catalogue.seat)),
        setval(pg_get_serial_sequence('catalogue.shows', 'id'), (SELECT max(id) FROM catalogue.shows)),
        setval(pg_get_serial_sequence('inventory.show_seat', 'id'), (SELECT max(id) FROM inventory.show_seat)),
-       setval(pg_get_serial_sequence('booking.booking', 'id'), (SELECT coalesce(max(id), 1) FROM booking.booking)),
-       setval(pg_get_serial_sequence('booking.booking_seat', 'id'), (SELECT coalesce(max(id), 1) FROM booking.booking_seat));
+       -- Booking ids come from Hibernate sequences (pooled: nextval is the top of the next 50 ids)
+       setval('booking.booking_seq', (SELECT coalesce(max(id), 1) FROM booking.booking)),
+       setval('booking.booking_seat_seq', (SELECT coalesce(max(id), 1) FROM booking.booking_seat));
 
 VACUUM ANALYZE catalogue.movie, catalogue.theatre, catalogue.screen, catalogue.seat, catalogue.shows,
                inventory.show_seat, booking.booking, booking.booking_seat;
