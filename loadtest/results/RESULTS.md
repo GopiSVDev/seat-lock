@@ -91,3 +91,4 @@ still the baseline for the next "vs previous" above.
 | 2026-10-28 | seatmap | 1240 req/s | +0.8% | kept | seat map via JdbcClient (true limit ~1300: 1310 passed 1m, failed 2m confirm narrowly) | - | [report](runs/2026-10-28-01-23-seatmap.md) |
 | 2026-10-28 | seatmap | 1280 req/s | +3.2% | reverted | gzip seat map | deflate CPU > send savings on 1 core | [report](runs/2026-10-28-01-52-seatmap.md) |
 | 2026-11-01 | seatmap | 3980 req/s | -4.1% | reverted | JVM heap fixed + young gen half (NewRatio=1) | no gain, promotion per GB unchanged | [report](runs/2026-11-01-03-35-seatmap.md) |
+| 2026-11-01 | book | 900 req/s | +3.4% | reverted | group commit (commit_delay 100us, siblings 3) | capacity same as the true ~900 before; fewer fsyncs not attributable | [report](runs/2026-11-01-09-05-book.md) |
