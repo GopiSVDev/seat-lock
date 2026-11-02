@@ -73,7 +73,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 
 ## flash-sale
 
-A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map (layout through the CDN edge, availability from the app on every attempt), thinks 0-3 s, books 1-4 adjacent free seats near the centre, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the JVM with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).
+A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map (layout through the CDN edge, availability from the app on every attempt), picks 1-4 adjacent free seats near their own preferred spot (most want the middle-back rows near the centre, some recliners, some an aisle, a few the front), thinks 0-3 s, books, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the JVM with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).
 
 Pass: no seat oversold, errors < 1.00%, dropped < 1%, over 1m at 200 users/s (latency, sell-out and 409s are reported, not judged).
 
@@ -81,6 +81,7 @@ Pass: no seat oversold, errors < 1.00%, dropped < 1%, over 1m at 200 users/s (la
 |---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
 | 2026-10-23 | 200 | fail | dropped 47.72% >= 1% | 5749 | 281 | 5468 | not sold out | 0 | 7398.1 | 6080.7 | 7468.2 | 0.00% | 47.72% | 0.67 (1) | 0.239 (1) | baseline | [report](runs/2026-10-23-03-02-flash-sale.md) |
 | 2026-11-02 | 200 | pass | - | 10996 | 390 | 9910 | 58.7 | 0 | 2.7 | 10 | 7.1 | 0.00% | 0.00% | 0.342 (1) | 0.201 (1) | re-baseline, k6 VUs pre-allocated for retries | [report](runs/2026-11-02-01-18-flash-sale.md) |
+| 2026-11-02 | 200 | pass | - | 10996 | 447 | 1627 | 17.5 | 0 | 1.7 | 9.6 | 7.8 | 0.00% | 0.00% | 0.122 (1) | 0.108 (1) | varied seat preferences (realistic buyers) | [report](runs/2026-11-02-01-44-flash-sale.md) |
 
 ## Reverted or within ±5%
 

@@ -24,9 +24,10 @@ export const TESTS = {
     '`POST /shows` on a 250-seat screen, which also creates the 250 show seats in the same transaction. Admin path.',
   'flash-sale':
     'A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map ' +
-    '(layout through the CDN edge, availability from the app on every attempt), thinks 0-3 s, books 1-4 adjacent ' +
-    'free seats near the centre, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the JVM ' +
-    'with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).',
+    '(layout through the CDN edge, availability from the app on every attempt), picks 1-4 adjacent free seats near ' +
+    'their own preferred spot (most want the middle-back rows near the centre, some recliners, some an aisle, a few ' +
+    'the front), thinks 0-3 s, books, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the ' +
+    'JVM with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).',
 };
 
 // What runs from before the seat map split (2026-11-01) sent; their reports keep describing that
@@ -44,8 +45,22 @@ const BEFORE_SPLIT = {
     'Runs once, after warming up the JVM with `mixed`.',
 };
 
+// Flash-sale runs before varied seat preferences: every user aimed for the centre of a random row
+const SEAT_PREFERENCES = '2026-11-02T01:35';
+const BEFORE_PREFERENCES = {
+  'flash-sale':
+    'A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map ' +
+    '(layout through the CDN edge, availability from the app on every attempt), thinks 0-3 s, books 1-4 adjacent ' +
+    'free seats near the centre, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the JVM ' +
+    'with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).',
+};
+
 function testText(test, startedAt) {
-  return (startedAt < SEAT_MAP_SPLIT && BEFORE_SPLIT[test]) || TESTS[test];
+  return (
+    (startedAt < SEAT_MAP_SPLIT && BEFORE_SPLIT[test]) ||
+    (startedAt < SEAT_PREFERENCES && BEFORE_PREFERENCES[test]) ||
+    TESTS[test]
+  );
 }
 
 export function targetText(config) {
