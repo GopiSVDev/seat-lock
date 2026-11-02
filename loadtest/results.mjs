@@ -18,14 +18,15 @@ export const TESTS = {
     '`POST /bookings` for 2 seats; every request takes different seats, so bookings never collide. ' +
     'The cost of one booking: conditional UPDATE of the seats plus INSERT of the booking and its seats, in one transaction.',
   mixed:
-    'Browsing and booking together: 30% seat map view, 20% show, 15% movie, 5% theatre, 5% screen, ' +
-    '10% get booking, 15% book (bookings never collide).',
+    'Browsing and booking together: 30% seat map view (layout through the CDN edge + availability from the app), ' +
+    '20% show, 15% movie, 5% theatre, 5% screen, 10% get booking, 15% book (bookings never collide).',
   'show-create':
     '`POST /shows` on a 250-seat screen, which also creates the 250 show seats in the same transaction. Admin path.',
   'flash-sale':
-    'A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map, ' +
-    'thinks 0-3 s, books 1-4 adjacent free seats near the centre, and on a 409 starts again, up to 3 bookings. ' +
-    'Runs once, after warming up the JVM with `mixed`.',
+    'A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map ' +
+    '(layout through the CDN edge, availability from the app on every attempt), thinks 0-3 s, books 1-4 adjacent ' +
+    'free seats near the centre, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the JVM ' +
+    'with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).',
 };
 
 // What runs from before the seat map split (2026-11-01) sent; their reports keep describing that
@@ -37,6 +38,10 @@ const BEFORE_SPLIT = {
   mixed:
     'Browsing and booking together: 30% seat map, 20% show, 15% movie, 5% theatre, 5% screen, ' +
     '10% get booking, 15% book (bookings never collide).',
+  'flash-sale':
+    'A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map, ' +
+    'thinks 0-3 s, books 1-4 adjacent free seats near the centre, and on a 409 starts again, up to 3 bookings. ' +
+    'Runs once, after warming up the JVM with `mixed`.',
 };
 
 function testText(test, startedAt) {
@@ -301,7 +306,9 @@ export function writeResultsPage(resultsDir) {
     '- **CPU** columns: average cores used during the confirm run (capacity) or the event, VM limit in brackets.',
     '  CPU db is VM CPU minus backend CPU: Postgres plus Docker and the OS.',
     '- Setup: the app (PostgreSQL + backend) runs in an LXD VM with 1 vCPU (pinned to one host core) and 2 GB',
-    '  RAM; k6 and monitoring run on the host, on other cores.',
+    '  RAM, on host networking since 2026-11-01 (no Docker NAT); k6 (CPUs 0-7), the nginx CDN edge (CPUs 8-9)',
+    '  and monitoring run on the host. Tomcat threads / DB connections: 200 / 10 at first, 30 / 10 from',
+    '  2026-10-27-03-15, 10 / 5 from 2026-10-28-02-18, 10 / 10 (current) from 2026-11-01-08-37.',
   ];
   for (const test of tests) {
     const testRuns = runs.filter((r) => r.test === test);

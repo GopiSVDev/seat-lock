@@ -13,7 +13,9 @@ A row's report link has every step of that run: latency, where the time went, SQ
 - **CPU** columns: average cores used during the confirm run (capacity) or the event, VM limit in brackets.
   CPU db is VM CPU minus backend CPU: Postgres plus Docker and the OS.
 - Setup: the app (PostgreSQL + backend) runs in an LXD VM with 1 vCPU (pinned to one host core) and 2 GB
-  RAM; k6 and monitoring run on the host, on other cores.
+  RAM, on host networking since 2026-11-01 (no Docker NAT); k6 (CPUs 0-7), the nginx CDN edge (CPUs 8-9)
+  and monitoring run on the host. Tomcat threads / DB connections: 200 / 10 at first, 30 / 10 from
+  2026-10-27-03-15, 10 / 5 from 2026-10-28-02-18, 10 / 10 (current) from 2026-11-01-08-37.
 
 ## seatmap
 
@@ -51,7 +53,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 
 ## mixed
 
-Browsing and booking together: 30% seat map view, 20% show, 15% movie, 5% theatre, 5% screen, 10% get booking, 15% book (bookings never collide).
+Browsing and booking together: 30% seat map view (layout through the CDN edge + availability from the app), 20% show, 15% movie, 5% theatre, 5% screen, 10% get booking, 15% book (bookings never collide).
 
 Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type), errors < 1.00%, dropped < 1%.
 
@@ -71,7 +73,7 @@ Pass: p90 <= 150 ms, p95 <= 200 ms, p99 <= 500 ms (also p95/p99 per request type
 
 ## flash-sale
 
-A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map, thinks 0-3 s, books 1-4 adjacent free seats near the centre, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the JVM with `mixed`.
+A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map (layout through the CDN edge, availability from the app on every attempt), thinks 0-3 s, books 1-4 adjacent free seats near the centre, and on a 409 starts again, up to 3 bookings. Runs once, after warming up the JVM with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).
 
 Pass: no seat oversold, errors < 1.00%, dropped < 1%, over 1m at 200 users/s (latency, sell-out and 409s are reported, not judged).
 
