@@ -80,6 +80,7 @@ Pass: no seat oversold, errors < 1.00%, dropped < 1%, over 1m at 200 users/s (la
 | Date | Users/s | Result | Failed on | Users | Booked | Gave up | Sold out after s | Oversold | p95 seat map ms | p95 book 201 ms | p95 book 409 ms | Errors | Dropped | CPU backend | CPU db | Note | Run |
 |---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
 | 2026-10-23 | 200 | fail | dropped 47.72% >= 1% | 5749 | 281 | 5468 | not sold out | 0 | 7398.1 | 6080.7 | 7468.2 | 0.00% | 47.72% | 0.67 (1) | 0.239 (1) | baseline | [report](runs/2026-10-23-03-02-flash-sale.md) |
+| 2026-11-02 | 200 | pass | - | 10996 | 390 | 9910 | 58.7 | 0 | 2.7 | 10 | 7.1 | 0.00% | 0.00% | 0.342 (1) | 0.201 (1) | re-baseline, k6 VUs pre-allocated for retries | [report](runs/2026-11-02-01-18-flash-sale.md) |
 
 ## Reverted or within ±5%
 
@@ -96,3 +97,4 @@ still the baseline for the next "vs previous" above.
 | 2026-11-01 | seatmap | 3980 req/s | -4.1% | reverted | JVM heap fixed + young gen half (NewRatio=1) | no gain, promotion per GB unchanged | [report](runs/2026-11-01-03-35-seatmap.md) |
 | 2026-11-01 | book | 900 req/s | +3.4% | reverted | group commit (commit_delay 100us, siblings 3) | capacity same as the true ~900 before; fewer fsyncs not attributable | [report](runs/2026-11-01-09-05-book.md) |
 | 2026-11-02 | book | 1110 req/s | +15.6% | reverted | synchronous_commit off | +16% but a crash loses acknowledged bookings, seats resold | [report](runs/2026-11-02-00-34-book.md) |
+| 2026-11-02 | flash-sale | fail | - | reverted | re-baseline after seatmap + book work | k6 pre-allocated too few VUs, 1.01% dropped while the app kept up; rerun 01-18 | [report](runs/2026-11-02-00-59-flash-sale.md) |

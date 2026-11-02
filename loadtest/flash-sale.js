@@ -55,8 +55,10 @@ Object.assign(options.scenarios.flash_sale, {
     { target: RATE, duration: RAMP },
     { target: RATE, duration: `${Math.max(toSeconds(DURATION) - toSeconds(RAMP), 1)}s` },
   ],
-  // A user session lasts a few seconds (think time + requests), so many users are active at once
-  preAllocatedVUs: Math.ceil(RATE * (THINK_MAX_S + 1)) + 10,
+  // A user session lasts a few seconds (think time per attempt + requests), so many users are active at
+  // once. Sized for the average session with retries (up to MAX_ATTEMPTS thinks of THINK_MAX_S / 2): VUs
+  // created mid-test start late and count as dropped iterations although the app kept up
+  preAllocatedVUs: Math.ceil(RATE * ((THINK_MAX_S / 2) * MAX_ATTEMPTS + 1)) + 10,
   maxVUs: Math.ceil(RATE * (THINK_MAX_S + 1) * 4) + 50,
 });
 
