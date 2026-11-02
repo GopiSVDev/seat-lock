@@ -93,3 +93,4 @@ still the baseline for the next "vs previous" above.
 | 2026-10-28 | seatmap | 1280 req/s | +3.2% | reverted | gzip seat map | deflate CPU > send savings on 1 core | [report](runs/2026-10-28-01-52-seatmap.md) |
 | 2026-11-01 | seatmap | 3980 req/s | -4.1% | reverted | JVM heap fixed + young gen half (NewRatio=1) | no gain, promotion per GB unchanged | [report](runs/2026-11-01-03-35-seatmap.md) |
 | 2026-11-01 | book | 900 req/s | +3.4% | reverted | group commit (commit_delay 100us, siblings 3) | capacity same as the true ~900 before; fewer fsyncs not attributable | [report](runs/2026-11-01-09-05-book.md) |
+| 2026-11-02 | book | 1110 req/s | +15.6% | reverted | synchronous_commit off | +16% but a crash loses acknowledged bookings, seats resold | [report](runs/2026-11-02-00-34-book.md) |
