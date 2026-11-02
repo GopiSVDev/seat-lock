@@ -128,7 +128,8 @@ Ids are explicit and follow formulas the scripts rely on (documented at the top 
   sudo ufw route allow out on lxdbr0
   sudo lxc launch images:debian/13 seat-lock --vm -c limits.cpu=1 -c limits.memory=2GiB -d root,size=10GiB
   sudo lxc config device override seat-lock eth0 ipv4.address=10.24.21.250   # fixed IP
-  sudo lxc stop seat-lock && sudo lxc config set seat-lock limits.cpu=10-10   # pin to CPU 10
+  # --force: the VM is still booting and ignores a clean shutdown (lxc stop would wait forever)
+  sudo lxc stop seat-lock --force && sudo lxc config set seat-lock limits.cpu=10-10   # pin to CPU 10
   sudo lxc start seat-lock
   # lxc exec needs the VM agent, which starts some seconds after boot
   until sudo lxc exec seat-lock -- true 2>/dev/null; do sleep 2; done

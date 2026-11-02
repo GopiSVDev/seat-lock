@@ -155,7 +155,7 @@ req_rate=$(prom "$reqs / $MEASURE_SECONDS")
 
   echo "## Postgres: what the app's connections were doing"
   echo
-  echo "Average number of connections in each state (pool size 10) and the same as ms per request"
+  echo "Average number of connections in each state and the same as ms per request"
   echo "(connections / request rate). 'idle' = connection not running SQL: either back in the pool or"
   echo "held by the JVM between sending and receiving (network, JVM waiting for CPU, Java code)."
   echo "'active' with no wait event = running on the CPU or waiting for one."
