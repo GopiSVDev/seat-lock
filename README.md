@@ -16,7 +16,8 @@ improvement was made only after a load test showed a real problem, and every res
 - [Project layout](#project-layout)
 - [Not built yet](#not-built-yet)
 
-API reference with request and response examples: **[docs/api.md](docs/api.md)**.
+New here? **[docs/story.md](docs/story.md)** explains the whole app as a story about a cinema, no
+programming needed. API reference with request and response examples: **[docs/api.md](docs/api.md)**.
 
 ## What it does
 

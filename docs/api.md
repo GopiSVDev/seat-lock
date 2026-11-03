@@ -67,15 +67,26 @@ Admin data: what is playing where. Owned by the `catalogue` module.
 | `releaseDate` | date (`2014-11-07`) | required |
 
 ```json
-{"title": "Interstellar", "description": "Space epic", "durationMinutes": 169,
- "certification": "UA", "releaseDate": "2014-11-07"}
+{
+  "title": "Interstellar",
+  "description": "Space epic",
+  "durationMinutes": 169,
+  "certification": "UA",
+  "releaseDate": "2014-11-07"
+}
 ```
 
 Response `201`:
 
 ```json
-{"id": 1, "title": "Interstellar", "description": "Space epic", "durationMinutes": 169,
- "certification": "UA", "releaseDate": "2014-11-07"}
+{
+  "id": 1,
+  "title": "Interstellar",
+  "description": "Space epic",
+  "durationMinutes": 169,
+  "certification": "UA",
+  "releaseDate": "2014-11-07"
+}
 ```
 
 #### `GET /movies/{id}`
@@ -89,10 +100,23 @@ Returns the same shape. `404` if unknown.
 All fields required.
 
 ```json
-{"name": "PVR Grand", "city": "Chennai", "address": "1 Main Road"}
+{
+  "name": "PVR Grand",
+  "city": "Chennai",
+  "address": "1 Main Road"
+}
 ```
 
-Response `201`: `{"id": 1, "name": "PVR Grand", "city": "Chennai", "address": "1 Main Road"}`
+Response `201`:
+
+```json
+{
+  "id": 1,
+  "name": "PVR Grand",
+  "city": "Chennai",
+  "address": "1 Main Road"
+}
+```
 
 #### `GET /theatres/{id}`
 
@@ -115,20 +139,64 @@ created; see the README.
 | `rows[].seatType` | [SeatType](#enums) | required |
 
 ```json
-{"name": "Screen 1", "rows": [
-  {"label": "A", "seatCount": 10, "seatType": "REGULAR"},
-  {"label": "B", "seatCount": 10, "seatType": "REGULAR"},
-  {"label": "C", "seatCount": 8, "seatType": "RECLINER"}
-]}
+{
+  "name": "Screen 1",
+  "rows": [
+    {
+      "label": "A",
+      "seatCount": 10,
+      "seatType": "REGULAR"
+    },
+    {
+      "label": "B",
+      "seatCount": 10,
+      "seatType": "REGULAR"
+    },
+    {
+      "label": "C",
+      "seatCount": 8,
+      "seatType": "RECLINER"
+    }
+  ]
+}
 ```
 
 Response `201` (seats abbreviated):
 
 ```json
-{"id": 1, "theatreId": 1, "name": "Screen 1", "totalSeats": 28, "rows": [
-  {"label": "A", "seats": [{"id": 1, "number": 1, "seatType": "REGULAR"}, {"id": 2, "number": 2, "seatType": "REGULAR"}]},
-  {"label": "C", "seats": [{"id": 21, "number": 1, "seatType": "RECLINER"}]}
-]}
+{
+  "id": 1,
+  "theatreId": 1,
+  "name": "Screen 1",
+  "totalSeats": 28,
+  "rows": [
+    {
+      "label": "A",
+      "seats": [
+        {
+          "id": 1,
+          "number": 1,
+          "seatType": "REGULAR"
+        },
+        {
+          "id": 2,
+          "number": 2,
+          "seatType": "REGULAR"
+        }
+      ]
+    },
+    {
+      "label": "C",
+      "seats": [
+        {
+          "id": 21,
+          "number": 1,
+          "seatType": "RECLINER"
+        }
+      ]
+    }
+  ]
+}
 ```
 
 `404` if the theatre is unknown. These are physical seat ids; bookings use show seat ids (see seat map).
@@ -152,15 +220,29 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
 | `format` | [ShowFormat](#enums) | required |
 
 ```json
-{"movieId": 1, "screenId": 1, "startTime": "2030-01-01T18:30:00Z", "language": "English", "format": "IMAX_2D"}
+{
+  "movieId": 1,
+  "screenId": 1,
+  "startTime": "2030-01-01T18:30:00Z",
+  "language": "English",
+  "format": "IMAX_2D"
+}
 ```
 
 Response `201` (`endTime` = start + movie duration):
 
 ```json
-{"id": 1, "movieId": 1, "movieTitle": "Interstellar", "screenId": 1, "screenName": "Screen 1",
- "startTime": "2030-01-01T18:30:00Z", "endTime": "2030-01-01T21:19:00Z",
- "language": "English", "format": "IMAX_2D"}
+{
+  "id": 1,
+  "movieId": 1,
+  "movieTitle": "Interstellar",
+  "screenId": 1,
+  "screenName": "Screen 1",
+  "startTime": "2030-01-01T18:30:00Z",
+  "endTime": "2030-01-01T21:19:00Z",
+  "language": "English",
+  "format": "IMAX_2D"
+}
 ```
 
 #### `GET /shows/{id}`
@@ -181,10 +263,36 @@ Headers: `Cache-Control: max-age=86400, public, immutable`. Safe for browsers an
 since a show's layout never changes.
 
 ```json
-{"showId": 1, "totalSeats": 28, "rows": [
-  {"label": "A", "seatType": "REGULAR", "seats": [{"id": 1, "number": 1}, {"id": 2, "number": 2}]},
-  {"label": "C", "seatType": "RECLINER", "seats": [{"id": 21, "number": 1}]}
-]}
+{
+  "showId": 1,
+  "totalSeats": 28,
+  "rows": [
+    {
+      "label": "A",
+      "seatType": "REGULAR",
+      "seats": [
+        {
+          "id": 1,
+          "number": 1
+        },
+        {
+          "id": 2,
+          "number": 2
+        }
+      ]
+    },
+    {
+      "label": "C",
+      "seatType": "RECLINER",
+      "seats": [
+        {
+          "id": 21,
+          "number": 1
+        }
+      ]
+    }
+  ]
+}
 ```
 
 `404` if the show is unknown.
@@ -195,7 +303,11 @@ Free seat count and the ids of seats that are not available. May be up to 1 seco
 app). Booking always re-checks in the database, so staleness can cause a `409` but never a double sale.
 
 ```json
-{"showId": 1, "availableSeats": 26, "unavailable": [1, 2]}
+{
+  "showId": 1,
+  "availableSeats": 26,
+  "unavailable": [1, 2]
+}
 ```
 
 `404` if the show is unknown.
@@ -215,15 +327,33 @@ Books exactly the seats the customer picked. All or nothing: if any seat is take
 | `showSeatIds` | long[] | at least one; show seat ids from the layout |
 
 ```json
-{"showId": 1, "customerName": "asha", "showSeatIds": [1, 2]}
+{
+  "showId": 1,
+  "customerName": "asha",
+  "showSeatIds": [1, 2]
+}
 ```
 
 Response `201`:
 
 ```json
-{"id": 1, "showId": 1, "customerName": "asha", "status": "CONFIRMED",
- "createdAt": "2026-11-03T10:15:30.123456Z",
- "seats": [{"showSeatId": 1, "label": "A1"}, {"showSeatId": 2, "label": "A2"}]}
+{
+  "id": 1,
+  "showId": 1,
+  "customerName": "asha",
+  "status": "CONFIRMED",
+  "createdAt": "2026-11-03T10:15:30.123456Z",
+  "seats": [
+    {
+      "showSeatId": 1,
+      "label": "A1"
+    },
+    {
+      "showSeatId": 2,
+      "label": "A2"
+    }
+  ]
+}
 ```
 
 | Error | When |
@@ -245,7 +375,12 @@ so they get different seats instead of colliding.
 | `seatType` | [SeatType](#enums) | required |
 
 ```json
-{"showId": 1, "customerName": "ravi", "quantity": 2, "seatType": "RECLINER"}
+{
+  "showId": 1,
+  "customerName": "ravi",
+  "quantity": 2,
+  "seatType": "RECLINER"
+}
 ```
 
 Response `201`: same shape as `POST /bookings`.
