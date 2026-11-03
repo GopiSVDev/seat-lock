@@ -9,21 +9,27 @@
 // over RAMP, then RATE users/s until DURATION. Each user, like a real buyer:
 //   1. reads the seat map (layout from the CDN edge once per VU, availability from the app every time);
 //      if it shows no free seats, leaves (sold out)
-//   2. picks 1-4 adjacent free seats near their own preferred spot (preferredSpot: most want the
-//      middle-back rows near the centre, some recliners, some an aisle, a few the front), one of the
-//      TOP_CHOICES closest blocks; then thinks for 0-THINK_MAX_S seconds and books them
-//   3. on 409 (someone was faster) starts again at 1 with the same group size and spot, up to
-//      MAX_ATTEMPTS bookings
-// The longer users think, the staler their seat map and the more 409s, as in a real sale.
+//   2. has a group size (1-4) and a preferred spot (preferredSpot: most want the middle-back rows near the
+//      centre, some recliners, some an aisle, a few the front), thinks for 0-THINK_MAX_S seconds, then
+//      SEAT_MODE=best (default, since 2026-11-03): asks POST /bookings/best-available for that many
+//        seats of the type at their spot (RECLINER or REGULAR); the server picks the adjacent block
+//      SEAT_MODE=pick (the runs before): picks the seats on the map, one of the TOP_CHOICES free blocks
+//        closest to their spot, and books those exact seats with POST /bookings
+//   3. on 409 starts again at 1 with the same group size and spot, up to MAX_ATTEMPTS bookings; in best
+//      mode the attempts alternate seat types (preferred, other, preferred, ...), like a person told
+//      "no 2 recliners together" who then tries regular seats
+// In pick mode, the longer users think, the staler their seat map and the more 409s, as in a real sale.
 // Before 2026-11-02 every user took the free block closest to the centre of a random row, and the group
 // size was re-drawn on every attempt: far more alike than real buyers, so more 409s.
 //
 // Reported: users who booked / saw sold out / gave up, booking attempts, sold out after (last
-// successful booking, from the sale opening; only if every seat sold), and the oversell check: seats in 201 responses
-// (seats_booked) must equal unavailable seats in the availability afterwards (seats_sold).
+// successful booking, from the sale opening; only if every seat sold), seats left unsold and how many of
+// them are stranded singles (no free neighbour in the row: a group can't use them), and the oversell
+// check: seats in 201 responses (seats_booked) must equal unavailable seats afterwards (seats_sold).
 //
-// Env: RATE (peak new users/s, default 50), RAMP (default 10s), DURATION (default 1m),
-// THINK_MAX_S (default 3), MAX_ATTEMPTS (default 3), TOP_CHOICES (default 3), BASE_URL (default http://10.24.21.250:8080, the LXD VM)
+// Env: RATE (peak new users/s, default 50), RAMP (default 10s), DURATION (default 1m), SEAT_MODE (best |
+// pick, default best), THINK_MAX_S (default 3), MAX_ATTEMPTS (default 3), TOP_CHOICES (default 3, pick
+// mode), BASE_URL (default http://10.24.21.250:8080, the LXD VM)
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -37,6 +43,8 @@ const MAX_ATTEMPTS = Number(__ENV.MAX_ATTEMPTS || 3);
 const TOP_CHOICES = Number(__ENV.TOP_CHOICES || 3);
 const RAMP = __ENV.RAMP || '10s';
 const DURATION = __ENV.DURATION || '1m';
+const SEAT_MODE = __ENV.SEAT_MODE || 'best';
+if (!['best', 'pick'].includes(SEAT_MODE)) throw new Error(`SEAT_MODE must be best or pick, got ${SEAT_MODE}`);
 
 const usersBooked = new Counter('users_booked');
 const usersSoldOut = new Counter('users_sold_out');
@@ -45,6 +53,7 @@ const attempts = new Counter('booking_attempts');
 const seatsBooked = new Counter('seats_booked');
 const seatsSold = new Counter('seats_sold');
 const seatsTotal = new Counter('seats_total');
+const seatsStranded = new Counter('seats_stranded');
 const soldAfter = new Trend('booked_after_open', true);
 
 const toSeconds = (d) => (d.endsWith('m') ? Number(d.slice(0, -1)) * 60 : Number(d.replace(/s$/, '')));
@@ -124,9 +133,28 @@ function pickSeats(rows, taken, size, spot) {
   return free.slice(0, size).map((seat) => seat.id);
 }
 
+// Seat types to try in best mode: the one at the buyer's spot first, then the others of the hall in turn
+function seatTypes(rows, spot) {
+  const preferred = rows[Math.round(spot.row * (rows.length - 1))].seatType;
+  return [preferred, ...new Set(rows.map((row) => row.seatType).filter((type) => type !== preferred))];
+}
+
+// Free seats whose left and right neighbours in the row are both taken (or the row's end)
+function countStranded(rows, taken) {
+  let stranded = 0;
+  for (const { seats } of rows) {
+    seats.forEach((seat, i) => {
+      const free = (j) => j >= 0 && j < seats.length && !taken.has(seats[j].id);
+      if (free(i) && !free(i - 1) && !free(i + 1)) stranded++;
+    });
+  }
+  return stranded;
+}
+
 export default function (data) {
   // One buyer (or group): same size and preferred spot on every attempt
   const size = groupSize();
+  const customerName = `k6-${exec.scenario.iterationInTest}`;
   let spot;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     layoutRows ??= layout(data.showId, 'layout')?.rows;
@@ -137,19 +165,30 @@ export default function (data) {
       return;
     }
     spot ??= preferredSpot(layoutRows);
-    const seats = pickSeats(layoutRows, new Set(free.unavailable), size, spot);
+
+    let url;
+    let body;
+    if (SEAT_MODE === 'best') {
+      const types = seatTypes(layoutRows, spot);
+      url = `${BASE_URL}/bookings/best-available`;
+      body = { showId: data.showId, customerName, quantity: size, seatType: types[(attempt - 1) % types.length] };
+    } else {
+      url = `${BASE_URL}/bookings`;
+      body = { showId: data.showId, customerName, showSeatIds: pickSeats(layoutRows, new Set(free.unavailable), size, spot) };
+    }
     sleep(Math.random() * THINK_MAX_S);
 
-    const res = http.post(
-      `${BASE_URL}/bookings`,
-      JSON.stringify({ showId: data.showId, customerName: `k6-${exec.scenario.iterationInTest}`, showSeatIds: seats }),
-      { headers: JSON_HEADERS, tags: { name: 'book' }, responseCallback: http.expectedStatuses(201, 409) },
-    );
+    const res = http.post(url, JSON.stringify(body), {
+      headers: JSON_HEADERS,
+      responseType: 'text', // best mode learns its seats from the response
+      tags: { name: 'book' },
+      responseCallback: http.expectedStatuses(201, 409),
+    });
     attempts.add(1);
     check(res, { 'booking 201 or 409': (r) => r.status === 201 || r.status === 409 });
     if (res.status === 201) {
       usersBooked.add(1);
-      seatsBooked.add(seats.length);
+      seatsBooked.add(res.json('seats').length);
       soldAfter.add(Date.now() - data.openedAt);
       return;
     }
@@ -161,6 +200,8 @@ export default function (data) {
 export function teardown(data) {
   sleep(2); // availability is cached for 1 s
   const free = availability(data.showId, 'setup');
+  const rows = layout(data.showId, 'setup').rows;
   seatsSold.add(free.unavailable.length);
   seatsTotal.add(free.availableSeats + free.unavailable.length);
+  seatsStranded.add(countStranded(rows, new Set(free.unavailable)));
 }

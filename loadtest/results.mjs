@@ -115,6 +115,7 @@ export function pct(n) {
 }
 
 const cell = (v) => v ?? '-';
+const unsoldCell = (sale) => `${sale.seatsTotal - sale.seatsSold} (${cell(sale.seatsStranded)})`;
 const ofLimit = (v, max) => `${cell(v)} / ${cell(max)}`;
 const cpuCell = (used, vm) => `${used ?? '-'} (${vm ? vm.cpus : '?'})`;
 const short = (missed, max = 3) =>
@@ -211,15 +212,16 @@ export function writeRunReport(run, runsDir) {
             '',
             'Users = sessions started. "Sold out after" = last successful booking, from the sale opening.',
             'Seats booked = seats in 201 responses; seats sold = BOOKED seats in the seat map afterwards.',
-            'Any difference is an oversell.',
+            'Any difference is an oversell. Unsold = seats still free at the end; stranded = free seats with no',
+            'free neighbour in their row, which only a solo buyer can use (counted since 2026-11-03).',
             '',
-            '| Phase | Users/s | Result | Users | Booked | Saw sold out | Gave up | Booking attempts | Sold out after s | Seats booked | Seats sold | Oversold |',
-            '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+            '| Phase | Users/s | Result | Users | Booked | Saw sold out | Gave up | Booking attempts | Sold out after s | Seats booked | Seats sold | Unsold (stranded) | Oversold |',
+            '|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
             ...steps
               .filter((s) => s.sale)
               .map((s) => {
                 const x = s.sale;
-                return `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${x.users} | ${x.booked} | ${x.soldOut} | ${x.gaveUp} | ${x.attempts} | ${cell(x.soldOutAfterS)} | ${x.seatsBooked} | ${x.seatsSold} | ${x.oversold} |`;
+                return `| ${s.phase} | ${s.rate} | ${verdict(s)} | ${x.users} | ${x.booked} | ${x.soldOut} | ${x.gaveUp} | ${x.attempts} | ${cell(x.soldOutAfterS)} | ${x.seatsBooked} | ${x.seatsSold} | ${unsoldCell(x)} | ${x.oversold} |`;
               }),
             '',
           ]
@@ -269,6 +271,7 @@ function eventRow(run, latest) {
     cell(s.sale?.booked),
     cell(s.sale?.gaveUp),
     cell(s.sale?.soldOutAfterS),
+    s.sale ? unsoldCell(s.sale) : '-',
     cell(s.sale?.oversold),
     p95Of(s.byRequest.some((r) => r.label === 'availability') ? 'availability' : 'seatmap'), // split since 2026-11-01
     p95Of('book 201'),
@@ -293,8 +296,8 @@ const CAPACITY_HEADER = [
   '|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|',
 ];
 const EVENT_HEADER = [
-  '| Date | Users/s | Result | Failed on | Users | Booked | Gave up | Sold out after s | Oversold | p95 seat map ms | p95 book 201 ms | p95 book 409 ms | Errors | Dropped | CPU backend | CPU db | Note | Run |',
-  '|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|',
+  '| Date | Users/s | Result | Failed on | Users | Booked | Gave up | Sold out after s | Unsold (stranded) | Oversold | p95 seat map ms | p95 book 201 ms | p95 book 409 ms | Errors | Dropped | CPU backend | CPU db | Note | Run |',
+  '|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|',
 ];
 
 export function writeResultsPage(resultsDir) {

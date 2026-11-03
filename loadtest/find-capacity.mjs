@@ -191,6 +191,8 @@ function runStep(phase, rate, duration, stepScript = script) {
       seatsBooked: m.seats_booked?.count ?? 0,
       seatsSold: m.seats_sold.count,
       seatsTotal: m.seats_total?.count ?? 0,
+      // Free seats with no free neighbour at the end (counted since 2026-11-03)
+      seatsStranded: m.seats_stranded?.count ?? null,
     };
     // Last successful booking counts as the sell-out only if every seat was sold
     const lastBookingS = m.booked_after_open?.max == null ? null : round(m.booked_after_open.max / 1000);
@@ -227,7 +229,8 @@ function runStep(phase, rate, duration, stepScript = script) {
   if (sale) {
     console.log(
       `${' '.repeat(37)}users ${sale.users}: booked ${sale.booked}, saw sold out ${sale.soldOut}, gave up ${sale.gaveUp}  |  ` +
-        `sold out after ${sale.soldOutAfterS ?? '?'}s  |  seats booked ${sale.seatsBooked}, sold ${sale.seatsSold}` +
+        `sold out after ${sale.soldOutAfterS ?? '?'}s  |  seats booked ${sale.seatsBooked}, sold ${sale.seatsSold}, ` +
+        `unsold ${sale.seatsTotal - sale.seatsSold} (stranded singles ${sale.seatsStranded ?? '?'})` +
         (sale.oversold === 0 ? '' : `  OVERSOLD ${sale.oversold}`),
     );
   }

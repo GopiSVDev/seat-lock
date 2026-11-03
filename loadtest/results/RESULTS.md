@@ -77,11 +77,12 @@ A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each
 
 Pass: no seat oversold, errors < 1.00%, dropped < 1%, over 1m at 200 users/s (latency, sell-out and 409s are reported, not judged).
 
-| Date | Users/s | Result | Failed on | Users | Booked | Gave up | Sold out after s | Oversold | p95 seat map ms | p95 book 201 ms | p95 book 409 ms | Errors | Dropped | CPU backend | CPU db | Note | Run |
-|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
-| 2026-10-23 | 200 | fail | dropped 47.72% >= 1% | 5749 | 281 | 5468 | not sold out | 0 | 7398.1 | 6080.7 | 7468.2 | 0.00% | 47.72% | 0.67 (1) | 0.239 (1) | baseline | [report](runs/2026-10-23-03-02-flash-sale.md) |
-| 2026-11-02 | 200 | pass | - | 10996 | 390 | 9910 | 58.7 | 0 | 2.7 | 10 | 7.1 | 0.00% | 0.00% | 0.342 (1) | 0.201 (1) | re-baseline, k6 VUs pre-allocated for retries | [report](runs/2026-11-02-01-18-flash-sale.md) |
-| 2026-11-02 | 200 | pass | - | 10996 | 447 | 1627 | 17.5 | 0 | 1.7 | 9.6 | 7.8 | 0.00% | 0.00% | 0.122 (1) | 0.108 (1) | varied seat preferences (realistic buyers) | [report](runs/2026-11-02-01-44-flash-sale.md) |
+| Date | Users/s | Result | Failed on | Users | Booked | Gave up | Sold out after s | Unsold (stranded) | Oversold | p95 seat map ms | p95 book 201 ms | p95 book 409 ms | Errors | Dropped | CPU backend | CPU db | Note | Run |
+|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
+| 2026-10-23 | 200 | fail | dropped 47.72% >= 1% | 5749 | 281 | 5468 | not sold out | 316 (-) | 0 | 7398.1 | 6080.7 | 7468.2 | 0.00% | 47.72% | 0.67 (1) | 0.239 (1) | baseline | [report](runs/2026-10-23-03-02-flash-sale.md) |
+| 2026-11-02 | 200 | pass | - | 10996 | 390 | 9910 | 58.7 | 0 (-) | 0 | 2.7 | 10 | 7.1 | 0.00% | 0.00% | 0.342 (1) | 0.201 (1) | re-baseline, k6 VUs pre-allocated for retries | [report](runs/2026-11-02-01-18-flash-sale.md) |
+| 2026-11-02 | 200 | pass | - | 10996 | 447 | 1627 | 17.5 | 0 (-) | 0 | 1.7 | 9.6 | 7.8 | 0.00% | 0.00% | 0.122 (1) | 0.108 (1) | varied seat preferences (realistic buyers) | [report](runs/2026-11-02-01-44-flash-sale.md) |
+| 2026-11-03 | 200 | pass | - | 10996 | 416 | 160 | 10.1 | 0 (0) | 0 | 2 | 15.9 | 12 | 0.00% | 0.00% | 0.176 (1) | 0.073 (1) | best available (server picks adjacent block, skip locked) | [report](runs/2026-11-03-00-50-flash-sale.md) |
 
 ## Reverted or within ±5%
 
