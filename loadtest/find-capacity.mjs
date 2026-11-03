@@ -60,6 +60,7 @@ const TEST_DEFAULTS = {
   'flash-sale': { MODE: 'event', WARMUP_TEST: 'mixed' },
 };
 const env = (name, fallback) => process.env[name] ?? TEST_DEFAULTS[test]?.[name] ?? fallback;
+const toSeconds = (d) => (d.endsWith('m') ? Number(d.slice(0, -1)) * 60 : Number(d.replace(/s$/, '')));
 const config = {
   mode: env('MODE', 'capacity'),
   peakUsers: Number(env('PEAK_USERS', 200)),
@@ -91,6 +92,11 @@ const config = {
   prometheusUrl: env('PROMETHEUS_URL', 'http://localhost:9090/api/v1/write'),
   prometheusQueryUrl: env('PROMETHEUS_QUERY_URL', 'http://localhost:9090/api/v1/query'),
 };
+// flash-sale: 1,000-seat shows on sale at once, enough that seats outlast the event (while seats remain
+// nearly every user books ~2.4 seats; 2.5 x 1.5 margin). FLASH_SHOWS overrides.
+if (test === 'flash-sale') {
+  config.flashShows = Number(env('FLASH_SHOWS', Math.ceil((config.peakUsers * toSeconds(config.eventDuration) * 2.5 * 1.5) / 1000)));
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, `${test}.js`);
@@ -145,6 +151,7 @@ function runStep(phase, rate, duration, stepScript = script) {
       ...process.env,
       RATE: String(rate),
       DURATION: duration,
+      ...(phase === 'event' && config.flashShows ? { FLASH_SHOWS: String(config.flashShows) } : {}),
       BASE_URL: config.baseUrl,
       K6_PROMETHEUS_RW_SERVER_URL: config.prometheusUrl,
       K6_PROMETHEUS_RW_TREND_STATS: 'avg,p(90),p(95),p(99),max',
@@ -416,7 +423,13 @@ const gridDown = (r) => Math.floor(r / config.resolution) * config.resolution;
 const gridUp = (r) => Math.ceil(r / config.resolution) * config.resolution;
 
 console.log(`Target: ${target}`);
-if (isEvent) console.log(`Event: ${config.peakUsers} users/s for ${config.eventDuration}, warm-up with ${config.warmupTest}\n`);
+if (isEvent) {
+  console.log(
+    `Event: ${config.peakUsers} users/s for ${config.eventDuration}` +
+      (config.flashShows ? ` over ${config.flashShows} shows` : '') +
+      `, warm-up with ${config.warmupTest}\n`,
+  );
+}
 else {
   console.log(
     previous && process.env.START_RATE == null

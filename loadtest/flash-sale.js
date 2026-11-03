@@ -1,14 +1,17 @@
-// Flash sale event: a new 1,000-seat show opens and users rush in. Not a capacity search: one run,
-// judged on correctness (no seat sold twice), errors and how latency behaves during the rush.
+// Flash sale event: advance booking opens for many 1,000-seat shows at once (like a blockbuster release
+// across theatres) and users rush in. Not a capacity search: one run, judged on correctness (no seat
+// sold twice), errors and how latency behaves during the rush.
 //   node loadtest/find-capacity.mjs flash-sale "note"          (warms up the JVM first)
 //
 // Single run by hand:
 //   RATE=200 RAMP=10s DURATION=1m k6 run loadtest/flash-sale.js
 //
-// setup() schedules the show on the Flash Arena screen. New users arrive from 0 up to RATE users/s
-// over RAMP, then RATE users/s until DURATION. Each user, like a real buyer:
-//   1. reads the seat map (layout from the CDN edge once per VU, availability from the app every time);
-//      if it shows no free seats, leaves (sold out)
+// setup() schedules FLASH_SHOWS shows on the Flash Arena screen through the API (find-capacity.mjs sizes
+// them so seats outlast the event; default 1, the single show of the earlier runs). New users arrive from
+// 0 up to RATE users/s over RAMP, then RATE users/s until DURATION. Each user, like a real buyer:
+//   1. wants one show, picked by popularity (Zipf: a few prime-time shows get most users); reads its seat
+//      map (layout from the CDN edge once per VU and show, availability from the app every time); if it
+//      shows no free seats, looks at another show, up to SHOWS_TO_TRY shows, then leaves (sold out)
 //   2. has a group size (1-4) and a preferred spot (preferredSpot: most want the middle-back rows near the
 //      centre, some recliners, some an aisle, a few the front), thinks for 0-THINK_MAX_S seconds, then
 //      SEAT_MODE=best (default, since 2026-11-03): asks POST /bookings/best-available for that many
@@ -27,9 +30,9 @@
 // them are stranded singles (no free neighbour in the row: a group can't use them), and the oversell
 // check: seats in 201 responses (seats_booked) must equal unavailable seats afterwards (seats_sold).
 //
-// Env: RATE (peak new users/s, default 50), RAMP (default 10s), DURATION (default 1m), SEAT_MODE (best |
-// pick, default best), THINK_MAX_S (default 3), MAX_ATTEMPTS (default 3), TOP_CHOICES (default 3, pick
-// mode), BASE_URL (default http://10.24.21.250:8080, the LXD VM)
+// Env: RATE (peak new users/s, default 50), RAMP (default 10s), DURATION (default 1m), FLASH_SHOWS
+// (default 1), SHOWS_TO_TRY (default 3), SEAT_MODE (best | pick, default best), THINK_MAX_S (default 3), MAX_ATTEMPTS
+// (default 3), TOP_CHOICES (default 3, pick mode), BASE_URL (default http://10.24.21.250:8080, the LXD VM)
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -43,6 +46,8 @@ const MAX_ATTEMPTS = Number(__ENV.MAX_ATTEMPTS || 3);
 const TOP_CHOICES = Number(__ENV.TOP_CHOICES || 3);
 const RAMP = __ENV.RAMP || '10s';
 const DURATION = __ENV.DURATION || '1m';
+const FLASH_SHOWS = Number(__ENV.FLASH_SHOWS || 1);
+const SHOWS_TO_TRY = Number(__ENV.SHOWS_TO_TRY || 3);
 const SEAT_MODE = __ENV.SEAT_MODE || 'best';
 if (!['best', 'pick'].includes(SEAT_MODE)) throw new Error(`SEAT_MODE must be best or pick, got ${SEAT_MODE}`);
 
@@ -60,8 +65,8 @@ const toSeconds = (d) => (d.endsWith('m') ? Number(d.slice(0, -1)) * 60 : Number
 
 export const options = baseOptions('flash_sale', ['layout', 'availability', 'book:201:409']);
 
-// Per VU: the show's layout rows, fetched once (immutable)
-let layoutRows;
+// Per VU: layout rows by show id, each fetched once (immutable)
+const layoutRows = {};
 Object.assign(options.scenarios.flash_sale, {
   executor: 'ramping-arrival-rate',
   startRate: 0,
@@ -77,15 +82,38 @@ Object.assign(options.scenarios.flash_sale, {
   maxVUs: Math.ceil(RATE * (THINK_MAX_S + 1) * 4) + 50,
 });
 
+// Scheduling a show inserts its 1,000 show seats one by one (~0.3 s), so many shows take a while
+options.setupTimeout = '5m';
+
 export function setup() {
-  const startTime = new Date(Date.now() + (60 + Math.random() * 300) * 86_400_000).toISOString();
-  const show = http.post(
-    `${BASE_URL}/shows`,
-    JSON.stringify({ movieId: 1, screenId: seed.flashScreenId, startTime, language: 'English', format: 'IMAX_2D' }),
-    { headers: JSON_HEADERS, responseType: 'text', tags: { name: 'setup' } },
-  );
-  if (show.status !== 201) exec.test.abort(`Could not create the flash sale show: ${show.status} ${show.body}`);
-  return { showId: show.json('id'), openedAt: Date.now() };
+  const showIds = [];
+  // 10 at a time: the VM has one core, more in parallel only queues
+  for (let first = 0; first < FLASH_SHOWS; first += 10) {
+    const batch = [];
+    for (let i = first; i < Math.min(first + 10, FLASH_SHOWS); i++) {
+      const startTime = new Date(Date.now() + (60 + Math.random() * 300) * 86_400_000).toISOString();
+      const body = { movieId: 1, screenId: seed.flashScreenId, startTime, language: 'English', format: 'IMAX_2D' };
+      batch.push(['POST', `${BASE_URL}/shows`, JSON.stringify(body),
+        { headers: JSON_HEADERS, responseType: 'text', tags: { name: 'setup' } }]);
+    }
+    for (const show of http.batch(batch)) {
+      if (show.status !== 201) exec.test.abort(`Could not create a flash sale show: ${show.status} ${show.body}`);
+      showIds.push(show.json('id'));
+    }
+  }
+  return { showIds, openedAt: Date.now() };
+}
+
+// The shows this user would go to, most wanted first: Zipf by position in showIds, no repeats.
+// (n + 1)^u so the last show can be picked too; lib.js zipfIndex never picks it, which only matters for few items
+function showsToTry(showIds) {
+  const n = showIds.length;
+  const wanted = [];
+  while (wanted.length < Math.min(SHOWS_TO_TRY, n)) {
+    const showId = showIds[Math.min(Math.floor(Math.pow(n + 1, Math.random())), n) - 1];
+    if (!wanted.includes(showId)) wanted.push(showId);
+  }
+  return wanted;
 }
 
 // 1 seat 10%, 2 seats 50%, 3 seats 20%, 4 seats 20%
@@ -155,28 +183,35 @@ export default function (data) {
   // One buyer (or group): same size and preferred spot on every attempt
   const size = groupSize();
   const customerName = `k6-${exec.scenario.iterationInTest}`;
+  const shows = showsToTry(data.showIds);
+  let showIndex = 0;
   let spot;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    layoutRows ??= layout(data.showId, 'layout')?.rows;
-    const free = availability(data.showId, 'availability');
-    if (!layoutRows || !free) return;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; ) {
+    const showId = shows[showIndex];
+    layoutRows[showId] ??= layout(showId, 'layout')?.rows;
+    const rows = layoutRows[showId];
+    const free = availability(showId, 'availability');
+    if (!rows || !free) return;
     if (free.availableSeats === 0) {
+      // Sold out: looks at the next show they would like (not a booking attempt)
+      if (++showIndex < shows.length) continue;
       usersSoldOut.add(1);
       return;
     }
-    spot ??= preferredSpot(layoutRows);
+    spot ??= preferredSpot(rows);
 
     let url;
     let body;
     if (SEAT_MODE === 'best') {
-      const types = seatTypes(layoutRows, spot);
+      const types = seatTypes(rows, spot);
       url = `${BASE_URL}/bookings/best-available`;
-      body = { showId: data.showId, customerName, quantity: size, seatType: types[(attempt - 1) % types.length] };
+      body = { showId, customerName, quantity: size, seatType: types[(attempt - 1) % types.length] };
     } else {
       url = `${BASE_URL}/bookings`;
-      body = { showId: data.showId, customerName, showSeatIds: pickSeats(layoutRows, new Set(free.unavailable), size, spot) };
+      body = { showId, customerName, showSeatIds: pickSeats(rows, new Set(free.unavailable), size, spot) };
     }
     sleep(Math.random() * THINK_MAX_S);
+    attempt++;
 
     const res = http.post(url, JSON.stringify(body), {
       headers: JSON_HEADERS,
@@ -199,9 +234,11 @@ export default function (data) {
 
 export function teardown(data) {
   sleep(2); // availability is cached for 1 s
-  const free = availability(data.showId, 'setup');
-  const rows = layout(data.showId, 'setup').rows;
-  seatsSold.add(free.unavailable.length);
-  seatsTotal.add(free.availableSeats + free.unavailable.length);
-  seatsStranded.add(countStranded(rows, new Set(free.unavailable)));
+  for (const showId of data.showIds) {
+    const free = availability(showId, 'setup');
+    const rows = layout(showId, 'setup').rows;
+    seatsSold.add(free.unavailable.length);
+    seatsTotal.add(free.availableSeats + free.unavailable.length);
+    seatsStranded.add(countStranded(rows, new Set(free.unavailable)));
+  }
 }

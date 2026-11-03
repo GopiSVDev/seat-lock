@@ -23,6 +23,29 @@ export const TESTS = {
   'show-create':
     '`POST /shows` on a 250-seat screen, which also creates the 250 show seats in the same transaction. Admin path.',
   'flash-sale':
+    'Advance booking opens for {shows} 1,000-seat shows at once (enough that seats outlast the event) and new ' +
+    'users arrive at a fixed rate (Users/s). Each user wants one show, picked by popularity (Zipf: a few shows get ' +
+    'most users), and loads its seat map (layout through the CDN edge, availability from the app on every attempt); ' +
+    'if it is sold out they look at another show, up to 3. They want 1-4 seats of the type at their preferred spot ' +
+    '(most want the middle-back rows near the centre, some recliners, some an aisle, a few the front), think 0-3 s ' +
+    'and ask `POST /bookings/best-available`; on a 409 they try again with the other seat type, up to 3 bookings. ' +
+    'Runs once, after warming up the JVM with `mixed`. **p95 seat map** is the availability request.',
+};
+
+// Flash-sale runs with one show and best-available buyers (2026-11-03, before the multi-show sale)
+const ONE_SHOW = {
+  'flash-sale':
+    'A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map ' +
+    '(layout through the CDN edge, availability from the app on every attempt), wants 1-4 seats of the type at their ' +
+    'preferred spot (most want the middle-back rows near the centre, some recliners, some an aisle, a few the front), ' +
+    'thinks 0-3 s and asks `POST /bookings/best-available`; on a 409 they try again with the other seat type, up to ' +
+    '3 bookings. Runs once, after warming up the JVM with `mixed`. **p95 seat map** is the availability request.',
+};
+
+// Flash-sale runs before best available: users picked exact seats on the map
+const BEST_AVAILABLE = '2026-11-03T00:45';
+const BEFORE_BEST_AVAILABLE = {
+  'flash-sale':
     'A new 1,000-seat show opens and new users arrive at a fixed rate (Users/s). Each user loads the seat map ' +
     '(layout through the CDN edge, availability from the app on every attempt), picks 1-4 adjacent free seats near ' +
     'their own preferred spot (most want the middle-back rows near the centre, some recliners, some an aisle, a few ' +
@@ -55,11 +78,14 @@ const BEFORE_PREFERENCES = {
     'with `mixed`. **p95 seat map** is the availability request since 2026-11-01 (the full seat map before).',
 };
 
-function testText(test, startedAt) {
+function testText(test, run) {
+  const { startedAt } = run;
   return (
     (startedAt < SEAT_MAP_SPLIT && BEFORE_SPLIT[test]) ||
     (startedAt < SEAT_PREFERENCES && BEFORE_PREFERENCES[test]) ||
-    TESTS[test]
+    (startedAt < BEST_AVAILABLE && BEFORE_BEST_AVAILABLE[test]) ||
+    (test === 'flash-sale' && run.config?.flashShows == null && ONE_SHOW[test]) ||
+    TESTS[test]?.replace('{shows}', run.config?.flashShows)
   );
 }
 
@@ -159,7 +185,7 @@ export function writeRunReport(run, runsDir) {
       run.note ? `> ${run.note}\n` : '',
       `- Date: ${run.startedAt}`,
       `- Commit: ${run.commit}${run.uncommittedChanges ? ' (+changes)' : ''}`,
-      ...(testText(test, run.startedAt) ? [`- Test: ${testText(test, run.startedAt)}`] : []),
+      ...(testText(test, run) ? [`- Test: ${testText(test, run)}`] : []),
       `- Pass: ${targetText(config)}`,
       isEvent
         ? `- Failed on: ${eventStep && eventStep.pass === false ? failures(eventStep, config).join(', ') : '-'}`
@@ -357,7 +383,8 @@ export function writeResultsPage(resultsDir) {
       '',
       `## ${test}`,
       '',
-      ...(TESTS[test] ? [TESTS[test], ''] : []),
+      // The current description; each run report has the one that matches that run
+      ...(TESTS[test] ? [TESTS[test].replace('{shows}', 'many'), ''] : []),
       ...(latest ? [`Pass: ${targetText(latest.config)}.`, ''] : passLines.has(test) ? [passLines.get(test), ''] : []),
       ...(isEvent ? EVENT_HEADER : CAPACITY_HEADER),
       ...rows.filter(Boolean),
