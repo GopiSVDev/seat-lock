@@ -30,11 +30,16 @@ public class Seat {
     @Column(nullable = false)
     private SeatType seatType;
 
-    public Seat(Screen screen, String rowLabel, int seatNumber, SeatType seatType) {
+    // Best-available order within the screen: 1 = best seat
+    @Column(nullable = false)
+    private int seatRank;
+
+    public Seat(Screen screen, String rowLabel, int seatNumber, SeatType seatType, int seatRank) {
         this.screen = screen;
         this.rowLabel = rowLabel;
         this.seatNumber = seatNumber;
         this.seatType = seatType;
+        this.seatRank = seatRank;
     }
 
     public String getLabel() {

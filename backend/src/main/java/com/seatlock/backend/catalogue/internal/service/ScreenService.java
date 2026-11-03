@@ -14,11 +14,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ScreenService {
+
+    private static final double SWEET_ROW = 0.6;
 
     private final TheatreRepository theatreRepository;
     private final ScreenRepository screenRepository;
@@ -31,14 +34,41 @@ public class ScreenService {
 
         Screen screen = screenRepository.save(new Screen(theatre, request.name()));
 
+        // Seats are saved in row order (ids follow it; the seat map relies on that), each with its rank
+        int[] ranks = seatRanks(request.rows());
         List<Seat> seats = new ArrayList<>();
         for (CreateScreenRequest.Row row : request.rows()) {
             for (int number = 1; number <= row.seatCount(); number++) {
-                seats.add(new Seat(screen, row.label(), number, row.seatType()));
+                seats.add(new Seat(screen, row.label(), number, row.seatType(), ranks[seats.size()]));
             }
         }
 
         return ScreenResponse.from(screen, seatRepository.saveAll(seats));
+    }
+
+    // Best-available ranks in row order: rank 1 is the seat closest to the sweet spot (the row 60% of the way
+    // back, centre of the row); one row away counts like 2 seats along the row. Ties: front row, then left seat.
+    private static int[] seatRanks(List<CreateScreenRequest.Row> rows) {
+        record Place(int index, int row, int number, double distance) {
+        }
+
+        double sweetRow = SWEET_ROW * (rows.size() - 1);
+        List<Place> places = new ArrayList<>();
+        for (int r = 0; r < rows.size(); r++) {
+            double centre = (rows.get(r).seatCount() + 1) / 2.0;
+            for (int number = 1; number <= rows.get(r).seatCount(); number++) {
+                places.add(new Place(places.size(), r, number, 2 * Math.abs(r - sweetRow) + Math.abs(number - centre)));
+            }
+        }
+
+        places.sort(Comparator.comparingDouble(Place::distance)
+                .thenComparingInt(Place::row)
+                .thenComparingInt(Place::number));
+        int[] ranks = new int[places.size()];
+        for (int i = 0; i < places.size(); i++) {
+            ranks[places.get(i).index()] = i + 1;
+        }
+        return ranks;
     }
 
     @Transactional(readOnly = true)
