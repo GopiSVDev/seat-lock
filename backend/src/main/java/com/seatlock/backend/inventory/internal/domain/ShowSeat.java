@@ -32,16 +32,21 @@ public class ShowSeat {
     @Column(nullable = false)
     private SeatType seatType;
 
+    // Copied from the catalogue seat: best-available order, 1 = best
+    @Column(nullable = false)
+    private int seatRank;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ShowSeatStatus status;
 
-    public ShowSeat(Long showId, Long seatId, String rowLabel, int seatNumber, SeatType seatType) {
+    public ShowSeat(Long showId, Long seatId, String rowLabel, int seatNumber, SeatType seatType, int seatRank) {
         this.showId = showId;
         this.seatId = seatId;
         this.rowLabel = rowLabel;
         this.seatNumber = seatNumber;
         this.seatType = seatType;
+        this.seatRank = seatRank;
         this.status = ShowSeatStatus.AVAILABLE;
     }
 

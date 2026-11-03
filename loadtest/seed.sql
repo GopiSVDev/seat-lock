@@ -29,14 +29,22 @@ FROM generate_series(1, 40) s
 UNION ALL
 SELECT 41, 1, 'Flash Arena';
 
-INSERT INTO catalogue.seat (id, screen_id, row_label, seat_number, seat_type)
-SELECT (s - 1) * 250 + k + 1, s, chr(65 + k / 25), k % 25 + 1,
-       CASE WHEN k / 25 >= 8 THEN 'PREMIUM' ELSE 'REGULAR' END
-FROM generate_series(1, 40) s, generate_series(0, 249) k
-UNION ALL
-SELECT 40 * 250 + k + 1, 41, chr(65 + k / 50), k % 50 + 1,
-       CASE WHEN k / 50 >= 16 THEN 'RECLINER' ELSE 'REGULAR' END
-FROM generate_series(0, 999) k;
+-- seat_rank: best-available order, same formula as ScreenService.seatRanks (distance from the row 60% of the
+-- way back, centre of the row; a row counts like 2 seats; ties: front row, then left seat)
+INSERT INTO catalogue.seat (id, screen_id, row_label, seat_number, seat_type, seat_rank)
+SELECT id, screen_id, chr(65 + r), n, seat_type,
+       row_number() OVER (PARTITION BY screen_id
+                          ORDER BY 2 * abs(r - 0.6 * (row_count - 1)) + abs(n - (width + 1) / 2.0), r, n)
+FROM (
+    SELECT (s - 1) * 250 + k + 1 AS id, s AS screen_id, k / 25 AS r, k % 25 + 1 AS n,
+           CASE WHEN k / 25 >= 8 THEN 'PREMIUM' ELSE 'REGULAR' END AS seat_type, 10 AS row_count, 25 AS width
+    FROM generate_series(1, 40) s, generate_series(0, 249) k
+    UNION ALL
+    SELECT 40 * 250 + k + 1, 41, k / 50, k % 50 + 1,
+           CASE WHEN k / 50 >= 16 THEN 'RECLINER' ELSE 'REGULAR' END, 20, 50
+    FROM generate_series(0, 999) k
+) seats
+ORDER BY id;
 
 INSERT INTO catalogue.shows (id, movie_id, screen_id, start_time, end_time, language, format)
 SELECT j, m.id, (j - 1) % 40 + 1, st, st + m.duration_minutes * interval '1 minute',
@@ -45,11 +53,12 @@ FROM generate_series(1, :shows) j
 JOIN catalogue.movie m ON m.id = (j - 1) % 50 + 1,
 LATERAL (SELECT date_trunc('hour', now()) + interval '1 day' + ((j - 1) / 40) * interval '4 hours' AS st) t;
 
-INSERT INTO inventory.show_seat (id, show_id, seat_id, row_label, seat_number, seat_type, status)
-SELECT (j - 1) * 250 + k + 1, j, ((j - 1) % 40) * 250 + k + 1, chr(65 + k / 25), k % 25 + 1,
-       CASE WHEN k / 25 >= 8 THEN 'PREMIUM' ELSE 'REGULAR' END,
+INSERT INTO inventory.show_seat (id, show_id, seat_id, row_label, seat_number, seat_type, seat_rank, status)
+SELECT (j - 1) * 250 + k + 1, j, seat.id, seat.row_label, seat.seat_number, seat.seat_type, seat.seat_rank,
        CASE WHEN j <= :booked_shows THEN 'BOOKED' ELSE 'AVAILABLE' END
-FROM generate_series(1, :shows) j, generate_series(0, 249) k
+FROM generate_series(1, :shows) j
+CROSS JOIN generate_series(0, 249) k
+JOIN catalogue.seat seat ON seat.id = ((j - 1) % 40) * 250 + k + 1
 ORDER BY j, k;
 
 INSERT INTO booking.booking (id, show_id, customer_name, status, created_at)

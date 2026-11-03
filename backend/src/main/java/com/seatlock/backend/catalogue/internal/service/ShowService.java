@@ -40,7 +40,8 @@ public class ShowService {
 
         List<ShowScheduled.ScheduledSeat> seats = seatRepository.findByScreenIdOrderByIdAsc(screen.getId()).stream()
                 .map(seat -> new ShowScheduled.ScheduledSeat(
-                        seat.getId(), seat.getRowLabel(), seat.getSeatNumber(), seat.getSeatType().name()))
+                        seat.getId(), seat.getRowLabel(), seat.getSeatNumber(), seat.getSeatType().name(),
+                        seat.getSeatRank()))
                 .toList();
         
         eventPublisher.publishEvent(new ShowScheduled(show.getId(), seats));

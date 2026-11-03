@@ -2,6 +2,7 @@ package com.seatlock.backend.booking.internal.web;
 
 import com.seatlock.backend.booking.internal.service.BookingService;
 import com.seatlock.backend.booking.internal.web.dto.BookingResponse;
+import com.seatlock.backend.booking.internal.web.dto.CreateBestAvailableBookingRequest;
 import com.seatlock.backend.booking.internal.web.dto.CreateBookingRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,13 @@ public class BookingController {
     @PostMapping
     public ResponseEntity<BookingResponse> create(@Valid @RequestBody CreateBookingRequest request) {
         BookingResponse response = bookingService.create(request);
+        return ResponseEntity.created(URI.create("/bookings/" + response.id())).body(response);
+    }
+
+    @PostMapping("/best-available")
+    public ResponseEntity<BookingResponse> createBestAvailable(
+            @Valid @RequestBody CreateBestAvailableBookingRequest request) {
+        BookingResponse response = bookingService.createBestAvailable(request);
         return ResponseEntity.created(URI.create("/bookings/" + response.id())).body(response);
     }
 
