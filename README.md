@@ -58,7 +58,8 @@ Then walk through the whole flow (ids assume an empty database):
 ```bash
 B=localhost:8080
 curl -s -XPOST $B/movies -H 'Content-Type: application/json' \
-  -d '{"title":"Interstellar","durationMinutes":169,"certification":"UA","releaseDate":"2014-11-07"}'
+  -d '{"title":"Interstellar","durationMinutes":169,"certification":"UA","releaseDate":"2014-11-07",
+       "posterUrl":"https://cdn.example.com/posters/interstellar.jpg","genres":["SCI_FI","DRAMA"]}'
 curl -s "$B/cities?query=chenai"   # typo tolerant: Chennai, id 5
 curl -s -XPOST $B/theatres -H 'Content-Type: application/json' \
   -d '{"name":"PVR Grand","cityId":5,"address":"1 Main Road"}'

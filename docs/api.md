@@ -139,6 +139,8 @@ Response `201`:
 | `durationMinutes` | int | > 0; used to compute a show's end time |
 | `certification` | [Certification](#enums) | required |
 | `releaseDate` | date (`2014-11-07`) | required |
+| `posterUrl` | string | optional; a valid URL, max 500 characters. A link to the image on a CDN or file storage, never the image itself |
+| `genres` | [Genre](#enums)[] | required, 1 to 3; duplicates are stored once |
 
 ```json
 {
@@ -146,7 +148,9 @@ Response `201`:
   "description": "Space epic",
   "durationMinutes": 169,
   "certification": "UA",
-  "releaseDate": "2014-11-07"
+  "releaseDate": "2014-11-07",
+  "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+  "genres": ["SCI_FI", "DRAMA"]
 }
 ```
 
@@ -159,9 +163,13 @@ Response `201`:
   "description": "Space epic",
   "durationMinutes": 169,
   "certification": "UA",
-  "releaseDate": "2014-11-07"
+  "releaseDate": "2014-11-07",
+  "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+  "genres": ["SCI_FI", "DRAMA"]
 }
 ```
+
+`posterUrl` is `null` when the movie has no poster yet.
 
 #### `GET /movies/{id}`
 
@@ -476,6 +484,7 @@ Returns the same shape as the create response. `404` if unknown.
 | Enum | Values |
 |---|---|
 | Certification | `U`, `UA`, `A` |
+| Genre | `ACTION`, `ADVENTURE`, `ANIMATION`, `BIOGRAPHY`, `COMEDY`, `CRIME`, `DOCUMENTARY`, `DRAMA`, `FAMILY`, `FANTASY`, `HISTORICAL`, `HORROR`, `MUSICAL`, `MYSTERY`, `ROMANCE`, `SCI_FI`, `SPORTS`, `THRILLER`, `WAR` |
 | SeatType | `REGULAR`, `PREMIUM`, `RECLINER` |
 | ShowFormat | `TWO_D`, `THREE_D`, `IMAX_2D`, `IMAX_3D`, `FOUR_DX` |
 | Booking status | `CONFIRMED` |

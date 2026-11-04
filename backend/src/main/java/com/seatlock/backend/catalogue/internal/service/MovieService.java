@@ -22,7 +22,9 @@ public class MovieService {
                 request.description(),
                 request.durationMinutes(),
                 request.certification(),
-                request.releaseDate()
+                request.releaseDate(),
+                request.posterUrl(),
+                request.genres().stream().distinct().toList()
         );
         return MovieResponse.from(movieRepository.save(movie));
     }
