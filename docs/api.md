@@ -378,6 +378,67 @@ Response `201` (`endTime` = start + movie duration):
 }
 ```
 
+#### `GET /shows`
+
+The "pick a theatre and time" page: one movie's shows in one city on one **date in India**, grouped by
+theatre. Only shows that haven't started yet. Not paged: one movie, one city, one day is naturally small.
+
+| Parameter | Meaning |
+|---|---|
+| `movieId` | Required; `404` if unknown. |
+| `cityId` | Required; `404` if unknown. |
+| `date` | Optional, `2026-11-05`. A day in India (00:00 to 24:00 IST); default today. A past date gives `400`. |
+| `language` | Optional, repeatable, a [Language](#enums). |
+| `format` | Optional, repeatable, a [ShowFormat](#enums). |
+
+`GET /shows?movieId=5&cityId=5&date=2026-12-02` → `200`:
+
+```json
+{
+  "movieId": 5,
+  "cityId": 5,
+  "date": "2026-12-02",
+  "dates": ["2026-12-02", "2026-12-03", "2026-12-09"],
+  "theatres": [
+    {
+      "id": 3,
+      "name": "AGS Cinemas",
+      "address": "Villivakkam",
+      "shows": [
+        {
+          "id": 9,
+          "startTime": "2026-12-02T18:29:00Z",
+          "language": "TAMIL",
+          "format": "TWO_D",
+          "screenName": "Screen 3"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "PVR Grand",
+      "address": "1 Main Road",
+      "shows": [
+        {
+          "id": 6,
+          "startTime": "2026-12-02T10:00:00Z",
+          "language": "ENGLISH",
+          "format": "IMAX_2D",
+          "screenName": "Screen 1"
+        }
+      ]
+    }
+  ]
+}
+```
+
+- Theatres by name, shows by start time. Times are UTC like everywhere else: `18:29Z` is 23:59 IST, so that
+  show belongs to 2 December; a show at `18:31Z` the same evening is 00:01 IST and belongs to 3 December.
+- `dates`: the next days (up to 7) with at least one upcoming show matching the filters, for the date strip.
+  It doesn't depend on `date`. An empty `theatres` list means nothing on that date.
+- Seat availability per show is not included: the seat map's
+  [`GET /shows/{id}/availability`](#get-showsidavailability) has it.
+
 #### `GET /shows/{id}`
 
 Returns the same shape. `404` if unknown.
