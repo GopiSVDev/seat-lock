@@ -42,11 +42,15 @@ NOTES.md
 CLAUDE.md
 
 ### Load testing ###
-# The load-test tooling, run reports and helper scripts stay local; only the results summary is published
+# The load-test tooling, raw run data, profiles and helper scripts stay local; results and run reports are published
 loadtest/*
 !loadtest/results/
 loadtest/results/*
 !loadtest/results/RESULTS.md
+!loadtest/results/SUMMARY.md
+!loadtest/results/runs/
+loadtest/results/runs/*
+!loadtest/results/runs/*.md
 scripts/
 # Local command cheat sheet
 COMMANDS.md
