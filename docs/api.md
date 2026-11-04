@@ -30,6 +30,8 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 |---|---|---|
 | 400 | Request body fails validation; `errors` maps each bad field to its message | `Validation failed` |
 | 400 | Malformed JSON or a wrong enum value | Spring's message |
+| 400 | A query parameter out of range (e.g. `size=100`) | `Validation failure` |
+| 400 | Filters that don't make sense together | see each endpoint |
 | 404 | An id in the path or body does not exist | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
 | 409 | Seats already taken or no adjacent block left | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
@@ -171,6 +173,52 @@ Response `201`:
 
 `posterUrl` is `null` when the movie has no poster yet.
 
+#### `GET /movies`
+
+A page of movie cards. With `cityId`: **now showing** in that city, i.e. movies with at least one show that
+hasn't started yet in one of its theatres, most upcoming shows first (theatres give the most shows to the
+films people want). Without `cityId`: the whole catalogue, newest release first (for admins scheduling shows).
+
+| Parameter | Meaning |
+|---|---|
+| `cityId` | Optional. Now showing in this city; `404` if the city is unknown. |
+| `language` | Optional, repeatable, a [Language](#enums). Has an upcoming show in this language in the city. Needs `cityId`. |
+| `format` | Optional, repeatable, a [ShowFormat](#enums). Has an upcoming show in this format in the city. Needs `cityId`. |
+| `genre` | Optional, repeatable, a [Genre](#enums). The movie has this genre. |
+| `page` | Page number from 0 (default 0). |
+| `size` | Items per page, 1 to 50 (default 20). |
+
+Several values of one filter mean **or**, different filters mean **and**:
+`?cityId=5&language=TAMIL&language=ENGLISH&genre=THRILLER` = thrillers with a Tamil or English show in
+Chennai. `language` or `format` without `cityId` gives `400`.
+
+`GET /movies?cityId=5&size=1` → `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": 5,
+      "title": "Big Hit",
+      "posterUrl": "https://cdn.example.com/posters/big-hit.jpg",
+      "genres": ["ACTION", "THRILLER"],
+      "certification": "UA",
+      "durationMinutes": 120,
+      "releaseDate": "2026-10-01",
+      "languages": ["ENGLISH", "TAMIL"],
+      "formats": ["IMAX_2D", "TWO_D"]
+    }
+  ],
+  "page": 0,
+  "size": 1,
+  "totalItems": 3,
+  "totalPages": 3
+}
+```
+
+`languages` and `formats` list everything the movie's upcoming shows offer **in that city**, whatever the
+filters; they are `null` without `cityId`. A page past the end returns empty `items` with the real totals.
+
 #### `GET /movies/{id}`
 
 Returns the same shape. `404` if unknown.
@@ -301,7 +349,7 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
 | `movieId` | long | required, must exist (else `404`) |
 | `screenId` | long | required, must exist (else `404`) |
 | `startTime` | instant | required, in the future |
-| `language` | string | required, e.g. `"English"` |
+| `language` | [Language](#enums) | required |
 | `format` | [ShowFormat](#enums) | required |
 
 ```json
@@ -309,7 +357,7 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
   "movieId": 1,
   "screenId": 1,
   "startTime": "2030-01-01T18:30:00Z",
-  "language": "English",
+  "language": "ENGLISH",
   "format": "IMAX_2D"
 }
 ```
@@ -325,7 +373,7 @@ Response `201` (`endTime` = start + movie duration):
   "screenName": "Screen 1",
   "startTime": "2030-01-01T18:30:00Z",
   "endTime": "2030-01-01T21:19:00Z",
-  "language": "English",
+  "language": "ENGLISH",
   "format": "IMAX_2D"
 }
 ```
@@ -484,6 +532,7 @@ Returns the same shape as the create response. `404` if unknown.
 | Enum | Values |
 |---|---|
 | Certification | `U`, `UA`, `A` |
+| Language | `ENGLISH`, `HINDI`, `TAMIL`, `TELUGU`, `MALAYALAM`, `KANNADA`, `BENGALI`, `MARATHI`, `GUJARATI`, `PUNJABI`, `ODIA`, `ASSAMESE`, `BHOJPURI`, `URDU`, `JAPANESE`, `KOREAN`, `FRENCH`, `SPANISH` |
 | Genre | `ACTION`, `ADVENTURE`, `ANIMATION`, `BIOGRAPHY`, `COMEDY`, `CRIME`, `DOCUMENTARY`, `DRAMA`, `FAMILY`, `FANTASY`, `HISTORICAL`, `HORROR`, `MUSICAL`, `MYSTERY`, `ROMANCE`, `SCI_FI`, `SPORTS`, `THRILLER`, `WAR` |
 | SeatType | `REGULAR`, `PREMIUM`, `RECLINER` |
 | ShowFormat | `TWO_D`, `THREE_D`, `IMAX_2D`, `IMAX_3D`, `FOUR_DX` |

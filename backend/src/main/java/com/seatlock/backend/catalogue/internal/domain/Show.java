@@ -32,14 +32,15 @@ public class Show {
     @Column(nullable = false)
     private Instant endTime;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String language;
+    private Language language;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ShowFormat format;
 
-    public Show(Movie movie, Screen screen, Instant startTime, String language, ShowFormat format) {
+    public Show(Movie movie, Screen screen, Instant startTime, Language language, ShowFormat format) {
         this.movie = movie;
         this.screen = screen;
         this.startTime = startTime;

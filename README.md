@@ -32,12 +32,12 @@ programming needed. API reference with request and response examples: **[docs/ap
 4. The customer **books**, either the exact seats they picked on the map or "best available N seats of a
    type", where the server chooses the best adjacent block for them.
 
-17 endpoints in total, all JSON over HTTP. Errors use the standard
+18 endpoints in total, all JSON over HTTP. Errors use the standard
 [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) format.
 
 | Area | Endpoints |
 |---|---|
-| Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `POST /movies`, `GET /movies/{id}`, `POST /theatres`, `GET /theatres/{id}`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `POST /shows`, `GET /shows/{id}` |
+| Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `POST /theatres`, `GET /theatres/{id}`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `POST /shows`, `GET /shows/{id}` |
 | Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
 | Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings/{id}` |
 
@@ -68,7 +68,7 @@ curl -s -XPOST $B/theatres/1/screens -H 'Content-Type: application/json' \
                                  {"label":"B","seatCount":10,"seatType":"REGULAR"},
                                  {"label":"C","seatCount":8,"seatType":"RECLINER"}]}'
 curl -s -XPOST $B/shows -H 'Content-Type: application/json' \
-  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T18:30:00Z","language":"English","format":"IMAX_2D"}'
+  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T18:30:00Z","language":"ENGLISH","format":"IMAX_2D"}'
 
 curl -s $B/shows/1/layout          # rows and seat ids
 curl -s $B/shows/1/availability    # which seat ids are taken
@@ -78,6 +78,7 @@ curl -s -XPOST $B/bookings -H 'Content-Type: application/json' \
 curl -s -XPOST $B/bookings/best-available -H 'Content-Type: application/json' \
   -d '{"showId":1,"customerName":"ravi","quantity":2,"seatType":"RECLINER"}'
 curl -s $B/bookings/1
+curl -s "$B/movies?cityId=5"       # now showing in Chennai
 ```
 
 Booking the same seats twice returns `409 Conflict`.
