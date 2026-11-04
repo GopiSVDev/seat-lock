@@ -7,7 +7,7 @@ ISO-8601 in UTC (`2030-01-01T18:30:00Z`). Every `POST` that creates something re
 For the big picture (modules, booking flow, caching) see the [README](../README.md).
 
 - [Errors](#errors)
-- [Catalogue](#catalogue): [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
+- [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
 - [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [get](#get-bookingsid)
 - [Enums](#enums)
@@ -30,9 +30,11 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 |---|---|---|
 | 400 | Request body fails validation; `errors` maps each bad field to its message | `Validation failed` |
 | 400 | Malformed JSON or a wrong enum value | Spring's message |
+| 400 | A query parameter out of range (e.g. `size=100`) | `Validation failure` |
+| 400 | Filters that don't make sense together | see each endpoint |
 | 404 | An id in the path or body does not exist | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
 | 409 | Seats already taken or no adjacent block left | see each endpoint |
-| 409 | A unique rule broken, e.g. a duplicate screen name in a theatre | `Request conflicts with existing data` |
+| 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
 
 Validation example:
@@ -54,6 +56,80 @@ Validation example:
 
 Admin data: what is playing where. Owned by the `catalogue` module.
 
+### Cities
+
+Cities are a fixed list (45 Indian cities and their aliases, loaded by a database migration). Theatres point
+to a city by id, so a misspelt city can't be stored.
+
+#### `GET /cities`
+
+Search or list cities. All parameters optional.
+
+| Parameter | Meaning |
+|---|---|
+| `query` | Text the user typed, up to 50 characters. Matches city names **and aliases**, by prefix (`chen`) and by trigram similarity, so typos work (`chenai`, `banglore`). At most 10 results, best first: prefix matches, then real names before aliases, then closest. |
+| `popular` | `true`: only the popular cities. Without `query` they come in popular order (Mumbai, Delhi, Bengaluru, ...). |
+| `withTheatres` | `true`: only cities with at least one theatre. A customer's city picker sends this; an admin choosing a city for a new theatre doesn't. |
+
+Without `query` the result is the whole (filtered) list, alphabetical unless `popular=true`.
+
+`GET /cities?query=madras` → `200`:
+
+```json
+[
+  {
+    "id": 5,
+    "name": "Chennai",
+    "state": "Tamil Nadu",
+    "popularRank": 5,
+    "matchedAlias": "Madras"
+  }
+]
+```
+
+`matchedAlias` is set when the city was found through an alias, so a UI can show "Chennai (Madras)"; it is
+`null` when the name matched or no `query` was sent. `popularRank` is `null` for cities outside the popular
+list. No match gives `[]`; a `query` over 50 characters gives `400`.
+
+#### `GET /cities/{id}`
+
+One city, same shape (`matchedAlias` is `null`). `404` if unknown.
+
+#### `POST /cities`
+
+```json
+{
+  "name": "Erode",
+  "state": "Tamil Nadu",
+  "popularRank": null
+}
+```
+
+`name` and `state` required (max 100 characters, trimmed). `popularRank` optional, positive. Response `201`
+with the city. `409` if the city already exists in that state (ignoring case) or the popular rank is taken.
+
+#### `POST /cities/{id}/aliases`
+
+Another name people type for the city: old name, short name or common spelling.
+
+```json
+{
+  "alias": "Tiruchi"
+}
+```
+
+Response `201`:
+
+```json
+{
+  "id": 26,
+  "cityId": 23,
+  "alias": "Tiruchi"
+}
+```
+
+`404` if the city is unknown, `409` if any city already has that alias (ignoring case).
+
 ### Movies
 
 #### `POST /movies`
@@ -65,6 +141,8 @@ Admin data: what is playing where. Owned by the `catalogue` module.
 | `durationMinutes` | int | > 0; used to compute a show's end time |
 | `certification` | [Certification](#enums) | required |
 | `releaseDate` | date (`2014-11-07`) | required |
+| `posterUrl` | string | optional; a valid URL, max 500 characters. A link to the image on a CDN or file storage, never the image itself |
+| `genres` | [Genre](#enums)[] | required, 1 to 3; duplicates are stored once |
 
 ```json
 {
@@ -72,7 +150,9 @@ Admin data: what is playing where. Owned by the `catalogue` module.
   "description": "Space epic",
   "durationMinutes": 169,
   "certification": "UA",
-  "releaseDate": "2014-11-07"
+  "releaseDate": "2014-11-07",
+  "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+  "genres": ["SCI_FI", "DRAMA"]
 }
 ```
 
@@ -85,9 +165,59 @@ Response `201`:
   "description": "Space epic",
   "durationMinutes": 169,
   "certification": "UA",
-  "releaseDate": "2014-11-07"
+  "releaseDate": "2014-11-07",
+  "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+  "genres": ["SCI_FI", "DRAMA"]
 }
 ```
+
+`posterUrl` is `null` when the movie has no poster yet.
+
+#### `GET /movies`
+
+A page of movie cards. With `cityId`: **now showing** in that city, i.e. movies with at least one show that
+hasn't started yet in one of its theatres, most upcoming shows first (theatres give the most shows to the
+films people want). Without `cityId`: the whole catalogue, newest release first (for admins scheduling shows).
+
+| Parameter | Meaning |
+|---|---|
+| `cityId` | Optional. Now showing in this city; `404` if the city is unknown. |
+| `language` | Optional, repeatable, a [Language](#enums). Has an upcoming show in this language in the city. Needs `cityId`. |
+| `format` | Optional, repeatable, a [ShowFormat](#enums). Has an upcoming show in this format in the city. Needs `cityId`. |
+| `genre` | Optional, repeatable, a [Genre](#enums). The movie has this genre. |
+| `page` | Page number from 0 (default 0). |
+| `size` | Items per page, 1 to 50 (default 20). |
+
+Several values of one filter mean **or**, different filters mean **and**:
+`?cityId=5&language=TAMIL&language=ENGLISH&genre=THRILLER` = thrillers with a Tamil or English show in
+Chennai. `language` or `format` without `cityId` gives `400`.
+
+`GET /movies?cityId=5&size=1` → `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": 5,
+      "title": "Big Hit",
+      "posterUrl": "https://cdn.example.com/posters/big-hit.jpg",
+      "genres": ["ACTION", "THRILLER"],
+      "certification": "UA",
+      "durationMinutes": 120,
+      "releaseDate": "2026-10-01",
+      "languages": ["ENGLISH", "TAMIL"],
+      "formats": ["IMAX_2D", "TWO_D"]
+    }
+  ],
+  "page": 0,
+  "size": 1,
+  "totalItems": 3,
+  "totalPages": 3
+}
+```
+
+`languages` and `formats` list everything the movie's upcoming shows offer **in that city**, whatever the
+filters; they are `null` without `cityId`. A page past the end returns empty `items` with the real totals.
 
 #### `GET /movies/{id}`
 
@@ -97,12 +227,12 @@ Returns the same shape. `404` if unknown.
 
 #### `POST /theatres`
 
-All fields required.
+All fields required. `cityId` comes from [`GET /cities`](#get-cities); `404` if unknown.
 
 ```json
 {
   "name": "PVR Grand",
-  "city": "Chennai",
+  "cityId": 5,
   "address": "1 Main Road"
 }
 ```
@@ -113,7 +243,10 @@ Response `201`:
 {
   "id": 1,
   "name": "PVR Grand",
-  "city": "Chennai",
+  "city": {
+    "id": 5,
+    "name": "Chennai"
+  },
   "address": "1 Main Road"
 }
 ```
@@ -121,6 +254,89 @@ Response `201`:
 #### `GET /theatres/{id}`
 
 Returns the same shape. `404` if unknown.
+
+#### `GET /theatres`
+
+A page of theatres, by name (ignoring case). The "Cinemas" tab sends `cityId`; an admin list doesn't.
+
+| Parameter | Meaning |
+|---|---|
+| `cityId` | Optional. Only theatres in this city; `404` if the city is unknown. |
+| `query` | Optional, up to 50 characters. Part of the name, ignoring case: `pvr` finds "PVR Grand" and "PVR Ampa Skywalk". |
+| `page` | Page number from 0 (default 0). |
+| `size` | Items per page, 1 to 50 (default 20). |
+
+`GET /theatres?cityId=5&query=pvr` → `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "PVR Grand",
+      "city": {
+        "id": 5,
+        "name": "Chennai"
+      },
+      "address": "1 Main Road"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalItems": 1,
+  "totalPages": 1
+}
+```
+
+#### `GET /theatres/{id}/shows`
+
+A theatre's page: its shows on one **date in India**, grouped by movie. Only shows that haven't started yet.
+The same data as [`GET /shows`](#get-shows), seen from the theatre instead of the movie.
+
+| Parameter | Meaning |
+|---|---|
+| `date` | Optional, `2026-11-05`. A day in India (00:00 to 24:00 IST); default today. A past date gives `400`. |
+| `language` | Optional, repeatable, a [Language](#enums). |
+| `format` | Optional, repeatable, a [ShowFormat](#enums). |
+
+`GET /theatres/1/shows?date=2026-12-02` → `200`:
+
+```json
+{
+  "theatre": {
+    "id": 1,
+    "name": "PVR Grand",
+    "city": {
+      "id": 5,
+      "name": "Chennai"
+    },
+    "address": "1 Main Road"
+  },
+  "date": "2026-12-02",
+  "dates": ["2026-12-01", "2026-12-02", "2026-12-03"],
+  "movies": [
+    {
+      "id": 5,
+      "title": "Big Hit",
+      "posterUrl": "https://cdn.example.com/posters/big-hit.jpg",
+      "certification": "UA",
+      "durationMinutes": 120,
+      "shows": [
+        {
+          "id": 6,
+          "startTime": "2026-12-02T10:00:00Z",
+          "language": "ENGLISH",
+          "format": "IMAX_2D",
+          "screenName": "Screen 1"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Movies by title, shows by start time. `dates` is the date strip (next 7 days with upcoming shows matching the
+filters). `404` if the theatre is unknown.
 
 ### Screens
 
@@ -216,7 +432,7 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
 | `movieId` | long | required, must exist (else `404`) |
 | `screenId` | long | required, must exist (else `404`) |
 | `startTime` | instant | required, in the future |
-| `language` | string | required, e.g. `"English"` |
+| `language` | [Language](#enums) | required |
 | `format` | [ShowFormat](#enums) | required |
 
 ```json
@@ -224,7 +440,7 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
   "movieId": 1,
   "screenId": 1,
   "startTime": "2030-01-01T18:30:00Z",
-  "language": "English",
+  "language": "ENGLISH",
   "format": "IMAX_2D"
 }
 ```
@@ -240,10 +456,71 @@ Response `201` (`endTime` = start + movie duration):
   "screenName": "Screen 1",
   "startTime": "2030-01-01T18:30:00Z",
   "endTime": "2030-01-01T21:19:00Z",
-  "language": "English",
+  "language": "ENGLISH",
   "format": "IMAX_2D"
 }
 ```
+
+#### `GET /shows`
+
+The "pick a theatre and time" page: one movie's shows in one city on one **date in India**, grouped by
+theatre. Only shows that haven't started yet. Not paged: one movie, one city, one day is naturally small.
+
+| Parameter | Meaning |
+|---|---|
+| `movieId` | Required; `404` if unknown. |
+| `cityId` | Required; `404` if unknown. |
+| `date` | Optional, `2026-11-05`. A day in India (00:00 to 24:00 IST); default today. A past date gives `400`. |
+| `language` | Optional, repeatable, a [Language](#enums). |
+| `format` | Optional, repeatable, a [ShowFormat](#enums). |
+
+`GET /shows?movieId=5&cityId=5&date=2026-12-02` → `200`:
+
+```json
+{
+  "movieId": 5,
+  "cityId": 5,
+  "date": "2026-12-02",
+  "dates": ["2026-12-02", "2026-12-03", "2026-12-09"],
+  "theatres": [
+    {
+      "id": 3,
+      "name": "AGS Cinemas",
+      "address": "Villivakkam",
+      "shows": [
+        {
+          "id": 9,
+          "startTime": "2026-12-02T18:29:00Z",
+          "language": "TAMIL",
+          "format": "TWO_D",
+          "screenName": "Screen 3"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "PVR Grand",
+      "address": "1 Main Road",
+      "shows": [
+        {
+          "id": 6,
+          "startTime": "2026-12-02T10:00:00Z",
+          "language": "ENGLISH",
+          "format": "IMAX_2D",
+          "screenName": "Screen 1"
+        }
+      ]
+    }
+  ]
+}
+```
+
+- Theatres by name, shows by start time. Times are UTC like everywhere else: `18:29Z` is 23:59 IST, so that
+  show belongs to 2 December; a show at `18:31Z` the same evening is 00:01 IST and belongs to 3 December.
+- `dates`: the next days (up to 7) with at least one upcoming show matching the filters, for the date strip.
+  It doesn't depend on `date`. An empty `theatres` list means nothing on that date.
+- Seat availability per show is not included: the seat map's
+  [`GET /shows/{id}/availability`](#get-showsidavailability) has it.
 
 #### `GET /shows/{id}`
 
@@ -399,6 +676,8 @@ Returns the same shape as the create response. `404` if unknown.
 | Enum | Values |
 |---|---|
 | Certification | `U`, `UA`, `A` |
+| Language | `ENGLISH`, `HINDI`, `TAMIL`, `TELUGU`, `MALAYALAM`, `KANNADA`, `BENGALI`, `MARATHI`, `GUJARATI`, `PUNJABI`, `ODIA`, `ASSAMESE`, `BHOJPURI`, `URDU`, `JAPANESE`, `KOREAN`, `FRENCH`, `SPANISH` |
+| Genre | `ACTION`, `ADVENTURE`, `ANIMATION`, `BIOGRAPHY`, `COMEDY`, `CRIME`, `DOCUMENTARY`, `DRAMA`, `FAMILY`, `FANTASY`, `HISTORICAL`, `HORROR`, `MUSICAL`, `MYSTERY`, `ROMANCE`, `SCI_FI`, `SPORTS`, `THRILLER`, `WAR` |
 | SeatType | `REGULAR`, `PREMIUM`, `RECLINER` |
 | ShowFormat | `TWO_D`, `THREE_D`, `IMAX_2D`, `IMAX_3D`, `FOUR_DX` |
 | Booking status | `CONFIRMED` |

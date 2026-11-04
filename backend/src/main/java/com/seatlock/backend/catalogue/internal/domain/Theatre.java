@@ -18,13 +18,14 @@ public class Theatre {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
-    private String city;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "city_id")
+    private City city;
 
     @Column(nullable = false)
     private String address;
 
-    public Theatre(String name, String city, String address) {
+    public Theatre(String name, City city, String address) {
         this.name = name;
         this.city = city;
         this.address = address;

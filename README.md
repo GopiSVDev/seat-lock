@@ -4,7 +4,8 @@ A movie ticket booking backend (in the spirit of BookMyShow or Ticketmaster) bui
 **how do you never sell the same seat twice when thousands of people try to book at once?**
 
 It is a modular monolith (Spring Boot 4, Java 25, PostgreSQL 16). It started deliberately simple; each
-improvement was made only after a load test showed a real problem; the results are in
+improvement was made only after a load test showed a real problem; the story is in
+[loadtest/results/SUMMARY.md](loadtest/results/SUMMARY.md), every run in
 [loadtest/results/RESULTS.md](loadtest/results/RESULTS.md).
 
 - [What it does](#what-it-does)
@@ -22,7 +23,8 @@ programming needed. API reference with request and response examples: **[docs/ap
 ## What it does
 
 1. An admin adds **movies**, **theatres** and **screens** (a screen is a seat layout: rows of seats, each
-   row REGULAR, PREMIUM or RECLINER).
+   row REGULAR, PREMIUM or RECLINER). Every theatre is in a **city** picked from a fixed list; city search
+   forgives typos and old names ("chenai", "Madras" → Chennai).
 2. The admin schedules a **show**: a movie on a screen at a time. Every seat of the screen becomes a
    bookable **show seat** for that show.
 3. A customer opens the **seat map** of a show: the layout (which never changes) plus availability (which
@@ -30,12 +32,12 @@ programming needed. API reference with request and response examples: **[docs/ap
 4. The customer **books**, either the exact seats they picked on the map or "best available N seats of a
    type", where the server chooses the best adjacent block for them.
 
-13 endpoints in total, all JSON over HTTP. Errors use the standard
+21 endpoints in total, all JSON over HTTP. Errors use the standard
 [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) format.
 
 | Area | Endpoints |
 |---|---|
-| Catalogue | `POST /movies`, `GET /movies/{id}`, `POST /theatres`, `GET /theatres/{id}`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `POST /shows`, `GET /shows/{id}` |
+| Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `GET /theatres`, `POST /theatres`, `GET /theatres/{id}`, `GET /theatres/{id}/shows`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `GET /shows`, `POST /shows`, `GET /shows/{id}` |
 | Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
 | Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings/{id}` |
 
@@ -56,15 +58,17 @@ Then walk through the whole flow (ids assume an empty database):
 ```bash
 B=localhost:8080
 curl -s -XPOST $B/movies -H 'Content-Type: application/json' \
-  -d '{"title":"Interstellar","durationMinutes":169,"certification":"UA","releaseDate":"2014-11-07"}'
+  -d '{"title":"Interstellar","durationMinutes":169,"certification":"UA","releaseDate":"2014-11-07",
+       "posterUrl":"https://cdn.example.com/posters/interstellar.jpg","genres":["SCI_FI","DRAMA"]}'
+curl -s "$B/cities?query=chenai"   # typo tolerant: Chennai, id 5
 curl -s -XPOST $B/theatres -H 'Content-Type: application/json' \
-  -d '{"name":"PVR Grand","city":"Chennai","address":"1 Main Road"}'
+  -d '{"name":"PVR Grand","cityId":5,"address":"1 Main Road"}'
 curl -s -XPOST $B/theatres/1/screens -H 'Content-Type: application/json' \
   -d '{"name":"Screen 1","rows":[{"label":"A","seatCount":10,"seatType":"REGULAR"},
                                  {"label":"B","seatCount":10,"seatType":"REGULAR"},
                                  {"label":"C","seatCount":8,"seatType":"RECLINER"}]}'
 curl -s -XPOST $B/shows -H 'Content-Type: application/json' \
-  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T18:30:00Z","language":"English","format":"IMAX_2D"}'
+  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T18:30:00Z","language":"ENGLISH","format":"IMAX_2D"}'
 
 curl -s $B/shows/1/layout          # rows and seat ids
 curl -s $B/shows/1/availability    # which seat ids are taken
@@ -74,9 +78,16 @@ curl -s -XPOST $B/bookings -H 'Content-Type: application/json' \
 curl -s -XPOST $B/bookings/best-available -H 'Content-Type: application/json' \
   -d '{"showId":1,"customerName":"ravi","quantity":2,"seatType":"RECLINER"}'
 curl -s $B/bookings/1
+curl -s "$B/movies?cityId=5"       # now showing in Chennai
+curl -s "$B/shows?movieId=1&cityId=5&date=2030-01-01"   # its shows that day, by theatre
+curl -s "$B/theatres?cityId=5&query=pvr"                 # cinemas in Chennai
+curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one cinema, by movie
 ```
 
 Booking the same seats twice returns `409 Conflict`.
+
+API docs: Swagger UI at [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), the OpenAPI
+spec at `/v3/api-docs`; the hand-written reference with examples is [docs/api.md](docs/api.md).
 
 ## Architecture
 
@@ -173,7 +184,7 @@ requests race for seat A5, the second one waits for the first to commit, re-chec
 the seat BOOKED, and updates nothing. If fewer rows came back than were requested, the request fails and
 everything it touched is rolled back. No seat is ever half-booked.
 
-**Safety net:** a partial unique index (`backend/src/main/resources/schema.sql`) allows at most one
+**Safety net:** a partial unique index (in the `V1__baseline.sql` migration) allows at most one
 CONFIRMED booking per show seat. If the application logic ever had a bug, the database would still refuse a
 double sale.
 
@@ -212,6 +223,8 @@ ready-made JSON bytes (Caffeine), so a cache hit skips the database and JSON ser
 
 ```mermaid
 erDiagram
+    CITY ||--o{ CITY_ALIAS : "also called"
+    CITY ||--o{ THEATRE : has
     THEATRE ||--o{ SCREEN : has
     SCREEN ||--o{ SEAT : has
     MOVIE ||--o{ SHOWS : "is shown in"
@@ -221,6 +234,14 @@ erDiagram
     BOOKING ||--o{ BOOKING_SEAT : contains
     SHOW_SEAT ||..o{ BOOKING_SEAT : "show_seat_id (plain id)"
 
+    CITY {
+        string name
+        string state
+        int popular_rank
+    }
+    CITY_ALIAS {
+        string alias
+    }
     SEAT {
         string row_label
         int seat_number
@@ -259,14 +280,21 @@ Solid lines are real foreign keys inside a schema; dotted lines are plain ids ac
   one show; a 250-seat screen gives 250 show seats per show. Booking changes AVAILABLE → BOOKED.
 - **Booking vs booking seat.** Like an order and its order lines: one row per seat, so history survives a
   future cancellation and re-sale of the same seat.
-- Times are stored as UTC `timestamptz`. Enums are stored as text. Tables are created by Hibernate at
-  startup (no migrations tool yet).
+- **Cities are reference data.** The list (45 Indian cities, 10 marked popular, plus aliases like Madras,
+  Bangalore, Gurgaon) is loaded by a migration; theatres point to a city by id, so a misspelt city can't get
+  in. Search matches names and aliases by prefix and by trigram similarity (`pg_trgm`), so typos still
+  find the right city.
+- Times are stored as UTC `timestamptz`. Enums are stored as text.
+- The schema is owned by **Flyway**: versioned SQL files in `backend/src/main/resources/db/migration`, applied
+  at startup and recorded in `flyway.flyway_schema_history`. Hibernate only validates that the entities match
+  (`ddl-auto=validate`); a change to the schema is a new migration file, never an edit of an applied one.
 
 ## Performance
 
 Measured on a deliberately small box: an LXD VM with **1 vCPU and 2 GB RAM**, load generated by k6 from the
 host. Every step, what it changed and what it gained, plus the experiments that were measured and rejected,
-is in [loadtest/results/RESULTS.md](loadtest/results/RESULTS.md).
+is in [loadtest/results/SUMMARY.md](loadtest/results/SUMMARY.md); every individual run, with its pass
+criteria and a detailed report, is in [loadtest/results/RESULTS.md](loadtest/results/RESULTS.md).
 
 | Test | First version | Now | Main changes |
 |---|---:|---:|---|
@@ -283,7 +311,7 @@ backend/              Spring Boot application (Dockerfile, pom.xml, src/)
 docker-compose.yml    postgres + backend; profiles: monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
 docker-compose.vm.yml host networking overrides for the load-test VM
 .env.example          every setting the app needs (copy to .env)
-loadtest/results/     RESULTS.md: performance results
+loadtest/results/     SUMMARY.md: performance story; RESULTS.md + runs/: every load-test run and its report
 monitoring/           Prometheus config, PostgreSQL init (pg_stat_statements)
 docs/                 api.md (API reference), story.md (the app explained as a story)
 ```
@@ -301,5 +329,5 @@ Deliberately left out until a test or feature needs them:
 - **Payment**, cancellation, refunds.
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
 - **Login / users**, notifications, search.
-- **Automated tests** (Testcontainers), database migrations (Flyway), show overlap checks.
+- **Automated tests** (Testcontainers), show overlap checks.
 - **Horizontal scaling**: several backend instances would need the in-memory caches moved to Redis.

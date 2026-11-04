@@ -1,5 +1,6 @@
 package com.seatlock.backend.catalogue.internal.web.dto;
 
+import com.seatlock.backend.catalogue.internal.domain.Language;
 import com.seatlock.backend.catalogue.internal.domain.Show;
 import com.seatlock.backend.catalogue.internal.domain.ShowFormat;
 
@@ -13,7 +14,7 @@ public record ShowResponse(
         String screenName,
         Instant startTime,
         Instant endTime,
-        String language,
+        Language language,
         ShowFormat format
 ) {
 

@@ -1,10 +1,11 @@
 package com.seatlock.backend.catalogue.internal.web.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 public record CreateTheatreRequest(
         @NotBlank String name,
-        @NotBlank String city,
+        @NotNull Long cityId,
         @NotBlank String address
 ) {
 }
