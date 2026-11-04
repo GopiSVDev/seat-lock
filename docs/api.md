@@ -255,6 +255,89 @@ Response `201`:
 
 Returns the same shape. `404` if unknown.
 
+#### `GET /theatres`
+
+A page of theatres, by name (ignoring case). The "Cinemas" tab sends `cityId`; an admin list doesn't.
+
+| Parameter | Meaning |
+|---|---|
+| `cityId` | Optional. Only theatres in this city; `404` if the city is unknown. |
+| `query` | Optional, up to 50 characters. Part of the name, ignoring case: `pvr` finds "PVR Grand" and "PVR Ampa Skywalk". |
+| `page` | Page number from 0 (default 0). |
+| `size` | Items per page, 1 to 50 (default 20). |
+
+`GET /theatres?cityId=5&query=pvr` → `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "PVR Grand",
+      "city": {
+        "id": 5,
+        "name": "Chennai"
+      },
+      "address": "1 Main Road"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalItems": 1,
+  "totalPages": 1
+}
+```
+
+#### `GET /theatres/{id}/shows`
+
+A theatre's page: its shows on one **date in India**, grouped by movie. Only shows that haven't started yet.
+The same data as [`GET /shows`](#get-shows), seen from the theatre instead of the movie.
+
+| Parameter | Meaning |
+|---|---|
+| `date` | Optional, `2026-11-05`. A day in India (00:00 to 24:00 IST); default today. A past date gives `400`. |
+| `language` | Optional, repeatable, a [Language](#enums). |
+| `format` | Optional, repeatable, a [ShowFormat](#enums). |
+
+`GET /theatres/1/shows?date=2026-12-02` → `200`:
+
+```json
+{
+  "theatre": {
+    "id": 1,
+    "name": "PVR Grand",
+    "city": {
+      "id": 5,
+      "name": "Chennai"
+    },
+    "address": "1 Main Road"
+  },
+  "date": "2026-12-02",
+  "dates": ["2026-12-01", "2026-12-02", "2026-12-03"],
+  "movies": [
+    {
+      "id": 5,
+      "title": "Big Hit",
+      "posterUrl": "https://cdn.example.com/posters/big-hit.jpg",
+      "certification": "UA",
+      "durationMinutes": 120,
+      "shows": [
+        {
+          "id": 6,
+          "startTime": "2026-12-02T10:00:00Z",
+          "language": "ENGLISH",
+          "format": "IMAX_2D",
+          "screenName": "Screen 1"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Movies by title, shows by start time. `dates` is the date strip (next 7 days with upcoming shows matching the
+filters). `404` if the theatre is unknown.
+
 ### Screens
 
 #### `POST /theatres/{theatreId}/screens`

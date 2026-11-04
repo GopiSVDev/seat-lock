@@ -9,7 +9,10 @@ import com.seatlock.backend.catalogue.internal.domain.ShowFormat;
 import com.seatlock.backend.catalogue.internal.repository.MovieRepository;
 import com.seatlock.backend.catalogue.internal.repository.ScreenRepository;
 import com.seatlock.backend.catalogue.internal.repository.SeatRepository;
+import com.seatlock.backend.catalogue.internal.domain.Theatre;
 import com.seatlock.backend.catalogue.internal.repository.ShowRepository;
+import com.seatlock.backend.catalogue.internal.repository.ShowScope;
+import com.seatlock.backend.catalogue.internal.repository.TheatreRepository;
 import com.seatlock.backend.catalogue.internal.repository.ShowtimeRepository;
 import com.seatlock.backend.catalogue.internal.repository.ShowtimeRow;
 import com.seatlock.backend.catalogue.internal.web.dto.CreateShowRequest;
@@ -17,6 +20,9 @@ import com.seatlock.backend.catalogue.internal.web.dto.ShowResponse;
 import com.seatlock.backend.catalogue.internal.web.dto.ShowtimesResponse;
 import com.seatlock.backend.catalogue.internal.web.dto.ShowtimesResponse.Showtime;
 import com.seatlock.backend.catalogue.internal.web.dto.ShowtimesResponse.TheatreShows;
+import com.seatlock.backend.catalogue.internal.web.dto.TheatreResponse;
+import com.seatlock.backend.catalogue.internal.web.dto.TheatreShowtimesResponse;
+import com.seatlock.backend.catalogue.internal.web.dto.TheatreShowtimesResponse.MovieShows;
 import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import com.seatlock.backend.shared.time.IndiaTime;
@@ -46,6 +52,7 @@ public class ShowService {
     private final ApplicationEventPublisher eventPublisher;
     private final ShowtimeRepository showtimeRepository;
     private final CityService cityService;
+    private final TheatreRepository theatreRepository;
 
     @Transactional
     public ShowResponse create(CreateShowRequest request) {
@@ -77,18 +84,57 @@ public class ShowService {
         }
         cityService.findCity(cityId);
 
+        LocalDate day = dayOrToday(date);
+        ShowScope scope = ShowScope.movieInCity(movieId, cityId);
+        Instant now = Instant.now();
+        List<ShowtimeRow> rows = showtimeRepository.findShowtimes(scope, languages, formats, now,
+                IndiaTime.startOf(day), IndiaTime.startOf(day.plusDays(1)));
+        List<LocalDate> dates = showtimeRepository.findDates(scope, languages, formats, now, DATE_STRIP_DAYS);
+
+        return new ShowtimesResponse(movieId, cityId, day, dates, groupByTheatre(rows));
+    }
+
+    // A theatre's shows on one date in India (default today), not yet started, grouped by movie.
+    // Transactional so the theatre's city (lazy) can be read for the response.
+    @Transactional(readOnly = true)
+    public TheatreShowtimesResponse findTheatreShowtimes(Long theatreId, LocalDate date,
+                                                         List<Language> languages, List<ShowFormat> formats) {
+        Theatre theatre = theatreRepository.findById(theatreId)
+                .orElseThrow(() -> new NotFoundException("Theatre", theatreId));
+
+        LocalDate day = dayOrToday(date);
+        ShowScope scope = ShowScope.atTheatre(theatreId);
+        Instant now = Instant.now();
+        List<ShowtimeRow> rows = showtimeRepository.findShowtimes(scope, languages, formats, now,
+                IndiaTime.startOf(day), IndiaTime.startOf(day.plusDays(1)));
+        List<LocalDate> dates = showtimeRepository.findDates(scope, languages, formats, now, DATE_STRIP_DAYS);
+
+        return new TheatreShowtimesResponse(TheatreResponse.from(theatre), day, dates, groupByMovie(rows));
+    }
+
+    private static LocalDate dayOrToday(LocalDate date) {
         LocalDate today = IndiaTime.today();
         LocalDate day = date == null ? today : date;
         if (day.isBefore(today)) {
             throw new BadRequestException("date " + day + " is in the past (today in India is " + today + ")");
         }
+        return day;
+    }
 
-        Instant now = Instant.now();
-        List<ShowtimeRow> rows = showtimeRepository.findShowtimes(movieId, cityId, languages, formats, now,
-                IndiaTime.startOf(day), IndiaTime.startOf(day.plusDays(1)));
-        List<LocalDate> dates = showtimeRepository.findDates(movieId, cityId, languages, formats, now, DATE_STRIP_DAYS);
+    // Rows arrive sorted by movie title, then time; keep that order
+    private static List<MovieShows> groupByMovie(List<ShowtimeRow> rows) {
+        Map<Long, MovieShows> movies = new LinkedHashMap<>();
+        for (ShowtimeRow row : rows) {
+            movies.computeIfAbsent(row.movieId(), id -> new MovieShows(id, row.movieTitle(), row.moviePosterUrl(),
+                            row.movieCertification(), row.movieDurationMinutes(), new ArrayList<>()))
+                    .shows()
+                    .add(showtime(row));
+        }
+        return List.copyOf(movies.values());
+    }
 
-        return new ShowtimesResponse(movieId, cityId, day, dates, groupByTheatre(rows));
+    private static Showtime showtime(ShowtimeRow row) {
+        return new Showtime(row.showId(), row.startTime(), row.language(), row.format(), row.screenName());
     }
 
     // Rows arrive sorted by theatre, then time; keep that order
@@ -98,7 +144,7 @@ public class ShowService {
             theatres.computeIfAbsent(row.theatreId(), id ->
                             new TheatreShows(id, row.theatreName(), row.theatreAddress(), new ArrayList<>()))
                     .shows()
-                    .add(new Showtime(row.showId(), row.startTime(), row.language(), row.format(), row.screenName()));
+                    .add(showtime(row));
         }
         return List.copyOf(theatres.values());
     }

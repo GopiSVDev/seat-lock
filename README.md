@@ -32,12 +32,12 @@ programming needed. API reference with request and response examples: **[docs/ap
 4. The customer **books**, either the exact seats they picked on the map or "best available N seats of a
    type", where the server chooses the best adjacent block for them.
 
-19 endpoints in total, all JSON over HTTP. Errors use the standard
+21 endpoints in total, all JSON over HTTP. Errors use the standard
 [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) format.
 
 | Area | Endpoints |
 |---|---|
-| Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `POST /theatres`, `GET /theatres/{id}`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `GET /shows`, `POST /shows`, `GET /shows/{id}` |
+| Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `GET /theatres`, `POST /theatres`, `GET /theatres/{id}`, `GET /theatres/{id}/shows`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `GET /shows`, `POST /shows`, `GET /shows/{id}` |
 | Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
 | Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings/{id}` |
 
@@ -80,6 +80,8 @@ curl -s -XPOST $B/bookings/best-available -H 'Content-Type: application/json' \
 curl -s $B/bookings/1
 curl -s "$B/movies?cityId=5"       # now showing in Chennai
 curl -s "$B/shows?movieId=1&cityId=5&date=2030-01-01"   # its shows that day, by theatre
+curl -s "$B/theatres?cityId=5&query=pvr"                 # cinemas in Chennai
+curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one cinema, by movie
 ```
 
 Booking the same seats twice returns `409 Conflict`.
