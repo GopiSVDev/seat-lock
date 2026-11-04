@@ -61,6 +61,36 @@ services:
       retries: 5
       start_period: 20s
 
+  # Dev mode; production would run `start` with HTTPS and its own database
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.3
+    container_name: seat-lock-keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?KEYCLOAK_ADMIN is not set}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is not set}
+      # Same token issuer whether reached as localhost:8180 or keycloak:8080
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:?KEYCLOAK_PORT is not set}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_PORT:?KEYCLOAK_PORT is not set}:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+      - keycloak_data:/opt/keycloak/data
+    healthcheck:
+      # No curl in the image
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   # --- Load test monitoring: runs on the laptop, the app (postgres, backend) runs in the LXD VM ---
   # docker compose --profile monitoring up -d prometheus postgres-exporter
   # Host networking so Prometheus reaches the VM and k6 reaches Prometheus on localhost:9090.
@@ -117,3 +147,4 @@ services:
 volumes:
   postgres_data:
   prometheus_data:
+  keycloak_data:

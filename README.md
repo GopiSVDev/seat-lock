@@ -49,7 +49,7 @@ Everything runs in Docker.
 
 ```bash
 cp .env.example .env            # database credentials, ports, thread and pool sizes (no defaults in the app)
-docker compose up --build -d    # PostgreSQL on :5433, backend on :8080
+docker compose up --build -d    # PostgreSQL on :5433, backend on :8080, Keycloak on :8180
 curl -s localhost:8080/actuator/health
 ```
 
@@ -85,6 +85,10 @@ curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one
 ```
 
 Booking the same seats twice returns `409 Conflict`.
+
+Logins are handled by **Keycloak** (admin console at [localhost:8180/admin](http://localhost:8180/admin),
+credentials from `.env`). The `seatlock` realm comes with test users `admin`/`admin` (ADMIN), `asha`/`asha`
+and `ravi`/`ravi` (CUSTOMER); new sign-ups get CUSTOMER. These are local development credentials only.
 
 API docs: Swagger UI at [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), the OpenAPI
 spec at `/v3/api-docs`; the hand-written reference with examples is [docs/api.md](docs/api.md).
@@ -308,6 +312,7 @@ Oversold seats in every test so far: **0**.
 
 ```
 backend/              Spring Boot application (Dockerfile, pom.xml, src/)
+keycloak/             Keycloak realm (roles, login clients, test users), imported on first start
 docker-compose.yml    postgres + backend; profiles: monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
 docker-compose.vm.yml host networking overrides for the load-test VM
 .env.example          every setting the app needs (copy to .env)
