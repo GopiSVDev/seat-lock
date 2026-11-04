@@ -14,10 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class TheatreService {
 
     private final TheatreRepository theatreRepository;
+    private final CityService cityService;
 
     @Transactional
     public TheatreResponse create(CreateTheatreRequest request) {
-        Theatre theatre = new Theatre(request.name(), request.city(), request.address());
+        Theatre theatre = new Theatre(request.name(), cityService.findCity(request.cityId()), request.address());
         return TheatreResponse.from(theatreRepository.save(theatre));
     }
 

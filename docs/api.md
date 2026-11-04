@@ -7,7 +7,7 @@ ISO-8601 in UTC (`2030-01-01T18:30:00Z`). Every `POST` that creates something re
 For the big picture (modules, booking flow, caching) see the [README](../README.md).
 
 - [Errors](#errors)
-- [Catalogue](#catalogue): [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
+- [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
 - [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [get](#get-bookingsid)
 - [Enums](#enums)
@@ -32,7 +32,7 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 400 | Malformed JSON or a wrong enum value | Spring's message |
 | 404 | An id in the path or body does not exist | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
 | 409 | Seats already taken or no adjacent block left | see each endpoint |
-| 409 | A unique rule broken, e.g. a duplicate screen name in a theatre | `Request conflicts with existing data` |
+| 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
 
 Validation example:
@@ -53,6 +53,80 @@ Validation example:
 ## Catalogue
 
 Admin data: what is playing where. Owned by the `catalogue` module.
+
+### Cities
+
+Cities are a fixed list (45 Indian cities and their aliases, loaded by a database migration). Theatres point
+to a city by id, so a misspelt city can't be stored.
+
+#### `GET /cities`
+
+Search or list cities. All parameters optional.
+
+| Parameter | Meaning |
+|---|---|
+| `query` | Text the user typed, up to 50 characters. Matches city names **and aliases**, by prefix (`chen`) and by trigram similarity, so typos work (`chenai`, `banglore`). At most 10 results, best first: prefix matches, then real names before aliases, then closest. |
+| `popular` | `true`: only the popular cities. Without `query` they come in popular order (Mumbai, Delhi, Bengaluru, ...). |
+| `withTheatres` | `true`: only cities with at least one theatre. A customer's city picker sends this; an admin choosing a city for a new theatre doesn't. |
+
+Without `query` the result is the whole (filtered) list, alphabetical unless `popular=true`.
+
+`GET /cities?query=madras` → `200`:
+
+```json
+[
+  {
+    "id": 5,
+    "name": "Chennai",
+    "state": "Tamil Nadu",
+    "popularRank": 5,
+    "matchedAlias": "Madras"
+  }
+]
+```
+
+`matchedAlias` is set when the city was found through an alias, so a UI can show "Chennai (Madras)"; it is
+`null` when the name matched or no `query` was sent. `popularRank` is `null` for cities outside the popular
+list. No match gives `[]`; a `query` over 50 characters gives `400`.
+
+#### `GET /cities/{id}`
+
+One city, same shape (`matchedAlias` is `null`). `404` if unknown.
+
+#### `POST /cities`
+
+```json
+{
+  "name": "Erode",
+  "state": "Tamil Nadu",
+  "popularRank": null
+}
+```
+
+`name` and `state` required (max 100 characters, trimmed). `popularRank` optional, positive. Response `201`
+with the city. `409` if the city already exists in that state (ignoring case) or the popular rank is taken.
+
+#### `POST /cities/{id}/aliases`
+
+Another name people type for the city: old name, short name or common spelling.
+
+```json
+{
+  "alias": "Tiruchi"
+}
+```
+
+Response `201`:
+
+```json
+{
+  "id": 26,
+  "cityId": 23,
+  "alias": "Tiruchi"
+}
+```
+
+`404` if the city is unknown, `409` if any city already has that alias (ignoring case).
 
 ### Movies
 
@@ -97,12 +171,12 @@ Returns the same shape. `404` if unknown.
 
 #### `POST /theatres`
 
-All fields required.
+All fields required. `cityId` comes from [`GET /cities`](#get-cities); `404` if unknown.
 
 ```json
 {
   "name": "PVR Grand",
-  "city": "Chennai",
+  "cityId": 5,
   "address": "1 Main Road"
 }
 ```
@@ -113,7 +187,10 @@ Response `201`:
 {
   "id": 1,
   "name": "PVR Grand",
-  "city": "Chennai",
+  "city": {
+    "id": 5,
+    "name": "Chennai"
+  },
   "address": "1 Main Road"
 }
 ```

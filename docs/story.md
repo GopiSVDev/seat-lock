@@ -80,6 +80,9 @@ flowchart TB
 
 **Behind the counter.**
 - The four steps are `POST /movies`, `POST /theatres`, `POST /theatres/1/screens` and `POST /shows`.
+- A cinema is filed under its **city**, chosen from the office's fixed list of towns (`cityId`), never
+  written by hand. That's why "Chennai" and "chenai" can't become two towns. Visitors asking for "Madras"
+  or "chenai" are still pointed to Chennai (`GET /cities?query=`).
 - The chair score is the **seat rank**. It is computed once, when the screen is created, from how far the
   chair is from the sweet spot (60% of the way back, centre of the row).
 - A **chair** (`seat`) belongs to the hall forever. A **chair for one evening** (`show_seat`) belongs to a
