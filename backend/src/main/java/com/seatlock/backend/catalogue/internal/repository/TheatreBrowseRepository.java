@@ -6,7 +6,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-// Theatre lists (the "Cinemas" tab, admin lists). Null filters mean "any".
 @Repository
 @RequiredArgsConstructor
 public class TheatreBrowseRepository {
@@ -20,7 +19,7 @@ public class TheatreBrowseRepository {
 
     private final JdbcClient jdbcClient;
 
-    // By name ignoring case (the database compares bytes: "AGS" before "Abirami"), then id so pages never overlap
+    // lower(): byte collation would sort "AGS" before "Abirami"
     public List<TheatreRow> find(Long cityId, String nameContains, int limit, long offset) {
         return jdbcClient.sql("select t.id, t.name, t.address, c.id as city_id, c.name as city_name " + FILTERED
                         + " order by lower(t.name), t.id limit :limit offset :offset")
@@ -45,7 +44,7 @@ public class TheatreBrowseRepository {
                 .single();
     }
 
-    // "pvr" → "%pvr%"; the user's text is data, not a pattern: "%" or "_" match literally
+    // Escape LIKE wildcards in user text
     private static String pattern(String nameContains) {
         if (nameContains == null) {
             return null;

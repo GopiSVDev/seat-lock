@@ -14,9 +14,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
-// Upcoming shows for the showtimes pages (a movie in a city, or one theatre). Plain SQL: a 4-table join read
-// straight into rows, and dates computed in India's time zone by Postgres.
-// Filters arrive as arrays; an empty array means "no filter". Scope ids that don't apply are null.
+// Empty filter arrays and null scope ids mean "any".
 @Repository
 @RequiredArgsConstructor
 public class ShowtimeRepository {
@@ -36,10 +34,9 @@ public class ShowtimeRepository {
 
     private final JdbcClient jdbcClient;
 
-    // Shows starting in [from, to). Movie page: theatres by name; theatre page: movies by title; then by time.
     public List<ShowtimeRow> findShowtimes(ShowScope scope, List<Language> languages, List<ShowFormat> formats,
                                            Instant now, Instant from, Instant to) {
-        // lower(): the database compares bytes, which would put "AGS" before "Abirami"
+        // lower(): byte collation would sort "AGS" before "Abirami"
         String order = scope.groupsByTheatre()
                 ? "lower(t.name), t.id, s.start_time, s.id"
                 : "lower(m.title), m.id, s.start_time, s.id";
@@ -70,7 +67,6 @@ public class ShowtimeRepository {
                 .list();
     }
 
-    // The next dates (in India) that have at least one upcoming show: the date strip at the top of the page
     public List<LocalDate> findDates(ShowScope scope, List<Language> languages, List<ShowFormat> formats,
                                      Instant now, int limit) {
         return upcoming("""

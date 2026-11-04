@@ -21,7 +21,7 @@ public class City {
     @Column(nullable = false)
     private String state;
 
-    // Position in the popular cities list; null = not listed
+    // null = not popular
     private Integer popularRank;
 
     public City(String name, String state, Integer popularRank) {

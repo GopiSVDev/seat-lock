@@ -6,7 +6,6 @@ import com.seatlock.backend.catalogue.internal.domain.ShowFormat;
 
 import java.time.Instant;
 
-// One upcoming show with its theatre and movie (flat; the service groups rows by theatre or by movie)
 public record ShowtimeRow(
         Long theatreId,
         String theatreName,

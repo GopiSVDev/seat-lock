@@ -13,7 +13,7 @@ import java.time.Instant;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Booking {
 
-    // Created by BookingWriteRepository (plain SQL, one statement with its seats); this mapping is for reads
+    // Read-only mapping: rows are inserted by BookingWriteRepository
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

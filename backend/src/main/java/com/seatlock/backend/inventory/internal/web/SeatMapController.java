@@ -10,8 +10,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
 
-// The seat map is split: a layout that never changes (browsers and CDNs cache it) and a small
-// availability payload that clients fetch on every view.
 @RestController
 @RequiredArgsConstructor
 public class SeatMapController {

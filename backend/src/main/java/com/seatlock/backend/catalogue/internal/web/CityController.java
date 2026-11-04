@@ -22,8 +22,6 @@ public class CityController {
 
     private final CityService cityService;
 
-    // Filters are explicit so the same URL always gives the same answer, whoever asks:
-    // a customer's city picker sends withTheatres=true, an admin choosing a city for a new theatre doesn't.
     @GetMapping
     public List<CityResponse> find(@RequestParam(required = false) @Size(max = 50) String query,
                                    @RequestParam(defaultValue = "false") boolean popular,

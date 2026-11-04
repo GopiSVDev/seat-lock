@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-// City search and listing in plain SQL: trigram similarity (pg_trgm) has no JPQL equivalent.
+// Plain SQL: pg_trgm has no JPQL equivalent.
 @Repository
 @RequiredArgsConstructor
 public class CitySearchRepository {
@@ -21,9 +21,7 @@ public class CitySearchRepository {
 
     private final JdbcClient jdbcClient;
 
-    // Matches city names and aliases two ways: typed prefix ("chen" → Chennai) and trigram similarity for typos
-    // ("chenai" → Chennai, % = similarity above pg_trgm's threshold, 0.3 by default). One row per city, through
-    // its best match; prefix matches rank first, then real names before aliases, then by similarity.
+    // Prefix or trigram match (% = similarity >= 0.3) on names and aliases; one row per city.
     public List<CityMatch> search(String query, boolean popularOnly, boolean withTheatresOnly, int limit) {
         return jdbcClient.sql("""
                         with candidates as (
@@ -60,7 +58,6 @@ public class CitySearchRepository {
                 .list();
     }
 
-    // Popular cities in rank order, otherwise alphabetical. The city list is small reference data (no paging).
     public List<CityMatch> list(boolean popularOnly, boolean withTheatresOnly) {
         return jdbcClient.sql("""
                         select c.id, c.name, c.state, c.popular_rank, null as matched_alias
@@ -76,7 +73,7 @@ public class CitySearchRepository {
                 .list();
     }
 
-    // The user's text is data, not a pattern: "%" or "_" must match literally
+    // Escape LIKE wildcards in user text
     private static String escapeLike(String text) {
         return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }

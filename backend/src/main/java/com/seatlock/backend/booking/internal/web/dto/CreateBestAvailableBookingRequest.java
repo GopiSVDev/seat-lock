@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 
-// Max 10 seats per booking, like most ticketing sites. Seat types mirror inventory's SeatType.
+// Seat types mirror inventory's SeatType
 public record CreateBestAvailableBookingRequest(
         @NotNull Long showId,
         @NotBlank String customerName,

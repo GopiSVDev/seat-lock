@@ -9,15 +9,13 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 
-// Plain JDBC for the booking hot path: the booking and all its seats in one statement (one round trip).
-// Ids come from the identity columns; reads stay on JPA (BookingRepository, BookingSeatRepository).
+// Booking and all its seats in one statement; reads stay on JPA.
 @Repository
 @RequiredArgsConstructor
 public class BookingWriteRepository {
 
     private final JdbcClient jdbcClient;
 
-    // Returns the new booking's id. Seats are inserted in the given order.
     public Long insert(Long showId, String customerName, BookingStatus status, Instant createdAt,
                        List<Long> showSeatIds, List<String> seatLabels) {
         return jdbcClient.sql("""

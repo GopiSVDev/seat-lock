@@ -22,7 +22,7 @@ public record ScreenResponse(
     public record SeatInfo(Long id, int number, SeatType seatType) {
     }
 
-    // Expects seats in layout order; groups them by row keeping that order
+    // Expects seats in layout order
     public static ScreenResponse from(Screen screen, List<Seat> seats) {
         List<Row> rows = seats.stream()
                 .collect(Collectors.groupingBy(Seat::getRowLabel, LinkedHashMap::new,

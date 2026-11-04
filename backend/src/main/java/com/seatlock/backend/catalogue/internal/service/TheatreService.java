@@ -26,7 +26,6 @@ public class TheatreService {
         return TheatreResponse.from(theatreRepository.save(theatre));
     }
 
-    // Theatres by name; cityId and name filters optional (blank name = no filter)
     public PageResponse<TheatreResponse> find(Long cityId, String query, int page, int size) {
         if (cityId != null) {
             cityService.findCity(cityId);   // unknown city → 404, not an empty list

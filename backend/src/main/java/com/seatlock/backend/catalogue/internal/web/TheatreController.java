@@ -29,7 +29,6 @@ public class TheatreController {
     private final TheatreService theatreService;
     private final ShowService showService;
 
-    // The "Cinemas" tab (with cityId) or an admin list (without); query = part of the name, ignoring case
     @GetMapping
     public PageResponse<TheatreResponse> find(@RequestParam(required = false) Long cityId,
                                               @RequestParam(required = false) @Size(max = 50) String query,
@@ -38,7 +37,6 @@ public class TheatreController {
         return theatreService.find(cityId, query, page, size);
     }
 
-    // A theatre's page: its shows on a date in India (default today), grouped by movie
     @GetMapping("/{id}/shows")
     public TheatreShowtimesResponse findShows(@PathVariable Long id,
                                               @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,

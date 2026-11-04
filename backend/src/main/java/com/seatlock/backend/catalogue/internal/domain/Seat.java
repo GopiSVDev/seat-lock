@@ -30,7 +30,7 @@ public class Seat {
     @Column(nullable = false)
     private SeatType seatType;
 
-    // Best-available order within the screen: 1 = best seat
+    // 1 = best seat in the screen
     @Column(nullable = false)
     private int seatRank;
 

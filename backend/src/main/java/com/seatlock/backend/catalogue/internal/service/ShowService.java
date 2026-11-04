@@ -42,7 +42,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ShowService {
 
-    // Days shown in the date strip
     private static final int DATE_STRIP_DAYS = 7;
 
     private final ShowRepository showRepository;
@@ -75,8 +74,7 @@ public class ShowService {
         return ShowResponse.from(show);
     }
 
-    // Shows of a movie in a city on one date in India (default today), not yet started, grouped by theatre.
-    // Not paged: one movie, one city, one day is naturally small (tens of theatres, a few shows each).
+    // Not paged: one movie, city and day is small.
     public ShowtimesResponse findShowtimes(Long movieId, Long cityId, LocalDate date,
                                            List<Language> languages, List<ShowFormat> formats) {
         if (!movieRepository.existsById(movieId)) {
@@ -94,8 +92,7 @@ public class ShowService {
         return new ShowtimesResponse(movieId, cityId, day, dates, groupByTheatre(rows));
     }
 
-    // A theatre's shows on one date in India (default today), not yet started, grouped by movie.
-    // Transactional so the theatre's city (lazy) can be read for the response.
+    // Transactional: the response reads the theatre's lazy city.
     @Transactional(readOnly = true)
     public TheatreShowtimesResponse findTheatreShowtimes(Long theatreId, LocalDate date,
                                                          List<Language> languages, List<ShowFormat> formats) {
@@ -121,7 +118,6 @@ public class ShowService {
         return day;
     }
 
-    // Rows arrive sorted by movie title, then time; keep that order
     private static List<MovieShows> groupByMovie(List<ShowtimeRow> rows) {
         Map<Long, MovieShows> movies = new LinkedHashMap<>();
         for (ShowtimeRow row : rows) {
@@ -137,7 +133,6 @@ public class ShowService {
         return new Showtime(row.showId(), row.startTime(), row.language(), row.format(), row.screenName());
     }
 
-    // Rows arrive sorted by theatre, then time; keep that order
     private static List<TheatreShows> groupByTheatre(List<ShowtimeRow> rows) {
         Map<Long, TheatreShows> theatres = new LinkedHashMap<>();
         for (ShowtimeRow row : rows) {

@@ -10,7 +10,7 @@ import java.util.List;
 
 public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
 
-    // Native for RETURNING: books and reads the labels in one round trip. Label = ShowSeat.getLabel().
+    // Native for RETURNING: books and reads labels in one round trip.
     @Query(value = """
             update inventory.show_seat
             set status = 'BOOKED'
@@ -21,8 +21,7 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
             """, nativeQuery = true)
     List<BookedSeat> bookIfAvailable(Long showId, Collection<Long> ids);
 
-    // Locks the next `limit` best available seats after `afterRank`. SKIP LOCKED: seats another booking holds
-    // are passed over instead of waited on, so concurrent buyers lock different seats.
+    // SKIP LOCKED: concurrent buyers lock different seats instead of waiting.
     @Query(value = """
             select id, row_label as rowLabel, seat_number as seatNumber, seat_rank as seatRank
             from inventory.show_seat

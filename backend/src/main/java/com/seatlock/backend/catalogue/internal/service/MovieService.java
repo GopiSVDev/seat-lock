@@ -26,9 +26,7 @@ public class MovieService {
     private final MovieBrowseRepository movieBrowseRepository;
     private final CityService cityService;
 
-    // With a city: now showing there, most upcoming shows first. Without: the whole catalogue, newest first.
-    // Count and page are two statements without a shared transaction: a show starting in between can make
-    // totalItems off by one for that request, harmless for a list a user is scrolling.
+    // Count and page run separately: totalItems can be off by one if a show starts in between.
     public PageResponse<MovieCardResponse> find(MovieFilter filter, int page, int size) {
         long offset = (long) page * size;
         List<MovieCard> cards;

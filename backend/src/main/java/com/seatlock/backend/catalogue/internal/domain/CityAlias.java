@@ -5,7 +5,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-// Another name people type for a city: old name (Madras), short name (Trichy), spelling (Gurgaon)
 @Entity
 @Table(name = "city_alias", schema = "catalogue")
 @Getter

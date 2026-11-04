@@ -26,7 +26,6 @@ public class MovieController {
 
     private final MovieService movieService;
 
-    // Repeat a parameter for several values: language=Tamil&language=English (either one matches)
     @GetMapping
     public PageResponse<MovieCardResponse> find(@RequestParam(required = false) Long cityId,
                                                 @RequestParam(defaultValue = "") List<Language> language,

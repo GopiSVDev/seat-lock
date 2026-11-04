@@ -3,7 +3,6 @@ package com.seatlock.backend.catalogue.internal.web.dto;
 import com.seatlock.backend.catalogue.internal.domain.City;
 import com.seatlock.backend.catalogue.internal.repository.CityMatch;
 
-// matchedAlias: the alias a search matched ("Madras" for Chennai), null when the name matched or no search ran
 public record CityResponse(
         Long id,
         String name,

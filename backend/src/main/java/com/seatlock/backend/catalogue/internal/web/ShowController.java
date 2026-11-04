@@ -23,8 +23,6 @@ public class ShowController {
 
     private final ShowService showService;
 
-    // A movie's shows in a city on a date in India (default today), grouped by theatre.
-    // Repeat language/format for several values (either one matches).
     @GetMapping
     public ShowtimesResponse find(@RequestParam Long movieId,
                                   @RequestParam Long cityId,

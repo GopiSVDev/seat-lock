@@ -6,8 +6,6 @@ import com.seatlock.backend.catalogue.internal.web.dto.ShowtimesResponse.Showtim
 import java.time.LocalDate;
 import java.util.List;
 
-// A theatre's page: its shows on one date in India, grouped by movie.
-// dates: the next dates with upcoming shows (for the date strip), whatever date was asked for.
 public record TheatreShowtimesResponse(
         TheatreResponse theatre,
         LocalDate date,

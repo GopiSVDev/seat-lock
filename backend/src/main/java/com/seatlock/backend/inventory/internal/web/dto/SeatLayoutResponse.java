@@ -7,14 +7,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
-// The part of the seat map that never changes for a show; statuses come from SeatAvailabilityResponse.
 public record SeatLayoutResponse(
         Long showId,
         int totalSeats,
         List<Row> rows
 ) {
 
-    // Screens are laid out row by row with one seat type per row
     public record Row(String label, SeatType seatType, List<SeatInfo> seats) {
     }
 

@@ -19,8 +19,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 
-// Movie lists in plain SQL: per-movie aggregates over shows (count, languages, formats) and array filters.
-// Filters arrive as arrays; an empty array means "no filter".
+// Empty filter arrays mean "any".
 @Repository
 @RequiredArgsConstructor
 public class MovieBrowseRepository {
@@ -28,10 +27,7 @@ public class MovieBrowseRepository {
     private static final String CARD_COLUMNS = """
             m.id, m.title, m.poster_url, m.genres, m.certification, m.duration_minutes, m.release_date""";
 
-    // Now showing in a city: movies with at least one show that hasn't started, in a theatre of that city.
-    // Languages, formats and the show count cover all of the city's upcoming shows, so a card lists everything
-    // on offer and the order doesn't change with the filters. Filters only pick which movies appear:
-    // values of one filter are OR-ed (Tamil or English), different filters AND-ed.
+    // Aggregates cover all of the city's upcoming shows; filters only select which movies appear.
     private static final String NOW_SHOWING = """
             with city_shows as (
                 select s.movie_id,
@@ -74,8 +70,7 @@ public class MovieBrowseRepository {
 
     private final JdbcClient jdbcClient;
 
-    // Most upcoming shows first (theatres give the most shows to the films people want), then id so pages
-    // never overlap when counts tie
+    // id breaks ties so pages never overlap
     public List<MovieCard> findNowShowing(MovieFilter filter, Instant now, int limit, long offset) {
         String sql = NOW_SHOWING.formatted(CARD_COLUMNS + ", cs.languages, cs.formats")
                 + " order by cs.show_count desc, m.id limit :limit offset :offset";
@@ -90,7 +85,6 @@ public class MovieBrowseRepository {
         return nowShowingQuery(NOW_SHOWING.formatted("count(*)"), filter, now).query(Long.class).single();
     }
 
-    // Whole catalogue (admin: pick a movie to schedule), newest release first
     public List<MovieCard> findAll(MovieFilter filter, int limit, long offset) {
         String sql = CATALOGUE.formatted(CARD_COLUMNS + ", null::varchar[] as languages, null::varchar[] as formats")
                 + " order by m.release_date desc, m.id limit :limit offset :offset";
@@ -118,7 +112,7 @@ public class MovieBrowseRepository {
                 .param("genres", names(filter.genres()));
     }
 
-    // A Java array (not a List) binds as one Postgres array parameter; a List would expand into "?, ?, ?"
+    // An array binds as one Postgres array; a List would expand into "?, ?, ?"
     private static String[] names(List<? extends Enum<?>> values) {
         return values.stream().map(Enum::name).toArray(String[]::new);
     }

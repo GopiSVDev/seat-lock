@@ -9,7 +9,6 @@ import com.seatlock.backend.catalogue.internal.repository.MovieCard;
 import java.time.LocalDate;
 import java.util.List;
 
-// A movie card in a list. languages/formats: what upcoming shows offer in the requested city (null without one).
 public record MovieCardResponse(
         Long id,
         String title,

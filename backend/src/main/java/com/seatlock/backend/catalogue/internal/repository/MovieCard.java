@@ -8,7 +8,7 @@ import com.seatlock.backend.catalogue.internal.domain.ShowFormat;
 import java.time.LocalDate;
 import java.util.List;
 
-// A movie as a list shows it. languages/formats: what upcoming shows offer in the city; null without a city.
+// languages/formats: null without a city
 public record MovieCard(
         Long id,
         String title,

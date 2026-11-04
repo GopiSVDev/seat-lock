@@ -34,7 +34,7 @@ public class ScreenService {
 
         Screen screen = screenRepository.save(new Screen(theatre, request.name()));
 
-        // Seats are saved in row order (ids follow it; the seat map relies on that), each with its rank
+        // Saved in row order: the seat map relies on ids following it
         int[] ranks = seatRanks(request.rows());
         List<Seat> seats = new ArrayList<>();
         for (CreateScreenRequest.Row row : request.rows()) {
@@ -46,8 +46,8 @@ public class ScreenService {
         return ScreenResponse.from(screen, seatRepository.saveAll(seats));
     }
 
-    // Best-available ranks in row order: rank 1 is the seat closest to the sweet spot (the row 60% of the way
-    // back, centre of the row); one row away counts like 2 seats along the row. Ties: front row, then left seat.
+    // Rank 1 = closest to the sweet spot (row 60% back, centre); a row away counts as 2 seats.
+    // Ties: front row, then left seat.
     private static int[] seatRanks(List<CreateScreenRequest.Row> rows) {
         record Place(int index, int row, int number, double distance) {
         }

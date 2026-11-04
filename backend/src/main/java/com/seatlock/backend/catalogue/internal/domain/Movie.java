@@ -37,10 +37,8 @@ public class Movie {
     @Column(nullable = false)
     private LocalDate releaseDate;
 
-    // Link to the image on a CDN / object storage; null = no poster yet
     private String posterUrl;
 
-    // Postgres text array (varchar[]), values as enum names like the other enums
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(nullable = false)

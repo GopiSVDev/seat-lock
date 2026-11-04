@@ -6,6 +6,6 @@ import com.seatlock.backend.catalogue.internal.domain.ShowFormat;
 
 import java.util.List;
 
-// Filters for movie lists; empty lists mean "any". cityId null = whole catalogue (languages/formats then unused).
+// Empty lists = any
 public record MovieFilter(Long cityId, List<Language> languages, List<Genre> genres, List<ShowFormat> formats) {
 }
