@@ -37,4 +37,6 @@ public class Booking {
 
     @Column(nullable = false)
     private Instant createdAt;
+
+    private Instant cancelledAt;
 }

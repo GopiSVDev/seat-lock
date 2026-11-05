@@ -57,4 +57,26 @@ public class BookingWriteRepository {
                 .query(Long.class)
                 .single();
     }
+
+    // Guarded like booking: of two concurrent cancels only one matches, so seats are released once
+    public boolean cancel(Long id, String customerId, Instant now) {
+        return jdbcClient.sql("""
+                        update booking.booking
+                        set status = 'CANCELLED', cancelled_at = :now
+                        where id = :id
+                          and customer_id = :customerId
+                          and status = 'CONFIRMED'
+                          and show_start_time > :now
+                        """)
+                .param("id", id)
+                .param("customerId", customerId)
+                .param("now", Timestamp.from(now))
+                .update() == 1;
+    }
+
+    public void cancelSeats(Long bookingId) {
+        jdbcClient.sql("update booking.booking_seat set status = 'CANCELLED' where booking_id = :bookingId")
+                .param("bookingId", bookingId)
+                .update();
+    }
 }

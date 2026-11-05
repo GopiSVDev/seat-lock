@@ -1,7 +1,7 @@
 # API reference
 
 Base URL locally: `http://localhost:8080`. All bodies are JSON (`Content-Type: application/json`). Times are
-ISO-8601 in UTC (`2030-01-01T18:30:00Z`). Every `POST` that creates something returns `201 Created` with a
+ISO-8601 in UTC (`2030-01-01T13:30:00Z`). Every `POST` that creates something returns `201 Created` with a
 `Location` header pointing at the new resource.
 
 For the big picture (modules, booking flow, caching) see the [README](../README.md).
@@ -10,7 +10,7 @@ For the big picture (modules, booking flow, caching) see the [README](../README.
 - [Errors](#errors)
 - [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
-- [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [mine](#get-bookings), [get](#get-bookingsid)
+- [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [mine](#get-bookings), [get](#get-bookingsid), [cancel](#post-bookingsidcancel)
 - [Enums](#enums)
 
 ## Authentication
@@ -66,7 +66,7 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 401 | No token, or a token that is invalid or expired (also sends a `WWW-Authenticate: Bearer` header) | `Authentication required` or `Invalid or expired token` |
 | 403 | Valid token, but the role may not call this endpoint (e.g. a CUSTOMER creating a movie) | `Not allowed for your role` |
 | 404 | An id in the path or body does not exist (or is another user's booking) | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
-| 409 | Seats already taken or no adjacent block left | see each endpoint |
+| 409 | Seats already taken, no adjacent block left, or a booking cancelled after its show started | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
 
@@ -473,7 +473,7 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
 {
   "movieId": 1,
   "screenId": 1,
-  "startTime": "2030-01-01T18:30:00Z",
+  "startTime": "2030-01-01T13:30:00Z",
   "language": "ENGLISH",
   "format": "IMAX_2D"
 }
@@ -488,8 +488,8 @@ Response `201` (`endTime` = start + movie duration):
   "movieTitle": "Interstellar",
   "screenId": 1,
   "screenName": "Screen 1",
-  "startTime": "2030-01-01T18:30:00Z",
-  "endTime": "2030-01-01T21:19:00Z",
+  "startTime": "2030-01-01T13:30:00Z",
+  "endTime": "2030-01-01T16:19:00Z",
   "language": "ENGLISH",
   "format": "IMAX_2D"
 }
@@ -659,9 +659,10 @@ Response `201`:
   "customerName": "Asha Kumar",
   "status": "CONFIRMED",
   "createdAt": "2026-11-03T10:15:30.123456Z",
+  "cancelledAt": null,
   "show": {
     "id": 1,
-    "startTime": "2030-01-01T18:30:00Z",
+    "startTime": "2030-01-01T13:30:00Z",
     "language": "ENGLISH",
     "format": "IMAX_2D",
     "movie": {
@@ -742,9 +743,10 @@ Response `200`:
       "customerName": "Asha Kumar",
       "status": "CONFIRMED",
       "createdAt": "2026-11-03T10:15:30.123456Z",
+      "cancelledAt": null,
       "show": {
         "id": 1,
-        "startTime": "2030-01-01T18:30:00Z",
+        "startTime": "2030-01-01T13:30:00Z",
         "language": "ENGLISH",
         "format": "IMAX_2D",
         "movie": {
@@ -782,6 +784,23 @@ Response `200`:
 
 Returns the same shape as the create response. `404` if unknown or owned by another user.
 
+#### `POST /bookings/{id}/cancel`
+
+Cancels the whole booking before its show starts: the booking becomes `CANCELLED` (it stays in the
+caller's list, with `cancelledAt` set) and its seats go back on sale. The seat map shows them free within
+about a second (availability is cached for 1 s). No body. No refund yet: payment isn't built.
+
+Idempotent: cancelling an already cancelled booking returns it unchanged with `200`, so a client can safely
+retry after a timeout. Two cancels arriving at once release the seats only once.
+
+Response `200`: the booking, same shape as `GET /bookings/{id}`, with `"status": "CANCELLED"` and
+`"cancelledAt": "2026-11-04T09:00:00.123456Z"`.
+
+| Error | When |
+|---|---|
+| `404 Booking not found: <id>` | unknown, or another user's booking |
+| `409 Show has already started` | the show's start time has passed |
+
 ## Enums
 
 | Enum | Values |
@@ -791,7 +810,7 @@ Returns the same shape as the create response. `404` if unknown or owned by anot
 | Genre | `ACTION`, `ADVENTURE`, `ANIMATION`, `BIOGRAPHY`, `COMEDY`, `CRIME`, `DOCUMENTARY`, `DRAMA`, `FAMILY`, `FANTASY`, `HISTORICAL`, `HORROR`, `MUSICAL`, `MYSTERY`, `ROMANCE`, `SCI_FI`, `SPORTS`, `THRILLER`, `WAR` |
 | SeatType | `REGULAR`, `PREMIUM`, `RECLINER` |
 | ShowFormat | `TWO_D`, `THREE_D`, `IMAX_2D`, `IMAX_3D`, `FOUR_DX` |
-| Booking status | `CONFIRMED` |
+| Booking status | `CONFIRMED`, `CANCELLED` |
 
 ## Operations
 

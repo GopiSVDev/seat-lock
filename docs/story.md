@@ -48,6 +48,10 @@ tickets.
 The ticket desk writes the wristband's number on every ticket it sells, not whatever name the buyer says.
 It also copies the movie, the hall and the time onto the ticket, so the ticket says what was sold even if
 the posters change later, and Asha's "my tickets" list can show coming shows first and old ones apart.
+
+If Asha can't go, she can hand her ticket back before the show starts. The desk stamps it "cancelled"
+(she keeps it in her list) and tells the seat desk to put her chairs back on sale. If she nervously hands
+it back twice, only the first stamp counts: otherwise the second could free a chair Ravi has just bought.
 Later, Asha can ask "show me my tickets" and gets only hers. If Ravi asks for Asha's ticket number, the desk
 says "no such ticket" (`404`), as if it didn't exist, so nobody can find out which ticket numbers are
 taken.
@@ -319,5 +323,5 @@ left". The board was simply a second behind, and they took a few seconds to deci
 ## Not in the story yet
 
 - **Holding chairs while you pay**: today a ticket is final the moment you book.
-- **Paying**, cancelling, refunds.
+- **Paying** and refunds.
 - **A queue at the door** for when far more fans arrive than the office can serve.

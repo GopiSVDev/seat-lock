@@ -3,6 +3,7 @@ package com.seatlock.backend.inventory.internal.repository;
 import com.seatlock.backend.inventory.BookedSeat;
 import com.seatlock.backend.inventory.internal.domain.ShowSeat;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.Collection;
@@ -34,6 +35,16 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
             for update skip locked
             """, nativeQuery = true)
     List<CandidateSeat> lockAvailable(Long showId, String seatType, int afterRank, int limit);
+
+    @Modifying
+    @Query(value = """
+            update inventory.show_seat
+            set status = 'AVAILABLE'
+            where id in (:ids)
+              and show_id = :showId
+              and status = 'BOOKED'
+            """, nativeQuery = true)
+    int release(Long showId, Collection<Long> ids);
 
     boolean existsByShowId(Long showId);
 }

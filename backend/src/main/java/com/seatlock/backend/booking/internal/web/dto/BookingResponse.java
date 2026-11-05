@@ -13,6 +13,7 @@ public record BookingResponse(
         String customerName,
         BookingStatus status,
         Instant createdAt,
+        Instant cancelledAt,
         Show show,
         List<Seat> seats
 ) {
@@ -49,6 +50,7 @@ public record BookingResponse(
                 booking.getCustomerName(),
                 booking.getStatus(),
                 booking.getCreatedAt(),
+                booking.getCancelledAt(),
                 Show.from(booking.getShowId(), booking.getShow()),
                 seats
         );

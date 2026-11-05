@@ -87,6 +87,19 @@ public class ShowSeatService implements InventoryApi {
         throw new ConflictException("One or more seats are already booked");
     }
 
+    @Override
+    @Transactional
+    public void releaseSeats(Long showId, List<Long> showSeatIds) {
+        Set<Long> seats = new HashSet<>(showSeatIds);
+        int released = showSeatRepository.release(showId, seats);
+
+        // Fewer means booking and inventory disagree: roll back rather than half-cancel
+        if (released != seats.size()) {
+            throw new IllegalStateException("Expected to release %d seats of show %d, released %d"
+                    .formatted(seats.size(), showId, released));
+        }
+    }
+
     // Earlier windows stay locked, so a block may span two; unbooked seats are released at commit.
     @Override
     @Transactional

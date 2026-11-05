@@ -14,6 +14,7 @@ import com.seatlock.backend.booking.internal.web.dto.CreateBookingRequest;
 import com.seatlock.backend.catalogue.CatalogueApi;
 import com.seatlock.backend.inventory.BookedSeat;
 import com.seatlock.backend.inventory.InventoryApi;
+import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import com.seatlock.backend.shared.security.CurrentUser;
 import com.seatlock.backend.shared.web.PageResponse;
@@ -71,8 +72,29 @@ public class BookingService {
         List<BookingResponse.Seat> seats = bookedSeats.stream()
                 .map(seat -> new BookingResponse.Seat(seat.showSeatId(), seat.label()))
                 .toList();
-        return new BookingResponse(id, customer.name(), BookingStatus.CONFIRMED, createdAt,
+        return new BookingResponse(id, customer.name(), BookingStatus.CONFIRMED, createdAt, null,
                 BookingResponse.Show.from(showId, show), seats);
+    }
+
+    // Idempotent: cancelling a cancelled booking returns it unchanged
+    @Transactional
+    public BookingResponse cancel(Long id, CurrentUser customer) {
+        // Microseconds, as for createdAt
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        boolean cancelledNow = bookingWriteRepository.cancel(id, customer.id(), now);
+
+        // Read after the update, so this sees it (or the cancel that beat us to it)
+        Booking booking = bookingRepository.findByIdAndCustomerId(id, customer.id())
+                .orElseThrow(() -> new NotFoundException("Booking", id));
+        List<BookingSeat> seats = bookingSeatRepository.findByBookingIdOrderByIdAsc(id);
+
+        if (cancelledNow) {
+            inventoryApi.releaseSeats(booking.getShowId(), seats.stream().map(BookingSeat::getShowSeatId).toList());
+            bookingWriteRepository.cancelSeats(id);
+        } else if (booking.getStatus() == BookingStatus.CONFIRMED) {
+            throw new ConflictException("Show has already started");
+        }
+        return BookingResponse.from(booking, seats);
     }
 
     @Transactional(readOnly = true)
