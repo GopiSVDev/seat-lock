@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 import java.util.List;
 
-// The two caches need different settings, which spring.cache.caffeine.spec (one spec for all) can't express.
+// Per-cache settings; spring.cache.caffeine.spec applies one spec to all.
 @Configuration
 public class SeatMapCacheConfig {
 
@@ -20,7 +20,7 @@ public class SeatMapCacheConfig {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager();
         cacheManager.setCacheNames(List.of()); // no caches created on demand: an unknown name fails
 
-        // A show's layout never changes, so no expiry; ~6 KB each, 2000 shows ≈ 12 MB
+        // Layouts never change: no expiry (~6 KB each)
         cacheManager.registerCustomCache(LAYOUTS, Caffeine.newBuilder()
                 .maximumSize(2000)
                 .recordStats()

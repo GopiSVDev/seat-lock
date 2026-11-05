@@ -1,16 +1,47 @@
 # API reference
 
 Base URL locally: `http://localhost:8080`. All bodies are JSON (`Content-Type: application/json`). Times are
-ISO-8601 in UTC (`2030-01-01T18:30:00Z`). Every `POST` that creates something returns `201 Created` with a
+ISO-8601 in UTC (`2030-01-01T13:30:00Z`). Every `POST` that creates something returns `201 Created` with a
 `Location` header pointing at the new resource.
 
 For the big picture (modules, booking flow, caching) see the [README](../README.md).
 
+- [Authentication](#authentication)
 - [Errors](#errors)
 - [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
-- [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [get](#get-bookingsid)
+- [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [mine](#get-bookings), [get](#get-bookingsid), [cancel](#post-bookingsidcancel)
 - [Enums](#enums)
+
+## Authentication
+
+Logins are handled by Keycloak (realm `seatlock`, locally at `http://localhost:8180`). Clients send the
+access token as `Authorization: Bearer <token>`. The backend checks the token itself, without calling
+Keycloak per request: signature (Keycloak's public keys, fetched once and cached), expiry, issuer
+`http://localhost:8180/realms/seatlock` and audience `seatlock-api`. Roles come from the token's
+`realm_access.roles` claim. Tokens live 5 minutes (1 hour for the dev-only client `seatlock-dev-cli`).
+
+| Request | Who may call it |
+|---|---|
+| `GET` on `/cities/**`, `/movies/**`, `/theatres/**`, `/screens/**`, `/shows/**` (includes the seat map) | anyone, no token |
+| `POST` on `/cities/**`, `/movies/**`, `/theatres/**` (includes screens), `/shows/**` | `ADMIN` |
+| `/bookings/**` | any logged-in user (`CUSTOMER` or `ADMIN`) |
+| Swagger UI, `/v3/api-docs`, `/actuator/health`, `/actuator/prometheus` | anyone |
+| anything else | any logged-in user |
+
+Test users: `admin`/`admin` (ADMIN and CUSTOMER), `asha`/`asha` and `ravi`/`ravi` (CUSTOMER). New sign-ups
+get CUSTOMER.
+
+Getting a token from the command line (client `seatlock-dev-cli`, password login, local development only):
+
+```bash
+curl -s localhost:8180/realms/seatlock/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=seatlock-dev-cli -d username=asha -d password=asha | jq -r .access_token
+```
+
+Apps and Swagger UI use client `seatlock-web` instead: the browser is sent to Keycloak's login page
+(authorization code flow with PKCE), so the app never sees the password. In Swagger UI click
+**Authorize**, then log in.
 
 ## Errors
 
@@ -32,8 +63,10 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 400 | Malformed JSON or a wrong enum value | Spring's message |
 | 400 | A query parameter out of range (e.g. `size=100`) | `Validation failure` |
 | 400 | Filters that don't make sense together | see each endpoint |
-| 404 | An id in the path or body does not exist | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
-| 409 | Seats already taken or no adjacent block left | see each endpoint |
+| 401 | No token, or a token that is invalid or expired (also sends a `WWW-Authenticate: Bearer` header) | `Authentication required` or `Invalid or expired token` |
+| 403 | Valid token, but the role may not call this endpoint (e.g. a CUSTOMER creating a movie) | `Not allowed for your role` |
+| 404 | An id in the path or body does not exist (or is another user's booking) | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
+| 409 | Seats already taken, no adjacent block left, or a booking cancelled after its show started | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
 
@@ -54,7 +87,8 @@ Validation example:
 
 ## Catalogue
 
-Admin data: what is playing where. Owned by the `catalogue` module.
+Admin data: what is playing where. Owned by the `catalogue` module. Every `GET` is public; every `POST`
+needs the `ADMIN` role.
 
 ### Cities
 
@@ -439,7 +473,7 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
 {
   "movieId": 1,
   "screenId": 1,
-  "startTime": "2030-01-01T18:30:00Z",
+  "startTime": "2030-01-01T13:30:00Z",
   "language": "ENGLISH",
   "format": "IMAX_2D"
 }
@@ -454,8 +488,8 @@ Response `201` (`endTime` = start + movie duration):
   "movieTitle": "Interstellar",
   "screenId": 1,
   "screenName": "Screen 1",
-  "startTime": "2030-01-01T18:30:00Z",
-  "endTime": "2030-01-01T21:19:00Z",
+  "startTime": "2030-01-01T13:30:00Z",
+  "endTime": "2030-01-01T16:19:00Z",
   "language": "ENGLISH",
   "format": "IMAX_2D"
 }
@@ -591,7 +625,15 @@ app). Booking always re-checks in the database, so staleness can cause a `409` b
 
 ## Booking
 
-Owned by the `booking` module. A booking is confirmed immediately (no hold or payment step yet).
+Owned by the `booking` module. A booking is confirmed immediately (no hold or payment step yet). All
+booking endpoints need a logged-in user, and each user only ever sees their own bookings: the owner is the
+token's `sub` (the user's permanent Keycloak id), never a field the client sends. Another user's booking
+answers `404`, exactly like a booking that doesn't exist, so booking ids can't be probed. `customerName` in
+responses is the user's name from the token at booking time.
+
+Every booking also keeps a copy of its show (`show`: time, language, format, movie, theatre, screen) taken
+when it was booked, the way an order keeps the product name. A booking page renders from it alone, without
+calling the catalogue endpoints, and still shows what was sold if catalogue data changes later.
 
 #### `POST /bookings`
 
@@ -600,13 +642,11 @@ Books exactly the seats the customer picked. All or nothing: if any seat is take
 | Field | Type | Rules |
 |---|---|---|
 | `showId` | long | required |
-| `customerName` | string | required |
 | `showSeatIds` | long[] | at least one; show seat ids from the layout |
 
 ```json
 {
   "showId": 1,
-  "customerName": "asha",
   "showSeatIds": [1, 2]
 }
 ```
@@ -616,10 +656,27 @@ Response `201`:
 ```json
 {
   "id": 1,
-  "showId": 1,
-  "customerName": "asha",
+  "customerName": "Asha Kumar",
   "status": "CONFIRMED",
   "createdAt": "2026-11-03T10:15:30.123456Z",
+  "cancelledAt": null,
+  "show": {
+    "id": 1,
+    "startTime": "2030-01-01T13:30:00Z",
+    "language": "ENGLISH",
+    "format": "IMAX_2D",
+    "movie": {
+      "id": 1,
+      "title": "Interstellar",
+      "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+      "certification": "UA"
+    },
+    "theatre": {
+      "id": 1,
+      "name": "PVR Grand"
+    },
+    "screenName": "Screen 1"
+  },
   "seats": [
     {
       "showSeatId": 1,
@@ -636,6 +693,7 @@ Response `201`:
 | Error | When |
 |---|---|
 | `409 One or more seats are already booked` | any requested seat is not AVAILABLE |
+| `404 Show not found: <showId>` | unknown show |
 | `404 Seats for show not found: <showId>` | a seat id does not exist or belongs to another show |
 
 #### `POST /bookings/best-available`
@@ -647,14 +705,12 @@ so they get different seats instead of colliding.
 | Field | Type | Rules |
 |---|---|---|
 | `showId` | long | required |
-| `customerName` | string | required |
 | `quantity` | int | 1 to 10 |
 | `seatType` | [SeatType](#enums) | required |
 
 ```json
 {
   "showId": 1,
-  "customerName": "ravi",
   "quantity": 2,
   "seatType": "RECLINER"
 }
@@ -667,9 +723,83 @@ Response `201`: same shape as `POST /bookings`.
 | `409 No 2 adjacent RECLINER seats available` | no block of that size and type is free (free seats may still exist, but not side by side) |
 | `404 Show not found: <showId>` | unknown show |
 
+#### `GET /bookings`
+
+The caller's bookings, as two tabs. Paged like the other lists.
+
+| Query parameter | Rules |
+|---|---|
+| `period` | `UPCOMING` (default): shows that haven't started, soonest first. `PAST`: shows that have started, latest first |
+| `page` | from 0, default 0 |
+| `size` | 1 to 50, default 20 |
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "customerName": "Asha Kumar",
+      "status": "CONFIRMED",
+      "createdAt": "2026-11-03T10:15:30.123456Z",
+      "cancelledAt": null,
+      "show": {
+        "id": 1,
+        "startTime": "2030-01-01T13:30:00Z",
+        "language": "ENGLISH",
+        "format": "IMAX_2D",
+        "movie": {
+          "id": 1,
+          "title": "Interstellar",
+          "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+          "certification": "UA"
+        },
+        "theatre": {
+          "id": 1,
+          "name": "PVR Grand"
+        },
+        "screenName": "Screen 1"
+      },
+      "seats": [
+        {
+          "showSeatId": 1,
+          "label": "A1"
+        },
+        {
+          "showSeatId": 2,
+          "label": "A2"
+        }
+      ]
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalItems": 1,
+  "totalPages": 1
+}
+```
+
 #### `GET /bookings/{id}`
 
-Returns the same shape as the create response. `404` if unknown.
+Returns the same shape as the create response. `404` if unknown or owned by another user.
+
+#### `POST /bookings/{id}/cancel`
+
+Cancels the whole booking before its show starts: the booking becomes `CANCELLED` (it stays in the
+caller's list, with `cancelledAt` set) and its seats go back on sale. The seat map shows them free within
+about a second (availability is cached for 1 s). No body. No refund yet: payment isn't built.
+
+Idempotent: cancelling an already cancelled booking returns it unchanged with `200`, so a client can safely
+retry after a timeout. Two cancels arriving at once release the seats only once.
+
+Response `200`: the booking, same shape as `GET /bookings/{id}`, with `"status": "CANCELLED"` and
+`"cancelledAt": "2026-11-04T09:00:00.123456Z"`.
+
+| Error | When |
+|---|---|
+| `404 Booking not found: <id>` | unknown, or another user's booking |
+| `409 Show has already started` | the show's start time has passed |
 
 ## Enums
 
@@ -680,7 +810,7 @@ Returns the same shape as the create response. `404` if unknown.
 | Genre | `ACTION`, `ADVENTURE`, `ANIMATION`, `BIOGRAPHY`, `COMEDY`, `CRIME`, `DOCUMENTARY`, `DRAMA`, `FAMILY`, `FANTASY`, `HISTORICAL`, `HORROR`, `MUSICAL`, `MYSTERY`, `ROMANCE`, `SCI_FI`, `SPORTS`, `THRILLER`, `WAR` |
 | SeatType | `REGULAR`, `PREMIUM`, `RECLINER` |
 | ShowFormat | `TWO_D`, `THREE_D`, `IMAX_2D`, `IMAX_3D`, `FOUR_DX` |
-| Booking status | `CONFIRMED` |
+| Booking status | `CONFIRMED`, `CANCELLED` |
 
 ## Operations
 

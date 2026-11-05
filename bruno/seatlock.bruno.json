@@ -1,0 +1,2545 @@
+{
+  "name": "SeatLock",
+  "version": "1",
+  "items": [
+    {
+      "type": "folder",
+      "name": "01 Log in (run first)",
+      "items": [
+        {
+          "type": "http",
+          "name": "Login admin (ADMIN)",
+          "request": {
+            "url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "formUrlEncoded",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [
+                {
+                  "name": "grant_type",
+                  "value": "password",
+                  "enabled": true
+                },
+                {
+                  "name": "client_id",
+                  "value": "{{devClientId}}",
+                  "enabled": true
+                },
+                {
+                  "name": "username",
+                  "value": "{{adminUser}}",
+                  "enabled": true
+                },
+                {
+                  "name": "password",
+                  "value": "{{adminPassword}}",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"adminToken\", res.getBody().access_token);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"has an access token\", function () {\n  expect(res.getBody().access_token).to.be.a(\"string\");\n});\n",
+            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `adminToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens from this dev client last 1 hour: re-run this request when calls start returning 401 `Invalid or expired token`."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "Login asha (CUSTOMER)",
+          "request": {
+            "url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "formUrlEncoded",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [
+                {
+                  "name": "grant_type",
+                  "value": "password",
+                  "enabled": true
+                },
+                {
+                  "name": "client_id",
+                  "value": "{{devClientId}}",
+                  "enabled": true
+                },
+                {
+                  "name": "username",
+                  "value": "{{ashaUser}}",
+                  "enabled": true
+                },
+                {
+                  "name": "password",
+                  "value": "{{ashaPassword}}",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"ashaToken\", res.getBody().access_token);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"has an access token\", function () {\n  expect(res.getBody().access_token).to.be.a(\"string\");\n});\n",
+            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `ashaToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens from this dev client last 1 hour: re-run this request when calls start returning 401 `Invalid or expired token`."
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Login ravi (CUSTOMER)",
+          "request": {
+            "url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "formUrlEncoded",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [
+                {
+                  "name": "grant_type",
+                  "value": "password",
+                  "enabled": true
+                },
+                {
+                  "name": "client_id",
+                  "value": "{{devClientId}}",
+                  "enabled": true
+                },
+                {
+                  "name": "username",
+                  "value": "{{raviUser}}",
+                  "enabled": true
+                },
+                {
+                  "name": "password",
+                  "value": "{{raviPassword}}",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"raviToken\", res.getBody().access_token);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"has an access token\", function () {\n  expect(res.getBody().access_token).to.be.a(\"string\");\n});\n",
+            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `raviToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens from this dev client last 1 hour: re-run this request when calls start returning 401 `Invalid or expired token`."
+          },
+          "seq": 3
+        },
+        {
+          "type": "http",
+          "name": "Wrong password is refused",
+          "request": {
+            "url": "{{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "formUrlEncoded",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [
+                {
+                  "name": "grant_type",
+                  "value": "password",
+                  "enabled": true
+                },
+                {
+                  "name": "client_id",
+                  "value": "{{devClientId}}",
+                  "enabled": true
+                },
+                {
+                  "name": "username",
+                  "value": "{{ashaUser}}",
+                  "enabled": true
+                },
+                {
+                  "name": "password",
+                  "value": "wrong",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\ntest(\"invalid_grant\", function () {\n  expect(res.getBody().error).to.equal(\"invalid_grant\");\n});\n",
+            "docs": "Keycloak, not SeatLock, rejects the login."
+          },
+          "seq": 4
+        },
+        {
+          "type": "http",
+          "name": "Login to the master realm (used by a security check)",
+          "request": {
+            "url": "{{keycloakUrl}}/realms/master/protocol/openid-connect/token",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "formUrlEncoded",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [
+                {
+                  "name": "grant_type",
+                  "value": "password",
+                  "enabled": true
+                },
+                {
+                  "name": "client_id",
+                  "value": "admin-cli",
+                  "enabled": true
+                },
+                {
+                  "name": "username",
+                  "value": "{{keycloakAdminUser}}",
+                  "enabled": true
+                },
+                {
+                  "name": "password",
+                  "value": "{{keycloakAdminPassword}}",
+                  "enabled": true
+                }
+              ],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"masterToken\", res.getBody().access_token);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "A real Keycloak token, but from another realm (signed with other keys, other issuer). Saved as `masterToken`; the security checks show the backend refuses it. Uses the Keycloak admin login from `.env` (`KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`)."
+          },
+          "seq": 5
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": "Gets access tokens for the three test users. Run this folder first, and again after an hour."
+      },
+      "seq": 1
+    },
+    {
+      "type": "folder",
+      "name": "02 Health and API docs (public)",
+      "items": [
+        {
+          "type": "http",
+          "name": "Health",
+          "request": {
+            "url": "{{baseUrl}}/actuator/health",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"UP\", function () {\n  expect(res.getBody().status).to.equal(\"UP\");\n});\n",
+            "docs": ""
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "OpenAPI spec",
+          "request": {
+            "url": "{{baseUrl}}/v3/api-docs",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "The machine-readable API description behind Swagger UI (`/swagger-ui.html`)."
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Prometheus metrics",
+          "request": {
+            "url": "{{baseUrl}}/actuator/prometheus",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Public on purpose (scraped without a token); production would serve actuator on an internal port."
+          },
+          "seq": 3
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": ""
+      },
+      "seq": 2
+    },
+    {
+      "type": "folder",
+      "name": "03 Cities",
+      "items": [
+        {
+          "type": "http",
+          "name": "Search with a typo: chenai",
+          "request": {
+            "url": "{{baseUrl}}/cities?query=chenai",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "query",
+                "value": "chenai",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"Chennai first\", function () {\n  expect(res.getBody()[0].name).to.equal(\"Chennai\");\n});\n",
+            "docs": "Typo tolerant (pg_trgm similarity). Chennai is city id 5."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "Search by old name: madras",
+          "request": {
+            "url": "{{baseUrl}}/cities?query=madras",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "query",
+                "value": "madras",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"Chennai first\", function () {\n  expect(res.getBody()[0].name).to.equal(\"Chennai\");\n});\n",
+            "docs": "Aliases (Madras, Bombay, Bangalore...) find the current name."
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Popular cities",
+          "request": {
+            "url": "{{baseUrl}}/cities?popular=true",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "popular",
+                "value": "true",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "The curated top 10, in rank order."
+          },
+          "seq": 3
+        },
+        {
+          "type": "http",
+          "name": "Cities with theatres",
+          "request": {
+            "url": "{{baseUrl}}/cities?withTheatres=true",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "withTheatres",
+                "value": "true",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 4
+        },
+        {
+          "type": "http",
+          "name": "All cities",
+          "request": {
+            "url": "{{baseUrl}}/cities",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 5
+        },
+        {
+          "type": "http",
+          "name": "Get Chennai",
+          "request": {
+            "url": "{{baseUrl}}/cities/{{chennaiId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"Chennai\", function () {\n  expect(res.getBody().name).to.equal(\"Chennai\");\n});\n",
+            "docs": ""
+          },
+          "seq": 6
+        },
+        {
+          "type": "http",
+          "name": "Create a city (ADMIN)",
+          "request": {
+            "url": "{{baseUrl}}/cities",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"name\": \"{{cityName}}\",\n  \"state\": \"Tamil Nadu\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "bru.setVar(\"cityName\", \"Testpur \" + Math.floor(Math.random() * 1000000));\n",
+              "res": "bru.setVar(\"cityId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": "Random name, so the collection can run again. Saves `cityId`."
+          },
+          "seq": 7
+        },
+        {
+          "type": "http",
+          "name": "Same city again is a conflict (ADMIN)",
+          "request": {
+            "url": "{{baseUrl}}/cities",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"name\": \"{{cityName}}\",\n  \"state\": \"Tamil Nadu\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
+            "docs": "Unique on name + state (case-insensitive)."
+          },
+          "seq": 8
+        },
+        {
+          "type": "http",
+          "name": "Add an alias (ADMIN)",
+          "request": {
+            "url": "{{baseUrl}}/cities/{{cityId}}/aliases",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"alias\": \"{{aliasName}}\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "bru.setVar(\"aliasName\", \"Oldpur \" + Math.floor(Math.random() * 1000000));\n",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": ""
+          },
+          "seq": 9
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": "GET is public; POST needs ADMIN."
+      },
+      "seq": 3
+    },
+    {
+      "type": "folder",
+      "name": "04 Admin: set up a show",
+      "items": [
+        {
+          "type": "http",
+          "name": "Create a movie",
+          "request": {
+            "url": "{{baseUrl}}/movies",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"title\": \"Interstellar\",\n  \"description\": \"A team travels through a wormhole to save humanity.\",\n  \"durationMinutes\": 169,\n  \"certification\": \"UA\",\n  \"releaseDate\": \"2014-11-07\",\n  \"posterUrl\": \"https://cdn.example.com/posters/interstellar.jpg\",\n  \"genres\": [\n    \"SCI_FI\",\n    \"DRAMA\"\n  ]\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"movieId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": "Saves `movieId`."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "Invalid movie is rejected with field errors",
+          "request": {
+            "url": "{{baseUrl}}/movies",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"title\": \"\",\n  \"durationMinutes\": 0,\n  \"genres\": []\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\ntest(\"field errors\", function () {\n  expect(res.getBody().errors).to.have.property(\"title\");\n});\n",
+            "docs": "Admin passes security, then Bean Validation answers 400 with an `errors` map per field."
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Create a theatre in Chennai",
+          "request": {
+            "url": "{{baseUrl}}/theatres",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"name\": \"PVR Grand\",\n  \"cityId\": {{chennaiId}},\n  \"address\": \"1 Main Road\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"theatreId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": "Saves `theatreId`."
+          },
+          "seq": 3
+        },
+        {
+          "type": "http",
+          "name": "Create a screen",
+          "request": {
+            "url": "{{baseUrl}}/theatres/{{theatreId}}/screens",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"name\": \"Screen 1\",\n  \"rows\": [\n    {\n      \"label\": \"A\",\n      \"seatCount\": 10,\n      \"seatType\": \"REGULAR\"\n    },\n    {\n      \"label\": \"B\",\n      \"seatCount\": 10,\n      \"seatType\": \"REGULAR\"\n    },\n    {\n      \"label\": \"C\",\n      \"seatCount\": 8,\n      \"seatType\": \"RECLINER\"\n    }\n  ]\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"screenId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": "28 seats: rows A and B regular, row C recliners. Saves `screenId`."
+          },
+          "seq": 4
+        },
+        {
+          "type": "http",
+          "name": "Schedule a show",
+          "request": {
+            "url": "{{baseUrl}}/shows",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"movieId\": {{movieId}},\n  \"screenId\": {{screenId}},\n  \"startTime\": \"{{showStart}}\",\n  \"language\": \"ENGLISH\",\n  \"format\": \"IMAX_2D\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{adminToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"showId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": "7:00 PM India time on 1 Jan 2030. Inventory creates one show seat per seat in the same transaction. Saves `showId`."
+          },
+          "seq": 5
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": "Creates the data the customer folders use. All need ADMIN."
+      },
+      "seq": 4
+    },
+    {
+      "type": "folder",
+      "name": "05 Browse (public, as a customer)",
+      "items": [
+        {
+          "type": "http",
+          "name": "Now showing in Chennai",
+          "request": {
+            "url": "{{baseUrl}}/movies?cityId={{chennaiId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "cityId",
+                "value": "{{chennaiId}}",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"includes the new movie\", function () {\n  const ids = res.getBody().items.map(m => m.id);\n  expect(ids).to.include(bru.getVar(\"movieId\"));\n});\n",
+            "docs": "Movies with upcoming shows in the city, most shows first, with the languages and formats on offer."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "Now showing, filtered",
+          "request": {
+            "url": "{{baseUrl}}/movies?cityId={{chennaiId}}&language=ENGLISH&format=IMAX_2D&genre=SCI_FI",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "cityId",
+                "value": "{{chennaiId}}",
+                "type": "query",
+                "enabled": true
+              },
+              {
+                "name": "language",
+                "value": "ENGLISH",
+                "type": "query",
+                "enabled": true
+              },
+              {
+                "name": "format",
+                "value": "IMAX_2D",
+                "type": "query",
+                "enabled": true
+              },
+              {
+                "name": "genre",
+                "value": "SCI_FI",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Repeatable filters: OR within one filter, AND across filters."
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Language filter without a city is rejected",
+          "request": {
+            "url": "{{baseUrl}}/movies?language=ENGLISH",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "language",
+                "value": "ENGLISH",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\n",
+            "docs": ""
+          },
+          "seq": 3
+        },
+        {
+          "type": "http",
+          "name": "Whole catalogue",
+          "request": {
+            "url": "{{baseUrl}}/movies?page=0&size=20",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "page",
+                "value": "0",
+                "type": "query",
+                "enabled": true
+              },
+              {
+                "name": "size",
+                "value": "20",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "No city: every movie, newest release first."
+          },
+          "seq": 4
+        },
+        {
+          "type": "http",
+          "name": "Movie details",
+          "request": {
+            "url": "{{baseUrl}}/movies/{{movieId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 5
+        },
+        {
+          "type": "http",
+          "name": "Showtimes: movie in a city on a day",
+          "request": {
+            "url": "{{baseUrl}}/shows?movieId={{movieId}}&cityId={{chennaiId}}&date={{showDate}}",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "movieId",
+                "value": "{{movieId}}",
+                "type": "query",
+                "enabled": true
+              },
+              {
+                "name": "cityId",
+                "value": "{{chennaiId}}",
+                "type": "query",
+                "enabled": true
+              },
+              {
+                "name": "date",
+                "value": "{{showDate}}",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"our theatre is listed\", function () {\n  const ids = res.getBody().theatres.map(t => t.id);\n  expect(ids).to.include(bru.getVar(\"theatreId\"));\n});\n",
+            "docs": "Grouped by theatre; `date` is a day in India time. `dates` is the strip of next days with shows."
+          },
+          "seq": 6
+        },
+        {
+          "type": "http",
+          "name": "Theatres in Chennai",
+          "request": {
+            "url": "{{baseUrl}}/theatres?cityId={{chennaiId}}&query=pvr",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "cityId",
+                "value": "{{chennaiId}}",
+                "type": "query",
+                "enabled": true
+              },
+              {
+                "name": "query",
+                "value": "pvr",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 7
+        },
+        {
+          "type": "http",
+          "name": "Theatre details",
+          "request": {
+            "url": "{{baseUrl}}/theatres/{{theatreId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 8
+        },
+        {
+          "type": "http",
+          "name": "Theatre page: what's on that day",
+          "request": {
+            "url": "{{baseUrl}}/theatres/{{theatreId}}/shows?date={{showDate}}",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "date",
+                "value": "{{showDate}}",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Grouped by movie."
+          },
+          "seq": 9
+        },
+        {
+          "type": "http",
+          "name": "Screen",
+          "request": {
+            "url": "{{baseUrl}}/screens/{{screenId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 10
+        },
+        {
+          "type": "http",
+          "name": "Show",
+          "request": {
+            "url": "{{baseUrl}}/shows/{{showId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 11
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": "No token needed: every GET on the catalogue is public."
+      },
+      "seq": 5
+    },
+    {
+      "type": "folder",
+      "name": "06 Seat map (public)",
+      "items": [
+        {
+          "type": "http",
+          "name": "Layout",
+          "request": {
+            "url": "{{baseUrl}}/shows/{{showId}}/layout",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": "const rowA = res.getBody().rows.find(r => r.label === \"A\");\nbru.setVar(\"seatIds\", JSON.stringify(rowA.seats.slice(0, 2).map(s => s.id)));\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"28 seats\", function () {\n  expect(res.getBody().totalSeats).to.equal(28);\n});\n",
+            "docs": "Rows and seat ids; never changes, so it is cacheable for a day (CDN). Saves A1 and A2 as `seatIds`."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "Availability",
+          "request": {
+            "url": "{{baseUrl}}/shows/{{showId}}/availability",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Which seat ids are taken right now. Cached for 1 second."
+          },
+          "seq": 2
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": ""
+      },
+      "seq": 6
+    },
+    {
+      "type": "folder",
+      "name": "07 Bookings (asha, then ravi)",
+      "items": [
+        {
+          "type": "http",
+          "name": "Book exact seats A1, A2",
+          "request": {
+            "url": "{{baseUrl}}/bookings",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"bookingId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by asha, with show details\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().show.movie.title).to.equal(\"Interstellar\");\n});\n",
+            "docs": "Owner comes from the token, never the body. The booking keeps a copy of the show details. Saves `bookingId`."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "Same seats again is a conflict",
+          "request": {
+            "url": "{{baseUrl}}/bookings",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
+            "docs": "The guarded UPDATE only books AVAILABLE seats: never sold twice."
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Best available: 2 recliners",
+          "request": {
+            "url": "{{baseUrl}}/bookings/best-available",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"quantity\": 2,\n  \"seatType\": \"RECLINER\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"bestBookingId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": "The server picks the best adjacent block (SKIP LOCKED under load)."
+          },
+          "seq": 3
+        },
+        {
+          "type": "http",
+          "name": "Best available: 10 recliners don't fit",
+          "request": {
+            "url": "{{baseUrl}}/bookings/best-available",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"quantity\": 10,\n  \"seatType\": \"RECLINER\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
+            "docs": "Only 6 recliners are left, so no block of 10 exists."
+          },
+          "seq": 4
+        },
+        {
+          "type": "http",
+          "name": "Get my booking",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": ""
+          },
+          "seq": 5
+        },
+        {
+          "type": "http",
+          "name": "My bookings: upcoming",
+          "request": {
+            "url": "{{baseUrl}}/bookings?period=UPCOMING",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "period",
+                "value": "UPCOMING",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"contains the booking\", function () {\n  const ids = res.getBody().items.map(b => b.id);\n  expect(ids).to.include(bru.getVar(\"bookingId\"));\n});\n",
+            "docs": "Shows that haven't started, soonest first (the default period)."
+          },
+          "seq": 6
+        },
+        {
+          "type": "http",
+          "name": "My bookings: past",
+          "request": {
+            "url": "{{baseUrl}}/bookings?period=PAST",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "period",
+                "value": "PAST",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Shows that have started, latest first."
+          },
+          "seq": 7
+        },
+        {
+          "type": "http",
+          "name": "Cancel the booking",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"cancelledAt\", res.getBody().cancelledAt);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"cancelled\", function () {\n  expect(res.getBody().status).to.equal(\"CANCELLED\");\n  expect(res.getBody().cancelledAt).to.be.a(\"string\");\n});\n",
+            "docs": "Seats A1, A2 go back on sale in the same transaction. After the show starts this answers 409 `Show has already started` (needs a past show, so not part of this collection)."
+          },
+          "seq": 8
+        },
+        {
+          "type": "http",
+          "name": "Cancel again changes nothing",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"same cancel time\", function () {\n  expect(res.getBody().cancelledAt).to.equal(bru.getVar(\"cancelledAt\"));\n});\n",
+            "docs": "Idempotent: a retry gets the same answer, and the seats are not released twice."
+          },
+          "seq": 9
+        },
+        {
+          "type": "http",
+          "name": "Ravi books the freed seats",
+          "request": {
+            "url": "{{baseUrl}}/bookings",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"raviBookingId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by ravi\", function () {\n  expect(res.getBody().customerName).to.equal(\"Ravi Shankar\");\n});\n",
+            "docs": "Re-sale works: Asha's cancelled seat rows no longer block the seats."
+          },
+          "seq": 10
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": "Needs the tokens from folder 01 and the show from folder 04."
+      },
+      "seq": 7
+    },
+    {
+      "type": "folder",
+      "name": "08 Security checks (expected failures)",
+      "items": [
+        {
+          "type": "http",
+          "name": "No token: create a movie",
+          "request": {
+            "url": "{{baseUrl}}/movies",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\ntest(\"problem detail + header\", function () {\n  expect(res.getBody().detail).to.equal(\"Authentication required\");\n  expect(res.getHeader(\"www-authenticate\")).to.contain(\"Bearer\");\n});\n",
+            "docs": "Security runs before validation, so even an empty body gets 401, not 400."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "No token: my bookings",
+          "request": {
+            "url": "{{baseUrl}}/bookings",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\n",
+            "docs": ""
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Fake token",
+          "request": {
+            "url": "{{baseUrl}}/bookings",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "abc.def.ghi"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\ntest(\"invalid token\", function () {\n  expect(res.getBody().detail).to.equal(\"Invalid or expired token\");\n});\n",
+            "docs": ""
+          },
+          "seq": 3
+        },
+        {
+          "type": "http",
+          "name": "Token from another realm",
+          "request": {
+            "url": "{{baseUrl}}/bookings",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{masterToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\n",
+            "docs": "Wrong signing keys and wrong issuer: refused."
+          },
+          "seq": 4
+        },
+        {
+          "type": "http",
+          "name": "Customer creating a movie",
+          "request": {
+            "url": "{{baseUrl}}/movies",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 403\", function () {\n  expect(res.getStatus()).to.equal(403);\n});\ntest(\"role\", function () {\n  expect(res.getBody().detail).to.equal(\"Not allowed for your role\");\n});\n",
+            "docs": ""
+          },
+          "seq": 5
+        },
+        {
+          "type": "http",
+          "name": "Ravi reads Asha's booking",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "404, not 403: nobody learns which booking ids exist (BOLA protection)."
+          },
+          "seq": 6
+        },
+        {
+          "type": "http",
+          "name": "Ravi cancels Asha's booking",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{bestBookingId}}/cancel",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": ""
+          },
+          "seq": 7
+        },
+        {
+          "type": "http",
+          "name": "Unknown show",
+          "request": {
+            "url": "{{baseUrl}}/bookings/best-available",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": 999999999,\n  \"quantity\": 1,\n  \"seatType\": \"REGULAR\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": ""
+          },
+          "seq": 8
+        },
+        {
+          "type": "http",
+          "name": "Page size too big",
+          "request": {
+            "url": "{{baseUrl}}/bookings?size=51",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "size",
+                "value": "51",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\n",
+            "docs": ""
+          },
+          "seq": 9
+        },
+        {
+          "type": "http",
+          "name": "Unknown period",
+          "request": {
+            "url": "{{baseUrl}}/bookings?period=SOON",
+            "method": "GET",
+            "headers": [],
+            "params": [
+              {
+                "name": "period",
+                "value": "SOON",
+                "type": "query",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\n",
+            "docs": ""
+          },
+          "seq": 10
+        }
+      ],
+      "root": {
+        "request": {
+          "headers": [],
+          "auth": {
+            "mode": "inherit"
+          },
+          "script": {
+            "req": "",
+            "res": ""
+          },
+          "vars": {
+            "req": [],
+            "res": []
+          },
+          "tests": ""
+        },
+        "docs": "Every request here should fail with the status in its test."
+      },
+      "seq": 8
+    }
+  ],
+  "environments": [
+    {
+      "name": "local",
+      "variables": [
+        {
+          "name": "baseUrl",
+          "value": "http://localhost:8080",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "keycloakUrl",
+          "value": "http://localhost:8180",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "realm",
+          "value": "seatlock",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "devClientId",
+          "value": "seatlock-dev-cli",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "adminUser",
+          "value": "admin",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "adminPassword",
+          "value": "admin",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "ashaUser",
+          "value": "asha",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "ashaPassword",
+          "value": "asha",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "raviUser",
+          "value": "ravi",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "raviPassword",
+          "value": "ravi",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "keycloakAdminUser",
+          "value": "admin",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "keycloakAdminPassword",
+          "value": "admin",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "chennaiId",
+          "value": "5",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "showStart",
+          "value": "2030-01-01T13:30:00Z",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "showDate",
+          "value": "2030-01-01",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        }
+      ]
+    }
+  ],
+  "root": {
+    "request": {
+      "headers": [],
+      "auth": {
+        "mode": "none"
+      },
+      "script": {
+        "req": "",
+        "res": ""
+      },
+      "vars": {
+        "req": [],
+        "res": []
+      },
+      "tests": ""
+    },
+    "docs": "SeatLock API tour. Select the `local` environment, run folder 01 to log in, then run the collection top to bottom (the Runner works too). Created ids are saved as variables and reused by later requests. Local development credentials only."
+  },
+  "brunoConfig": {
+    "version": "1",
+    "name": "SeatLock",
+    "type": "collection",
+    "ignore": [
+      "node_modules",
+      ".git"
+    ]
+  }
+}

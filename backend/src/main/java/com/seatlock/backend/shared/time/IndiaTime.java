@@ -4,8 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
-// SeatLock sells tickets in India only, so a "day" (show dates, "today") is a day in India.
-// A business rule, not deployment config. Times are still stored and returned in UTC.
+// India only: a "day" is a day in IST. Times stay UTC.
 public final class IndiaTime {
 
     public static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");

@@ -13,7 +13,7 @@ import java.time.Instant;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Booking {
 
-    // Created by BookingWriteRepository (plain SQL, one statement with its seats); this mapping is for reads
+    // Read-only mapping: rows are inserted by BookingWriteRepository
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -21,6 +21,13 @@ public class Booking {
     @Column(nullable = false)
     private Long showId;
 
+    @Embedded
+    private ShowSnapshot show;
+
+    @Column(nullable = false)
+    private String customerId;
+
+    // Name at booking time, from the token
     @Column(nullable = false)
     private String customerName;
 
@@ -30,4 +37,6 @@ public class Booking {
 
     @Column(nullable = false)
     private Instant createdAt;
+
+    private Instant cancelledAt;
 }

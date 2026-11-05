@@ -32,7 +32,7 @@ public class ShowSeat {
     @Column(nullable = false)
     private SeatType seatType;
 
-    // Copied from the catalogue seat: best-available order, 1 = best
+    // 1 = best seat (copied from catalogue)
     @Column(nullable = false)
     private int seatRank;
 

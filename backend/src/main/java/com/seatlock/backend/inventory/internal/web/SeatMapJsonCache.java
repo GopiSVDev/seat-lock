@@ -6,8 +6,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
-// Caches the serialized JSON, so cache hits skip Jackson and the heap holds one byte[] per show.
-// Cache settings live in SeatMapCacheConfig.
+// Caches serialized JSON: hits skip Jackson.
 @Component
 @RequiredArgsConstructor
 public class SeatMapJsonCache {

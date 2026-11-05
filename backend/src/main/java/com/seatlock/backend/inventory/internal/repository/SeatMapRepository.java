@@ -9,7 +9,7 @@ import java.sql.Array;
 import java.sql.SQLException;
 import java.util.List;
 
-// Plain JDBC for the hot read path; writes go through ShowSeatRepository (JPA).
+// Plain JDBC: hot read path.
 @Repository
 @RequiredArgsConstructor
 public class SeatMapRepository {
@@ -32,8 +32,7 @@ public class SeatMapRepository {
                 .list();
     }
 
-    // One row per show: Postgres filters and aggregates, so only the unavailable ids cross the wire.
-    // total_seats = 0 means the show has no seats (unknown show).
+    // total_seats = 0: unknown show.
     public SeatAvailability findAvailability(Long showId) {
         return jdbcClient.sql("""
                         select count(*) as total_seats,

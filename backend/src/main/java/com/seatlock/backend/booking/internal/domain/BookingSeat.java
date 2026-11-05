@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BookingSeat {
 
-    // Created by BookingWriteRepository with its booking (see Booking); this mapping is for reads
+    // Read-only mapping: rows are inserted by BookingWriteRepository
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

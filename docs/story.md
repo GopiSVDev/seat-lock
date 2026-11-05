@@ -36,6 +36,26 @@ The people in our story:
 - **Asha** and **Ravi**, two friends who both want to watch *Interstellar* tonight.
 - Later, **ten thousand fans** who all want tickets the second they go on sale.
 
+**The wristband at the door.** Anyone may look at the posters, the show times and the hall plan. To do
+more, you first visit the **front desk** (Keycloak), say who you are, and get a **wristband** (a token).
+The wristband shows your name, its colour shows what you may do (a customer band, or Meena's staff band),
+and it stops working after 5 minutes. Every desk checks the wristband itself, by looking at the front
+desk's stamp on it: there's no need to phone the front desk each time. With no band, or a fake or
+expired one, a desk says "please get a wristband first" (`401`). A customer band at the staff-only
+counter gets "not for you" (`403`): only Meena may add movies or shows, while anyone with a band may buy
+tickets.
+
+The ticket desk writes the wristband's number on every ticket it sells, not whatever name the buyer says.
+It also copies the movie, the hall and the time onto the ticket, so the ticket says what was sold even if
+the posters change later, and Asha's "my tickets" list can show coming shows first and old ones apart.
+
+If Asha can't go, she can hand her ticket back before the show starts. The desk stamps it "cancelled"
+(she keeps it in her list) and tells the seat desk to put her chairs back on sale. If she nervously hands
+it back twice, only the first stamp counts: otherwise the second could free a chair Ravi has just bought.
+Later, Asha can ask "show me my tickets" and gets only hers. If Ravi asks for Asha's ticket number, the desk
+says "no such ticket" (`404`), as if it didn't exist, so nobody can find out which ticket numbers are
+taken.
+
 ```mermaid
 flowchart LR
     people(["Meena, Asha, Ravi"])
@@ -295,10 +315,13 @@ left". The board was simply a second behind, and they took a few seconds to deci
 | `409 Conflict` | "Sorry, that seat is taken" |
 | Unique index | The ticket notebook refusing to write two tickets for one chair |
 | Load test (k6) | A rehearsal with thousands of pretend fans |
+| Keycloak | The front desk that checks who you are and hands out wristbands |
+| Access token (JWT) | The wristband: your name, your colour, an expiry time and the front desk's stamp |
+| Role (`CUSTOMER`, `ADMIN`) | The colour of the wristband |
+| `401` / `403` | "Get a wristband first" / "Your wristband doesn't open this counter" |
 
 ## Not in the story yet
 
 - **Holding chairs while you pay**: today a ticket is final the moment you book.
-- **Paying**, cancelling, refunds.
+- **Paying** and refunds.
 - **A queue at the door** for when far more fans arrive than the office can serve.
-- **Logging in**: today a ticket just has a name on it.

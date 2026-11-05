@@ -31,8 +31,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ShowSeatService implements InventoryApi {
 
-    // Seats locked per round trip while looking for an adjacent block. Bigger: fewer extra round trips, but
-    // concurrent buyers skip more seats (worse seats, and false "none left" near sell-out).
+    // Bigger window: fewer round trips, but concurrent buyers skip more seats.
     private static final int CANDIDATE_WINDOW = 50;
 
     private final ShowSeatRepository showSeatRepository;
@@ -48,8 +47,7 @@ public class ShowSeatService implements InventoryApi {
         showSeatRepository.saveAll(showSeats);
     }
 
-    // No transaction on the seat map reads: a single SELECT runs in its own implicit one (saves BEGIN/COMMIT
-    // on a hot path). Add @Transactional(readOnly = true) back if one of them ever runs more than one query.
+    // No @Transactional: one SELECT each. Add readOnly back if one ever runs more queries.
     public SeatLayoutResponse getLayout(Long showId) {
         List<LayoutSeat> seats = seatMapRepository.findLayout(showId);
 
@@ -80,7 +78,7 @@ public class ShowSeatService implements InventoryApi {
             return booked;
         }
 
-        // Failure only: tell unknown seats from booked ones (the exception rolls back the partial update)
+        // Failure only: unknown (404) vs booked (409); the exception rolls back the partial update
         List<ShowSeat> showSeats = showSeatRepository.findAllById(requested);
         boolean allValid = showSeats.size() == requested.size() && showSeats.stream().allMatch(seat -> seat.getShowId().equals(showId));
 
@@ -89,8 +87,20 @@ public class ShowSeatService implements InventoryApi {
         throw new ConflictException("One or more seats are already booked");
     }
 
-    // Locks candidate windows in rank order until they hold an adjacent block. Earlier windows stay locked and
-    // in the search, so a block may span two windows; seats left unbooked are released at commit.
+    @Override
+    @Transactional
+    public void releaseSeats(Long showId, List<Long> showSeatIds) {
+        Set<Long> seats = new HashSet<>(showSeatIds);
+        int released = showSeatRepository.release(showId, seats);
+
+        // Fewer means booking and inventory disagree: roll back rather than half-cancel
+        if (released != seats.size()) {
+            throw new IllegalStateException("Expected to release %d seats of show %d, released %d"
+                    .formatted(seats.size(), showId, released));
+        }
+    }
+
+    // Earlier windows stay locked, so a block may span two; unbooked seats are released at commit.
     @Override
     @Transactional
     public List<BookedSeat> bookBestAvailable(Long showId, int quantity, String seatType) {
@@ -104,7 +114,7 @@ public class ShowSeatService implements InventoryApi {
 
             List<Long> block = bestBlock(candidates, quantity);
             if (block != null) {
-                // Locked by this transaction and AVAILABLE, so the guarded update books all of them
+                // Locked by us and AVAILABLE: the guarded update books all of them
                 return showSeatRepository.bookIfAvailable(showId, block);
             }
 
@@ -117,7 +127,7 @@ public class ShowSeatService implements InventoryApi {
         throw new ConflictException("No " + quantity + " adjacent " + type + " seats available");
     }
 
-    // Ids of the `quantity` consecutive seat numbers in one row with the lowest rank sum, or null if none
+    // Lowest rank sum of `quantity` consecutive seats in one row; null if none
     private static List<Long> bestBlock(List<CandidateSeat> candidates, int quantity) {
         Map<String, List<CandidateSeat>> rows = candidates.stream()
                 .collect(Collectors.groupingBy(CandidateSeat::rowLabel, Collectors.toCollection(ArrayList::new)));
