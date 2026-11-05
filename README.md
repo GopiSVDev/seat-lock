@@ -14,6 +14,7 @@ improvement was made only after a load test showed a real problem; the story is 
 - [How a booking works](#how-a-booking-works)
 - [Data model](#data-model)
 - [Performance](#performance)
+- [Tests](#tests)
 - [Project layout](#project-layout)
 - [Not built yet](#not-built-yet)
 
@@ -32,14 +33,14 @@ programming needed. API reference with request and response examples: **[docs/ap
 4. The customer **books**, either the exact seats they picked on the map or "best available N seats of a
    type", where the server chooses the best adjacent block for them.
 
-22 endpoints in total, all JSON over HTTP. Errors use the standard
+23 endpoints in total, all JSON over HTTP. Errors use the standard
 [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) format.
 
 | Area | Endpoints |
 |---|---|
 | Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `GET /theatres`, `POST /theatres`, `GET /theatres/{id}`, `GET /theatres/{id}/shows`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `GET /shows`, `POST /shows`, `GET /shows/{id}` |
 | Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
-| Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings`, `GET /bookings/{id}` |
+| Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel` |
 
 Who may call what: `GET` on catalogue and seat maps is public, creating catalogue data needs the `ADMIN`
 role, and bookings need a logged-in user. Logins come from **Keycloak**; the backend checks the JWT access
@@ -79,7 +80,7 @@ curl -s -XPOST $B/theatres/1/screens -H "$ADMIN" -H 'Content-Type: application/j
                                  {"label":"B","seatCount":10,"seatType":"REGULAR"},
                                  {"label":"C","seatCount":8,"seatType":"RECLINER"}]}'
 curl -s -XPOST $B/shows -H "$ADMIN" -H 'Content-Type: application/json' \
-  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T18:30:00Z","language":"ENGLISH","format":"IMAX_2D"}'
+  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T13:30:00Z","language":"ENGLISH","format":"IMAX_2D"}'   # 7:00 PM in India
 
 curl -s $B/shows/1/layout          # rows and seat ids
 curl -s $B/shows/1/availability    # which seat ids are taken
@@ -89,6 +90,7 @@ curl -s -XPOST $B/bookings -H "$ASHA" -H 'Content-Type: application/json' \
 curl -s -XPOST $B/bookings/best-available -H "$ASHA" -H 'Content-Type: application/json' \
   -d '{"showId":1,"quantity":2,"seatType":"RECLINER"}'
 curl -s -H "$ASHA" $B/bookings/1
+curl -s -XPOST -H "$ASHA" $B/bookings/1/cancel   # seats A1, A2 go back on sale
 curl -s -H "$ASHA" $B/bookings     # Asha's upcoming bookings, soonest first (?period=PAST for past)
 curl -s "$B/movies?cityId=5"       # now showing in Chennai
 curl -s "$B/shows?movieId=1&cityId=5&date=2030-01-01"   # its shows that day, by theatre
@@ -102,6 +104,11 @@ Asha's token (CUSTOMER) it returns `403`.
 Logins are handled by **Keycloak** (admin console at [localhost:8180/admin](http://localhost:8180/admin),
 credentials from `.env`). The `seatlock` realm comes with test users `admin`/`admin` (ADMIN), `asha`/`asha`
 and `ravi`/`ravi` (CUSTOMER); new sign-ups get CUSTOMER. These are local development credentials only.
+
+**Bruno collection:** [bruno/seatlock.bruno.json](bruno/seatlock.bruno.json) holds every request above and
+more (55, in 8 folders: log in, health, cities, admin setup, browsing, seat map, bookings, security checks
+that must fail), each with tests. Import it in [Bruno](https://www.usebruno.com/), pick the `local`
+environment, run "01 Log in", then run the collection; created ids are passed along automatically.
 
 API docs: Swagger UI at [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), the OpenAPI
 spec at `/v3/api-docs`. Its **Authorize** button logs in through Keycloak (client `seatlock-web`,
@@ -167,8 +174,8 @@ that change together sit together. Single-feature modules (inventory, booking) a
 `domain/`, `repository/`, `service/`, `web/` (with `dto/`).
 
 Other modules never import anything from another module's `internal` package. They reference each other's
-data by plain id only: no JPA relations and no foreign keys across schemas. The rule is followed by
-convention for now; nothing enforces it with a tool yet.
+data by plain id only: no JPA relations and no foreign keys across schemas. `ArchitectureTest` (ArchUnit)
+fails the build if a class breaks this rule.
 
 **How the modules connect:**
 - **Scheduling a show** (`POST /shows`): catalogue saves the show and publishes a `ShowScheduled` event with
@@ -179,6 +186,11 @@ convention for now; nothing enforces it with a tool yet.
   `InventoryApi` to mark the seats BOOKED, then inserts the booking with a copy of the show details. All of
   it happens in one database transaction, so either everything succeeds or nothing does. The copy lets "my
   bookings" render and split into upcoming/past by show time without asking catalogue.
+- **Cancelling** (`POST /bookings/{id}/cancel`): a guarded update
+  `... set status = 'CANCELLED' where id = ? and customer_id = ? and status = 'CONFIRMED' and show_start_time > now`
+  decides the winner. Only the request that changed the row releases the seats through `InventoryApi`, in
+  the same transaction. This matters: if a double-tapped cancel released the seats twice, the second
+  release could free a seat someone else had booked in between, and it would be sold twice.
 
 `shared/` holds cross-cutting code: the global error handler and the `NotFoundException` /
 `ConflictException` types that services throw.
@@ -296,6 +308,7 @@ erDiagram
         string customer_name
         string status
         timestamptz created_at
+        timestamptz cancelled_at
         timestamptz show_start_time
         string movie_title
         string theatre_name
@@ -312,7 +325,8 @@ Solid lines are real foreign keys inside a schema; dotted lines are plain ids ac
 - **Seat vs show seat.** `seat` (catalogue) is the physical chair. `show_seat` (inventory) is that chair for
   one show; a 250-seat screen gives 250 show seats per show. Booking changes AVAILABLE → BOOKED.
 - **Booking vs booking seat.** Like an order and its order lines: one row per seat, so history survives a
-  future cancellation and re-sale of the same seat.
+  cancellation and re-sale of the same seat. A partial unique index allows only one CONFIRMED booking seat
+  per show seat; cancelled rows drop out of it, so the seat can be sold again.
 - **Cities are reference data.** The list (45 Indian cities, 10 marked popular, plus aliases like Madras,
   Bangalore, Gurgaon) is loaded by a migration; theatres point to a city by id, so a misspelt city can't get
   in. Search matches names and aliases by prefix and by trigram similarity (`pg_trgm`), so typos still
@@ -337,6 +351,28 @@ criteria and a detailed report, is in [loadtest/results/RESULTS.md](loadtest/res
 
 Oversold seats in every test so far: **0**.
 
+## Tests
+
+```bash
+docker compose run --rm backend-test    # Maven in Docker; Testcontainers starts a throwaway PostgreSQL 16
+```
+
+Tests run against a **real PostgreSQL** with every Flyway migration applied, and talk to the app over **real
+HTTP** on a random port, so security filters, error handling, JSON and SQL are all part of each test. Each test
+creates its own city, theatre, show and users, so tests are independent of each other and of their order.
+Logins don't need Keycloak: a test-only `JwtDecoder` turns test tokens into JWTs, while the real role mapping
+and ownership checks run unchanged (the real Keycloak path is covered by the Bruno collection).
+
+| Test | What it proves |
+|---|---|
+| `BookingConcurrencyTest` | 20 buyers racing for the same seats: exactly 1 wins; 30 parallel best-available buyers never share a seat; 10 simultaneous cancels release the seats once |
+| `BookingApiTest` | owner taken from the token, show copy on the booking, 409 for taken seats, best-available blocks, others' bookings are 404, upcoming/past split, cancel, idempotent cancel, no cancel after the show started |
+| `BookingConstraintsTest` | the database itself refuses bad states: a cancelled booking without a time, unknown statuses, one seat in two confirmed bookings |
+| `SecurityRulesTest` | public reads, 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default |
+| `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
+| `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
+| `CurrentUserTest`, `IndiaTimeTest` | unit tests: name fallbacks from the token, the India day boundary |
+
 ## Project layout
 
 ```
@@ -348,6 +384,7 @@ docker-compose.vm.yml host networking overrides for the load-test VM
 loadtest/results/     SUMMARY.md: performance story; RESULTS.md + runs/: every load-test run and its report
 monitoring/           Prometheus config, PostgreSQL init (pg_stat_statements)
 docs/                 api.md (API reference), story.md (the app explained as a story)
+bruno/                Bruno collection: every endpoint with tests, importable
 ```
 
 Configuration comes only from environment variables (see `.env.example`); there are no defaults in the
@@ -360,8 +397,8 @@ Deliberately left out until a test or feature needs them:
 
 - **Seat holds**: reserve seats for a few minutes while the customer pays (today a booking is confirmed
   immediately).
-- **Payment**, cancellation, refunds.
+- **Payment** and refunds (a cancelled booking just frees its seats).
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
 - Notifications, search.
-- **Automated tests** (Testcontainers), show overlap checks.
+- Show overlap checks.
 - **Horizontal scaling**: several backend instances would need the in-memory caches moved to Redis.

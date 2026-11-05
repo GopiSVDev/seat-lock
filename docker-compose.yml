@@ -97,6 +97,25 @@ services:
       retries: 12
       start_period: 30s
 
+  # --- Tests: docker compose run --rm backend-test ---
+  # Maven in a container; Testcontainers starts its own Postgres through the Docker socket (dev/CI only:
+  # socket access is root on the host). Sources are copied, so the build writes nothing into ./backend.
+  backend-test:
+    image: maven:3.9.16-eclipse-temurin-25
+    profiles: [test]
+    working_dir: /app
+    volumes:
+      - ./backend:/src:ro
+      - maven_repo:/root/.m2
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Testcontainers' Postgres runs beside this container; reach its published port through the host
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Only pom + src, like the Dockerfile: a host target/ (e.g. from the IDE) may hold stale classes
+    command: ["sh", "-c", "cp /src/pom.xml /app/ && cp -r /src/src /app/ && mvn -B test"]
+
   # --- Load test monitoring: runs on the laptop, the app (postgres, backend) runs in the LXD VM ---
   # docker compose --profile monitoring up -d prometheus postgres-exporter
   # Host networking so Prometheus reaches the VM and k6 reaches Prometheus on localhost:9090.
@@ -151,6 +170,7 @@ services:
       - /var/cache/nginx/edge:size=256m
 
 volumes:
+  maven_repo:
   postgres_data:
   prometheus_data:
   keycloak_data:
