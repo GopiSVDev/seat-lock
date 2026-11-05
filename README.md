@@ -41,57 +41,69 @@ programming needed. API reference with request and response examples: **[docs/ap
 | Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
 | Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings/{id}` |
 
-There is no login yet: a booking just carries a `customerName`.
+Who may call what: `GET` on catalogue and seat maps is public, creating catalogue data needs the `ADMIN`
+role, and bookings need a logged-in user. Logins come from **Keycloak**; the backend checks the JWT access
+token on every request (details in [docs/api.md](docs/api.md#authentication)). A booking still carries a
+free-text `customerName`; tying bookings to the logged-in user comes next.
 
 ## Quick start
 
 Everything runs in Docker.
 
 ```bash
-cp .env.example .env            # database credentials, ports, thread and pool sizes (no defaults in the app)
+cp .env.example .env            # credentials, ports, Keycloak token settings, thread and pool sizes (no defaults in the app)
 docker compose up --build -d    # PostgreSQL on :5433, backend on :8080, Keycloak on :8180
 curl -s localhost:8080/actuator/health
 ```
 
-Then walk through the whole flow (ids assume an empty database):
+Then walk through the whole flow (ids assume an empty database). Tokens come from Keycloak's dev-only
+password login (`jq` extracts them) and expire after 5 minutes: run the two `token` lines again when calls
+start returning 401.
 
 ```bash
 B=localhost:8080
-curl -s -XPOST $B/movies -H 'Content-Type: application/json' \
+token() { curl -s localhost:8180/realms/seatlock/protocol/openid-connect/token -d grant_type=password \
+  -d client_id=seatlock-dev-cli -d username=$1 -d password=$1 | jq -r .access_token; }
+ADMIN="Authorization: Bearer $(token admin)"
+ASHA="Authorization: Bearer $(token asha)"
+
+curl -s -XPOST $B/movies -H "$ADMIN" -H 'Content-Type: application/json' \
   -d '{"title":"Interstellar","durationMinutes":169,"certification":"UA","releaseDate":"2014-11-07",
        "posterUrl":"https://cdn.example.com/posters/interstellar.jpg","genres":["SCI_FI","DRAMA"]}'
 curl -s "$B/cities?query=chenai"   # typo tolerant: Chennai, id 5
-curl -s -XPOST $B/theatres -H 'Content-Type: application/json' \
+curl -s -XPOST $B/theatres -H "$ADMIN" -H 'Content-Type: application/json' \
   -d '{"name":"PVR Grand","cityId":5,"address":"1 Main Road"}'
-curl -s -XPOST $B/theatres/1/screens -H 'Content-Type: application/json' \
+curl -s -XPOST $B/theatres/1/screens -H "$ADMIN" -H 'Content-Type: application/json' \
   -d '{"name":"Screen 1","rows":[{"label":"A","seatCount":10,"seatType":"REGULAR"},
                                  {"label":"B","seatCount":10,"seatType":"REGULAR"},
                                  {"label":"C","seatCount":8,"seatType":"RECLINER"}]}'
-curl -s -XPOST $B/shows -H 'Content-Type: application/json' \
+curl -s -XPOST $B/shows -H "$ADMIN" -H 'Content-Type: application/json' \
   -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T18:30:00Z","language":"ENGLISH","format":"IMAX_2D"}'
 
 curl -s $B/shows/1/layout          # rows and seat ids
 curl -s $B/shows/1/availability    # which seat ids are taken
 
-curl -s -XPOST $B/bookings -H 'Content-Type: application/json' \
+curl -s -XPOST $B/bookings -H "$ASHA" -H 'Content-Type: application/json' \
   -d '{"showId":1,"customerName":"asha","showSeatIds":[1,2]}'
-curl -s -XPOST $B/bookings/best-available -H 'Content-Type: application/json' \
+curl -s -XPOST $B/bookings/best-available -H "$ASHA" -H 'Content-Type: application/json' \
   -d '{"showId":1,"customerName":"ravi","quantity":2,"seatType":"RECLINER"}'
-curl -s $B/bookings/1
+curl -s -H "$ASHA" $B/bookings/1
 curl -s "$B/movies?cityId=5"       # now showing in Chennai
 curl -s "$B/shows?movieId=1&cityId=5&date=2030-01-01"   # its shows that day, by theatre
 curl -s "$B/theatres?cityId=5&query=pvr"                 # cinemas in Chennai
 curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one cinema, by movie
 ```
 
-Booking the same seats twice returns `409 Conflict`.
+Booking the same seats twice returns `409 Conflict`. Without a token, `POST /movies` returns `401`; with
+Asha's token (CUSTOMER) it returns `403`.
 
 Logins are handled by **Keycloak** (admin console at [localhost:8180/admin](http://localhost:8180/admin),
 credentials from `.env`). The `seatlock` realm comes with test users `admin`/`admin` (ADMIN), `asha`/`asha`
 and `ravi`/`ravi` (CUSTOMER); new sign-ups get CUSTOMER. These are local development credentials only.
 
 API docs: Swagger UI at [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), the OpenAPI
-spec at `/v3/api-docs`; the hand-written reference with examples is [docs/api.md](docs/api.md).
+spec at `/v3/api-docs`. Its **Authorize** button logs in through Keycloak (client `seatlock-web`,
+authorization code with PKCE) and sends the token with every call. The hand-written reference with examples is [docs/api.md](docs/api.md).
 
 ## Architecture
 
@@ -313,7 +325,7 @@ Oversold seats in every test so far: **0**.
 ```
 backend/              Spring Boot application (Dockerfile, pom.xml, src/)
 keycloak/             Keycloak realm (roles, login clients, test users), imported on first start
-docker-compose.yml    postgres + backend; profiles: monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
+docker-compose.yml    postgres + backend + keycloak; profiles: monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
 docker-compose.vm.yml host networking overrides for the load-test VM
 .env.example          every setting the app needs (copy to .env)
 loadtest/results/     SUMMARY.md: performance story; RESULTS.md + runs/: every load-test run and its report
@@ -333,6 +345,6 @@ Deliberately left out until a test or feature needs them:
   immediately).
 - **Payment**, cancellation, refunds.
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
-- **Login / users**, notifications, search.
+- **Bookings owned by users** (my bookings, others' bookings hidden), notifications, search.
 - **Automated tests** (Testcontainers), show overlap checks.
 - **Horizontal scaling**: several backend instances would need the in-memory caches moved to Redis.

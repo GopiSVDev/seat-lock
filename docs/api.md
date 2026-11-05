@@ -6,11 +6,42 @@ ISO-8601 in UTC (`2030-01-01T18:30:00Z`). Every `POST` that creates something re
 
 For the big picture (modules, booking flow, caching) see the [README](../README.md).
 
+- [Authentication](#authentication)
 - [Errors](#errors)
 - [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
 - [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [get](#get-bookingsid)
 - [Enums](#enums)
+
+## Authentication
+
+Logins are handled by Keycloak (realm `seatlock`, locally at `http://localhost:8180`). Clients send the
+access token as `Authorization: Bearer <token>`. The backend checks the token itself, without calling
+Keycloak per request: signature (Keycloak's public keys, fetched once and cached), expiry, issuer
+`http://localhost:8180/realms/seatlock` and audience `seatlock-api`. Roles come from the token's
+`realm_access.roles` claim. Tokens live 5 minutes.
+
+| Request | Who may call it |
+|---|---|
+| `GET` on `/cities/**`, `/movies/**`, `/theatres/**`, `/screens/**`, `/shows/**` (includes the seat map) | anyone, no token |
+| `POST` on `/cities/**`, `/movies/**`, `/theatres/**` (includes screens), `/shows/**` | `ADMIN` |
+| `/bookings/**` | any logged-in user (`CUSTOMER` or `ADMIN`) |
+| Swagger UI, `/v3/api-docs`, `/actuator/health`, `/actuator/prometheus` | anyone |
+| anything else | any logged-in user |
+
+Test users: `admin`/`admin` (ADMIN and CUSTOMER), `asha`/`asha` and `ravi`/`ravi` (CUSTOMER). New sign-ups
+get CUSTOMER.
+
+Getting a token from the command line (client `seatlock-dev-cli`, password login, local development only):
+
+```bash
+curl -s localhost:8180/realms/seatlock/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=seatlock-dev-cli -d username=asha -d password=asha | jq -r .access_token
+```
+
+Apps and Swagger UI use client `seatlock-web` instead: the browser is sent to Keycloak's login page
+(authorization code flow with PKCE), so the app never sees the password. In Swagger UI click
+**Authorize**, then log in.
 
 ## Errors
 
@@ -32,6 +63,8 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 400 | Malformed JSON or a wrong enum value | Spring's message |
 | 400 | A query parameter out of range (e.g. `size=100`) | `Validation failure` |
 | 400 | Filters that don't make sense together | see each endpoint |
+| 401 | No token, or a token that is invalid or expired (also sends a `WWW-Authenticate: Bearer` header) | `Authentication required` or `Invalid or expired token` |
+| 403 | Valid token, but the role may not call this endpoint (e.g. a CUSTOMER creating a movie) | `Not allowed for your role` |
 | 404 | An id in the path or body does not exist | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
 | 409 | Seats already taken or no adjacent block left | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
@@ -54,7 +87,8 @@ Validation example:
 
 ## Catalogue
 
-Admin data: what is playing where. Owned by the `catalogue` module.
+Admin data: what is playing where. Owned by the `catalogue` module. Every `GET` is public; every `POST`
+needs the `ADMIN` role.
 
 ### Cities
 
@@ -591,7 +625,8 @@ app). Booking always re-checks in the database, so staleness can cause a `409` b
 
 ## Booking
 
-Owned by the `booking` module. A booking is confirmed immediately (no hold or payment step yet).
+Owned by the `booking` module. A booking is confirmed immediately (no hold or payment step yet). All
+booking endpoints need a logged-in user.
 
 #### `POST /bookings`
 

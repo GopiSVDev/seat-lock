@@ -1,0 +1,65 @@
+package com.seatlock.backend.shared.security;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
+@Configuration
+public class SecurityConfig {
+
+    private static final String[] CATALOGUE = {"/cities/**", "/movies/**", "/theatres/**", "/screens/**", "/shows/**"};
+
+    @Bean
+    SecurityFilterChain apiSecurity(HttpSecurity http, ProblemDetailAuthHandler problemHandler) throws Exception {
+        return http
+                // Tokens travel in a header, never a cookie, so there is nothing for CSRF to forge
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.GET, CATALOGUE).permitAll()
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // Scraped without a token; production would serve actuator on an internal port
+                        .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .requestMatchers(HttpMethod.POST, CATALOGUE).hasRole("ADMIN")
+                        .requestMatchers("/bookings/**").authenticated()
+                        .anyRequest().authenticated())
+                .oauth2ResourceServer(oauth -> oauth
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakRoles()))
+                        .authenticationEntryPoint(problemHandler)
+                        .accessDeniedHandler(problemHandler))
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint(problemHandler)
+                        .accessDeniedHandler(problemHandler))
+                .build();
+    }
+
+    // Keycloak puts realm roles in realm_access.roles; Spring only reads "scope" by default
+    private static JwtAuthenticationConverter keycloakRoles() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(SecurityConfig::realmRoles);
+        return converter;
+    }
+
+    private static Collection<GrantedAuthority> realmRoles(Jwt jwt) {
+        Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
+        if (realmAccess == null || !(realmAccess.get("roles") instanceof List<?> roles)) {
+            return List.of();
+        }
+        return roles.stream()
+                .map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
+                .toList();
+    }
+}

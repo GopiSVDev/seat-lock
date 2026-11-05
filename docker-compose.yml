@@ -47,8 +47,14 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB is not set}
       DB_USERNAME: ${POSTGRES_USER:?POSTGRES_USER is not set}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
+      JWT_JWK_SET_URI: ${JWT_JWK_SET_URI:?JWT_JWK_SET_URI is not set}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:?JWT_ISSUER_URI is not set}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:?JWT_AUDIENCE is not set}
+      SWAGGER_OAUTH_CLIENT_ID: ${SWAGGER_OAUTH_CLIENT_ID:?SWAGGER_OAUTH_CLIENT_ID is not set}
     depends_on:
       postgres:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     healthcheck:
       test:
