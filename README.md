@@ -150,12 +150,18 @@ flowchart LR
 ```
 catalogue/
 ├── ShowScheduled.java          ← public: other modules may import this
-└── internal/                   ← private to the module
-    ├── domain/                 JPA entities and enums
-    ├── repository/             Spring Data / JDBC access
-    ├── service/                business logic, transactions
-    └── web/                    controllers and request/response records (dto/)
+└── internal/                   ← private to the module, split by feature
+    ├── city/                   entity, repositories, service, controller of one feature
+    │   └── dto/                its request/response records
+    ├── movie/
+    ├── theatre/
+    ├── screen/
+    └── show/
 ```
+
+Inside `internal/`, a module with several features (catalogue) gets one folder per feature, so the files
+that change together sit together. Single-feature modules (inventory, booking) are split by layer instead:
+`domain/`, `repository/`, `service/`, `web/` (with `dto/`).
 
 Other modules never import anything from another module's `internal` package. They reference each other's
 data by plain id only: no JPA relations and no foreign keys across schemas. The rule is followed by

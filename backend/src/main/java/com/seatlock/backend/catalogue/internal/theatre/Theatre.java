@@ -1,0 +1,34 @@
+package com.seatlock.backend.catalogue.internal.theatre;
+
+import com.seatlock.backend.catalogue.internal.city.City;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Entity
+@Table(name = "theatre", schema = "catalogue")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Theatre {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "city_id")
+    private City city;
+
+    @Column(nullable = false)
+    private String address;
+
+    public Theatre(String name, City city, String address) {
+        this.name = name;
+        this.city = city;
+        this.address = address;
+    }
+}
