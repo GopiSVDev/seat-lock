@@ -59,8 +59,8 @@ curl -s localhost:8080/actuator/health
 ```
 
 Then walk through the whole flow (ids assume an empty database). Tokens come from Keycloak's dev-only
-password login (`jq` extracts them) and expire after 5 minutes: run the two `token` lines again when calls
-start returning 401.
+password login (`jq` extracts them) and last 1 hour (browser logins: 5 minutes): run the two `token` lines
+again when calls start returning 401.
 
 ```bash
 B=localhost:8080
@@ -365,7 +365,7 @@ and ownership checks run unchanged (the real Keycloak path is covered by the Bru
 
 | Test | What it proves |
 |---|---|
-| `BookingConcurrencyTest` | 20 buyers racing for the same seats: exactly 1 wins; 30 parallel best-available buyers never share a seat; 10 simultaneous cancels release the seats once |
+| `BookingConcurrencyTest` | 20 buyers racing for the same seats: exactly 1 wins; the same race with seat ids in opposite orders doesn't deadlock; 30 parallel best-available buyers never share a seat; 10 simultaneous cancels release the seats once |
 | `BookingApiTest` | owner taken from the token, show copy on the booking, 409 for taken seats, best-available blocks, others' bookings are 404, upcoming/past split, cancel, idempotent cancel, no cancel after the show started |
 | `BookingConstraintsTest` | the database itself refuses bad states: a cancelled booking without a time, unknown statuses, one seat in two confirmed bookings |
 | `SecurityRulesTest` | public reads, 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default |

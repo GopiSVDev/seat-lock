@@ -19,7 +19,7 @@ Logins are handled by Keycloak (realm `seatlock`, locally at `http://localhost:8
 access token as `Authorization: Bearer <token>`. The backend checks the token itself, without calling
 Keycloak per request: signature (Keycloak's public keys, fetched once and cached), expiry, issuer
 `http://localhost:8180/realms/seatlock` and audience `seatlock-api`. Roles come from the token's
-`realm_access.roles` claim. Tokens live 5 minutes.
+`realm_access.roles` claim. Tokens live 5 minutes (1 hour for the dev-only client `seatlock-dev-cli`).
 
 | Request | Who may call it |
 |---|---|

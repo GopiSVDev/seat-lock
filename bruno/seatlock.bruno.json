@@ -57,7 +57,7 @@
             },
             "assertions": [],
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"has an access token\", function () {\n  expect(res.getBody().access_token).to.be.a(\"string\");\n});\n",
-            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `adminToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens last 5 minutes: re-run this request when calls start returning 401 `Invalid or expired token`."
+            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `adminToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens from this dev client last 1 hour: re-run this request when calls start returning 401 `Invalid or expired token`."
           },
           "seq": 1
         },
@@ -112,7 +112,7 @@
             },
             "assertions": [],
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"has an access token\", function () {\n  expect(res.getBody().access_token).to.be.a(\"string\");\n});\n",
-            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `ashaToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens last 5 minutes: re-run this request when calls start returning 401 `Invalid or expired token`."
+            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `ashaToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens from this dev client last 1 hour: re-run this request when calls start returning 401 `Invalid or expired token`."
           },
           "seq": 2
         },
@@ -167,7 +167,7 @@
             },
             "assertions": [],
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"has an access token\", function () {\n  expect(res.getBody().access_token).to.be.a(\"string\");\n});\n",
-            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `raviToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens last 5 minutes: re-run this request when calls start returning 401 `Invalid or expired token`."
+            "docs": "Password login through the dev-only client `seatlock-dev-cli`. Saves the access token as `raviToken`; every request that needs this user sends it as `Authorization: Bearer`. Tokens from this dev client last 1 hour: re-run this request when calls start returning 401 `Invalid or expired token`."
           },
           "seq": 3
         },
@@ -298,7 +298,7 @@
           },
           "tests": ""
         },
-        "docs": "Gets access tokens for the three test users. Run this folder first, and again after 5 minutes."
+        "docs": "Gets access tokens for the three test users. Run this folder first, and again after an hour."
       },
       "seq": 1
     },

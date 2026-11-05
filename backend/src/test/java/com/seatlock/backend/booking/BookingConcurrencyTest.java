@@ -7,6 +7,7 @@ import com.seatlock.backend.support.TestShow;
 import com.seatlock.backend.support.TestUser;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,21 @@ class BookingConcurrencyTest extends IntegrationTest {
 
         assertThat(countByStatus(responses)).containsExactlyInAnyOrderEntriesOf(Map.of(201, 1L, 409, 19L));
         assertThat(confirmedBookingSeats(seats)).isEqualTo(2);
+    }
+
+    @Test
+    void opposingSeatOrdersDoNotDeadlock() {
+        TestShow show = newShow();
+        List<Long> ascending = new ArrayList<>(show.seatIdsByRow().get("A"));
+        ascending.addAll(show.seatIdsByRow().get("B"));
+        List<Long> descending = ascending.reversed();
+
+        // Half send the 20 seat ids ascending, half descending: Postgres locks rows in scan order, not list order
+        List<Response> responses = Concurrently.run(20,
+                n -> book(TestUser.customer("Buyer " + n), show, n % 2 == 0 ? ascending : descending));
+
+        assertThat(countByStatus(responses)).containsExactlyInAnyOrderEntriesOf(Map.of(201, 1L, 409, 19L));
+        assertThat(confirmedBookingSeats(ascending)).isEqualTo(20);
     }
 
     @Test
