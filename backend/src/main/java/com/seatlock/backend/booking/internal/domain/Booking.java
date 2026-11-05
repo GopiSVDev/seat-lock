@@ -22,6 +22,10 @@ public class Booking {
     private Long showId;
 
     @Column(nullable = false)
+    private String customerId;
+
+    // Name at booking time, from the token
+    @Column(nullable = false)
     private String customerName;
 
     @Enumerated(EnumType.STRING)

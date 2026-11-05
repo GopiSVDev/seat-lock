@@ -16,12 +16,12 @@ public class BookingWriteRepository {
 
     private final JdbcClient jdbcClient;
 
-    public Long insert(Long showId, String customerName, BookingStatus status, Instant createdAt,
+    public Long insert(Long showId, String customerId, String customerName, BookingStatus status, Instant createdAt,
                        List<Long> showSeatIds, List<String> seatLabels) {
         return jdbcClient.sql("""
                         with b as (
-                            insert into booking.booking (show_id, customer_name, status, created_at)
-                            values (:showId, :customerName, :status, :createdAt)
+                            insert into booking.booking (show_id, customer_id, customer_name, status, created_at)
+                            values (:showId, :customerId, :customerName, :status, :createdAt)
                             returning id
                         ), s as (
                             insert into booking.booking_seat (booking_id, show_seat_id, seat_label, status)
@@ -33,6 +33,7 @@ public class BookingWriteRepository {
                         select id from b
                         """)
                 .param("showId", showId)
+                .param("customerId", customerId)
                 .param("customerName", customerName)
                 .param("status", status.name())
                 .param("createdAt", Timestamp.from(createdAt))

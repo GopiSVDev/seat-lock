@@ -32,19 +32,20 @@ programming needed. API reference with request and response examples: **[docs/ap
 4. The customer **books**, either the exact seats they picked on the map or "best available N seats of a
    type", where the server chooses the best adjacent block for them.
 
-21 endpoints in total, all JSON over HTTP. Errors use the standard
+22 endpoints in total, all JSON over HTTP. Errors use the standard
 [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) format.
 
 | Area | Endpoints |
 |---|---|
 | Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `GET /theatres`, `POST /theatres`, `GET /theatres/{id}`, `GET /theatres/{id}/shows`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `GET /shows`, `POST /shows`, `GET /shows/{id}` |
 | Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
-| Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings/{id}` |
+| Booking | `POST /bookings`, `POST /bookings/best-available`, `GET /bookings`, `GET /bookings/{id}` |
 
 Who may call what: `GET` on catalogue and seat maps is public, creating catalogue data needs the `ADMIN`
 role, and bookings need a logged-in user. Logins come from **Keycloak**; the backend checks the JWT access
-token on every request (details in [docs/api.md](docs/api.md#authentication)). A booking still carries a
-free-text `customerName`; tying bookings to the logged-in user comes next.
+token on every request (details in [docs/api.md](docs/api.md#authentication)). Every booking belongs to the
+user who made it (the token's `sub`); users list and open only their own bookings, and anyone else's booking
+answers `404`.
 
 ## Quick start
 
@@ -84,10 +85,11 @@ curl -s $B/shows/1/layout          # rows and seat ids
 curl -s $B/shows/1/availability    # which seat ids are taken
 
 curl -s -XPOST $B/bookings -H "$ASHA" -H 'Content-Type: application/json' \
-  -d '{"showId":1,"customerName":"asha","showSeatIds":[1,2]}'
+  -d '{"showId":1,"showSeatIds":[1,2]}'
 curl -s -XPOST $B/bookings/best-available -H "$ASHA" -H 'Content-Type: application/json' \
-  -d '{"showId":1,"customerName":"ravi","quantity":2,"seatType":"RECLINER"}'
+  -d '{"showId":1,"quantity":2,"seatType":"RECLINER"}'
 curl -s -H "$ASHA" $B/bookings/1
+curl -s -H "$ASHA" $B/bookings     # Asha's bookings, newest first
 curl -s "$B/movies?cityId=5"       # now showing in Chennai
 curl -s "$B/shows?movieId=1&cityId=5&date=2030-01-01"   # its shows that day, by theatre
 curl -s "$B/theatres?cityId=5&query=pvr"                 # cinemas in Chennai
@@ -279,6 +281,7 @@ erDiagram
     }
     BOOKING {
         bigint show_id
+        string customer_id
         string customer_name
         string status
         timestamptz created_at
@@ -345,6 +348,6 @@ Deliberately left out until a test or feature needs them:
   immediately).
 - **Payment**, cancellation, refunds.
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
-- **Bookings owned by users** (my bookings, others' bookings hidden), notifications, search.
+- Notifications, search.
 - **Automated tests** (Testcontainers), show overlap checks.
 - **Horizontal scaling**: several backend instances would need the in-memory caches moved to Redis.

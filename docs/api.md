@@ -10,7 +10,7 @@ For the big picture (modules, booking flow, caching) see the [README](../README.
 - [Errors](#errors)
 - [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
-- [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [get](#get-bookingsid)
+- [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [mine](#get-bookings), [get](#get-bookingsid)
 - [Enums](#enums)
 
 ## Authentication
@@ -65,7 +65,7 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 400 | Filters that don't make sense together | see each endpoint |
 | 401 | No token, or a token that is invalid or expired (also sends a `WWW-Authenticate: Bearer` header) | `Authentication required` or `Invalid or expired token` |
 | 403 | Valid token, but the role may not call this endpoint (e.g. a CUSTOMER creating a movie) | `Not allowed for your role` |
-| 404 | An id in the path or body does not exist | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
+| 404 | An id in the path or body does not exist (or is another user's booking) | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
 | 409 | Seats already taken or no adjacent block left | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
@@ -626,7 +626,10 @@ app). Booking always re-checks in the database, so staleness can cause a `409` b
 ## Booking
 
 Owned by the `booking` module. A booking is confirmed immediately (no hold or payment step yet). All
-booking endpoints need a logged-in user.
+booking endpoints need a logged-in user, and each user only ever sees their own bookings: the owner is the
+token's `sub` (the user's permanent Keycloak id), never a field the client sends. Another user's booking
+answers `404`, exactly like a booking that doesn't exist, so booking ids can't be probed. `customerName` in
+responses is the user's name from the token at booking time.
 
 #### `POST /bookings`
 
@@ -635,13 +638,11 @@ Books exactly the seats the customer picked. All or nothing: if any seat is take
 | Field | Type | Rules |
 |---|---|---|
 | `showId` | long | required |
-| `customerName` | string | required |
 | `showSeatIds` | long[] | at least one; show seat ids from the layout |
 
 ```json
 {
   "showId": 1,
-  "customerName": "asha",
   "showSeatIds": [1, 2]
 }
 ```
@@ -652,7 +653,7 @@ Response `201`:
 {
   "id": 1,
   "showId": 1,
-  "customerName": "asha",
+  "customerName": "Asha Kumar",
   "status": "CONFIRMED",
   "createdAt": "2026-11-03T10:15:30.123456Z",
   "seats": [
@@ -682,14 +683,12 @@ so they get different seats instead of colliding.
 | Field | Type | Rules |
 |---|---|---|
 | `showId` | long | required |
-| `customerName` | string | required |
 | `quantity` | int | 1 to 10 |
 | `seatType` | [SeatType](#enums) | required |
 
 ```json
 {
   "showId": 1,
-  "customerName": "ravi",
   "quantity": 2,
   "seatType": "RECLINER"
 }
@@ -702,9 +701,48 @@ Response `201`: same shape as `POST /bookings`.
 | `409 No 2 adjacent RECLINER seats available` | no block of that size and type is free (free seats may still exist, but not side by side) |
 | `404 Show not found: <showId>` | unknown show |
 
+#### `GET /bookings`
+
+The caller's bookings, newest first. Paged like the other lists.
+
+| Query parameter | Rules |
+|---|---|
+| `page` | from 0, default 0 |
+| `size` | 1 to 50, default 20 |
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "showId": 1,
+      "customerName": "Asha Kumar",
+      "status": "CONFIRMED",
+      "createdAt": "2026-11-03T10:15:30.123456Z",
+      "seats": [
+        {
+          "showSeatId": 1,
+          "label": "A1"
+        },
+        {
+          "showSeatId": 2,
+          "label": "A2"
+        }
+      ]
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalItems": 1,
+  "totalPages": 1
+}
+```
+
 #### `GET /bookings/{id}`
 
-Returns the same shape as the create response. `404` if unknown.
+Returns the same shape as the create response. `404` if unknown or owned by another user.
 
 ## Enums
 

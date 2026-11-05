@@ -45,6 +45,11 @@ expired one, a desk says "please get a wristband first" (`401`). A customer band
 counter gets "not for you" (`403`): only Meena may add movies or shows, while anyone with a band may buy
 tickets.
 
+The ticket desk writes the wristband's number on every ticket it sells, not whatever name the buyer says.
+Later, Asha can ask "show me my tickets" and gets only hers. If Ravi asks for Asha's ticket number, the desk
+says "no such ticket" (`404`), as if it didn't exist, so nobody can find out which ticket numbers are
+taken.
+
 ```mermaid
 flowchart LR
     people(["Meena, Asha, Ravi"])
@@ -314,5 +319,3 @@ left". The board was simply a second behind, and they took a few seconds to deci
 - **Holding chairs while you pay**: today a ticket is final the moment you book.
 - **Paying**, cancelling, refunds.
 - **A queue at the door** for when far more fans arrive than the office can serve.
-- **Your own tickets**: you need a wristband to buy, but a ticket still just has a name written on it,
-  and anyone with a band can look up any ticket number. Soon tickets belong to the person who bought them.
