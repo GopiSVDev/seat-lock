@@ -1,14 +1,17 @@
 package com.seatlock.backend.booking.internal.service;
 
 import com.seatlock.backend.booking.internal.domain.Booking;
+import com.seatlock.backend.booking.internal.domain.BookingPeriod;
 import com.seatlock.backend.booking.internal.domain.BookingSeat;
 import com.seatlock.backend.booking.internal.domain.BookingStatus;
+import com.seatlock.backend.booking.internal.domain.ShowSnapshot;
 import com.seatlock.backend.booking.internal.repository.BookingRepository;
 import com.seatlock.backend.booking.internal.repository.BookingSeatRepository;
 import com.seatlock.backend.booking.internal.repository.BookingWriteRepository;
 import com.seatlock.backend.booking.internal.web.dto.BookingResponse;
 import com.seatlock.backend.booking.internal.web.dto.CreateBestAvailableBookingRequest;
 import com.seatlock.backend.booking.internal.web.dto.CreateBookingRequest;
+import com.seatlock.backend.catalogue.CatalogueApi;
 import com.seatlock.backend.inventory.BookedSeat;
 import com.seatlock.backend.inventory.InventoryApi;
 import com.seatlock.backend.shared.exception.NotFoundException;
@@ -31,9 +34,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class BookingService {
 
-    // Matches ix_booking_customer_created
-    private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+    // Same order as ix_booking_customer_show_start: forwards for upcoming, backwards for past
+    private static final Sort SOONEST_FIRST = Sort.by(Sort.Order.asc("show.startTime"), Sort.Order.asc("id"));
+    private static final Sort LATEST_FIRST = Sort.by(Sort.Order.desc("show.startTime"), Sort.Order.desc("id"));
 
+    private final CatalogueApi catalogueApi;
     private final InventoryApi inventoryApi;
     private final BookingRepository bookingRepository;
     private final BookingSeatRepository bookingSeatRepository;
@@ -41,29 +46,33 @@ public class BookingService {
 
     @Transactional
     public BookingResponse create(CreateBookingRequest request, CurrentUser customer) {
+        ShowSnapshot show = new ShowSnapshot(catalogueApi.findShowSummary(request.showId()));
         List<BookedSeat> bookedSeats = inventoryApi.bookSeats(request.showId(), request.showSeatIds());
-        return confirm(request.showId(), customer, bookedSeats);
+        return confirm(request.showId(), show, customer, bookedSeats);
     }
 
     @Transactional
     public BookingResponse createBestAvailable(CreateBestAvailableBookingRequest request, CurrentUser customer) {
+        ShowSnapshot show = new ShowSnapshot(catalogueApi.findShowSummary(request.showId()));
         List<BookedSeat> bookedSeats = inventoryApi.bookBestAvailable(request.showId(), request.quantity(),
                 request.seatType());
-        return confirm(request.showId(), customer, bookedSeats);
+        return confirm(request.showId(), show, customer, bookedSeats);
     }
 
     // Runs inside the caller's transaction, after inventory has booked the seats
-    private BookingResponse confirm(Long showId, CurrentUser customer, List<BookedSeat> bookedSeats) {
+    private BookingResponse confirm(Long showId, ShowSnapshot show, CurrentUser customer,
+                                    List<BookedSeat> bookedSeats) {
         // Microseconds: what timestamptz stores, so this response matches GET /bookings/{id}
         Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        Long id = bookingWriteRepository.insert(showId, customer.id(), customer.name(), BookingStatus.CONFIRMED,
-                createdAt, bookedSeats.stream().map(BookedSeat::showSeatId).toList(),
+        Long id = bookingWriteRepository.insert(showId, show, customer.id(), customer.name(),
+                BookingStatus.CONFIRMED, createdAt, bookedSeats.stream().map(BookedSeat::showSeatId).toList(),
                 bookedSeats.stream().map(BookedSeat::label).toList());
 
         List<BookingResponse.Seat> seats = bookedSeats.stream()
                 .map(seat -> new BookingResponse.Seat(seat.showSeatId(), seat.label()))
                 .toList();
-        return new BookingResponse(id, showId, customer.name(), BookingStatus.CONFIRMED, createdAt, seats);
+        return new BookingResponse(id, customer.name(), BookingStatus.CONFIRMED, createdAt,
+                BookingResponse.Show.from(showId, show), seats);
     }
 
     @Transactional(readOnly = true)
@@ -74,9 +83,14 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<BookingResponse> findMine(CurrentUser customer, int page, int size) {
-        Page<Booking> bookings = bookingRepository.findByCustomerId(customer.id(),
-                PageRequest.of(page, size, NEWEST_FIRST));
+    public PageResponse<BookingResponse> findMine(CurrentUser customer, BookingPeriod period, int page, int size) {
+        Instant now = Instant.now();
+        Page<Booking> bookings = switch (period) {
+            case UPCOMING -> bookingRepository.findUpcoming(customer.id(), now,
+                    PageRequest.of(page, size, SOONEST_FIRST));
+            case PAST -> bookingRepository.findPast(customer.id(), now,
+                    PageRequest.of(page, size, LATEST_FIRST));
+        };
 
         // One query for the whole page's seats, not one per booking
         List<Long> ids = bookings.map(Booking::getId).toList();

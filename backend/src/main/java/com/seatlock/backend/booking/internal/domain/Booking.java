@@ -21,6 +21,9 @@ public class Booking {
     @Column(nullable = false)
     private Long showId;
 
+    @Embedded
+    private ShowSnapshot show;
+
     @Column(nullable = false)
     private String customerId;
 

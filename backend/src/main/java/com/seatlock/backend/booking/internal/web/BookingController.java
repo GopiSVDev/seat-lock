@@ -1,5 +1,6 @@
 package com.seatlock.backend.booking.internal.web;
 
+import com.seatlock.backend.booking.internal.domain.BookingPeriod;
 import com.seatlock.backend.booking.internal.service.BookingService;
 import com.seatlock.backend.booking.internal.web.dto.BookingResponse;
 import com.seatlock.backend.booking.internal.web.dto.CreateBestAvailableBookingRequest;
@@ -40,9 +41,10 @@ public class BookingController {
 
     @GetMapping
     public PageResponse<BookingResponse> findMine(@AuthenticationPrincipal Jwt jwt,
+                                                  @RequestParam(defaultValue = "UPCOMING") BookingPeriod period,
                                                   @RequestParam(defaultValue = "0") @Min(0) int page,
                                                   @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
-        return bookingService.findMine(CurrentUser.from(jwt), page, size);
+        return bookingService.findMine(CurrentUser.from(jwt), period, page, size);
     }
 
     @GetMapping("/{id}")

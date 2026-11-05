@@ -89,7 +89,7 @@ curl -s -XPOST $B/bookings -H "$ASHA" -H 'Content-Type: application/json' \
 curl -s -XPOST $B/bookings/best-available -H "$ASHA" -H 'Content-Type: application/json' \
   -d '{"showId":1,"quantity":2,"seatType":"RECLINER"}'
 curl -s -H "$ASHA" $B/bookings/1
-curl -s -H "$ASHA" $B/bookings     # Asha's bookings, newest first
+curl -s -H "$ASHA" $B/bookings     # Asha's upcoming bookings, soonest first (?period=PAST for past)
 curl -s "$B/movies?cityId=5"       # now showing in Chennai
 curl -s "$B/shows?movieId=1&cityId=5&date=2030-01-01"   # its shows that day, by theatre
 curl -s "$B/theatres?cityId=5&query=pvr"                 # cinemas in Chennai
@@ -132,6 +132,7 @@ flowchart LR
     client --> catalogue & inventory & booking
     catalogue -- "ShowScheduled event" --> inventory
     booking -- "InventoryApi<br/>bookSeats / bookBestAvailable" --> inventory
+    booking -- "CatalogueApi<br/>findShowSummary" --> catalogue
     catalogue --- s1
     inventory --- s2
     booking --- s3
@@ -139,17 +140,19 @@ flowchart LR
 
 | Module | Owns | Public API (what other modules may use) | Endpoints |
 |---|---|---|---|
-| **catalogue** | movies, theatres, screens, physical seats, shows | `ShowScheduled` event | movies, theatres, screens, shows |
+| **catalogue** | movies, theatres, screens, physical seats, shows | `CatalogueApi`, `ShowSummary`, `ShowScheduled` event | movies, theatres, screens, shows |
 | **inventory** | `show_seat`: every seat of every show and its status (AVAILABLE / BOOKED) | `InventoryApi`, `BookedSeat` | seat map (layout, availability) |
 | **booking** | bookings and the seats in each booking | none yet | bookings |
 
-**Dependencies point one way:** booking → inventory → catalogue. Nothing depends on booking.
+**Dependencies point one way:** booking → inventory → catalogue, and booking → catalogue. Nothing depends on booking.
 
 **Package rule.** Each module is a package under `com.seatlock.backend`:
 
 ```
 catalogue/
-├── ShowScheduled.java          ← public: other modules may import this
+├── CatalogueApi.java           ← public: other modules may import these
+├── ShowSummary.java
+├── ShowScheduled.java
 └── internal/                   ← private to the module, split by feature
     ├── city/                   entity, repositories, service, controller of one feature
     │   └── dto/                its request/response records
@@ -172,8 +175,10 @@ convention for now; nothing enforces it with a tool yet.
   the screen's seats. Inventory listens and creates one `show_seat` row per seat, copying row, number,
   type and rank so it can serve the seat map without asking catalogue. The listener runs synchronously in
   the same transaction, so a show never exists without its seats.
-- **Booking** (`POST /bookings...`): booking calls `InventoryApi` to mark the seats BOOKED, then inserts
-  the booking. Both happen in one database transaction, so either both succeed or neither does.
+- **Booking** (`POST /bookings...`): booking asks `CatalogueApi` for the show's details (one query), calls
+  `InventoryApi` to mark the seats BOOKED, then inserts the booking with a copy of the show details. All of
+  it happens in one database transaction, so either everything succeeds or nothing does. The copy lets "my
+  bookings" render and split into upcoming/past by show time without asking catalogue.
 
 `shared/` holds cross-cutting code: the global error handler and the `NotFoundException` /
 `ConflictException` types that services throw.
@@ -291,6 +296,9 @@ erDiagram
         string customer_name
         string status
         timestamptz created_at
+        timestamptz show_start_time
+        string movie_title
+        string theatre_name
     }
     BOOKING_SEAT {
         bigint show_seat_id

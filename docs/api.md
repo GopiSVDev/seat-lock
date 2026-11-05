@@ -631,6 +631,10 @@ token's `sub` (the user's permanent Keycloak id), never a field the client sends
 answers `404`, exactly like a booking that doesn't exist, so booking ids can't be probed. `customerName` in
 responses is the user's name from the token at booking time.
 
+Every booking also keeps a copy of its show (`show`: time, language, format, movie, theatre, screen) taken
+when it was booked, the way an order keeps the product name. A booking page renders from it alone, without
+calling the catalogue endpoints, and still shows what was sold if catalogue data changes later.
+
 #### `POST /bookings`
 
 Books exactly the seats the customer picked. All or nothing: if any seat is taken, nothing is booked.
@@ -652,10 +656,26 @@ Response `201`:
 ```json
 {
   "id": 1,
-  "showId": 1,
   "customerName": "Asha Kumar",
   "status": "CONFIRMED",
   "createdAt": "2026-11-03T10:15:30.123456Z",
+  "show": {
+    "id": 1,
+    "startTime": "2030-01-01T18:30:00Z",
+    "language": "ENGLISH",
+    "format": "IMAX_2D",
+    "movie": {
+      "id": 1,
+      "title": "Interstellar",
+      "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+      "certification": "UA"
+    },
+    "theatre": {
+      "id": 1,
+      "name": "PVR Grand"
+    },
+    "screenName": "Screen 1"
+  },
   "seats": [
     {
       "showSeatId": 1,
@@ -672,6 +692,7 @@ Response `201`:
 | Error | When |
 |---|---|
 | `409 One or more seats are already booked` | any requested seat is not AVAILABLE |
+| `404 Show not found: <showId>` | unknown show |
 | `404 Seats for show not found: <showId>` | a seat id does not exist or belongs to another show |
 
 #### `POST /bookings/best-available`
@@ -703,10 +724,11 @@ Response `201`: same shape as `POST /bookings`.
 
 #### `GET /bookings`
 
-The caller's bookings, newest first. Paged like the other lists.
+The caller's bookings, as two tabs. Paged like the other lists.
 
 | Query parameter | Rules |
 |---|---|
+| `period` | `UPCOMING` (default): shows that haven't started, soonest first. `PAST`: shows that have started, latest first |
 | `page` | from 0, default 0 |
 | `size` | 1 to 50, default 20 |
 
@@ -717,10 +739,26 @@ Response `200`:
   "items": [
     {
       "id": 1,
-      "showId": 1,
       "customerName": "Asha Kumar",
       "status": "CONFIRMED",
       "createdAt": "2026-11-03T10:15:30.123456Z",
+      "show": {
+        "id": 1,
+        "startTime": "2030-01-01T18:30:00Z",
+        "language": "ENGLISH",
+        "format": "IMAX_2D",
+        "movie": {
+          "id": 1,
+          "title": "Interstellar",
+          "posterUrl": "https://cdn.example.com/posters/interstellar.jpg",
+          "certification": "UA"
+        },
+        "theatre": {
+          "id": 1,
+          "name": "PVR Grand"
+        },
+        "screenName": "Screen 1"
+      },
       "seats": [
         {
           "showSeatId": 1,

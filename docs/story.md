@@ -46,6 +46,8 @@ counter gets "not for you" (`403`): only Meena may add movies or shows, while an
 tickets.
 
 The ticket desk writes the wristband's number on every ticket it sells, not whatever name the buyer says.
+It also copies the movie, the hall and the time onto the ticket, so the ticket says what was sold even if
+the posters change later, and Asha's "my tickets" list can show coming shows first and old ones apart.
 Later, Asha can ask "show me my tickets" and gets only hers. If Ravi asks for Asha's ticket number, the desk
 says "no such ticket" (`404`), as if it didn't exist, so nobody can find out which ticket numbers are
 taken.

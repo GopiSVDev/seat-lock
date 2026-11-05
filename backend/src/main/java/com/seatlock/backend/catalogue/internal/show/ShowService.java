@@ -1,6 +1,8 @@
 package com.seatlock.backend.catalogue.internal.show;
 
+import com.seatlock.backend.catalogue.CatalogueApi;
 import com.seatlock.backend.catalogue.ShowScheduled;
+import com.seatlock.backend.catalogue.ShowSummary;
 import com.seatlock.backend.catalogue.internal.city.CityService;
 import com.seatlock.backend.catalogue.internal.movie.Movie;
 import com.seatlock.backend.catalogue.internal.movie.MovieRepository;
@@ -34,7 +36,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class ShowService {
+public class ShowService implements CatalogueApi {
 
     private static final int DATE_STRIP_DAYS = 7;
 
@@ -143,5 +145,16 @@ public class ShowService {
         return showRepository.findById(id)
                 .map(ShowResponse::from)
                 .orElseThrow(() -> new NotFoundException("Show", id));
+    }
+
+    @Override
+    public ShowSummary findShowSummary(Long showId) {
+        Show show = showRepository.findWithDetailsById(showId)
+                .orElseThrow(() -> new NotFoundException("Show", showId));
+        Movie movie = show.getMovie();
+        Theatre theatre = show.getScreen().getTheatre();
+        return new ShowSummary(show.getId(), show.getStartTime(), show.getLanguage().name(),
+                show.getFormat().name(), movie.getId(), movie.getTitle(), movie.getPosterUrl(),
+                movie.getCertification().name(), theatre.getId(), theatre.getName(), show.getScreen().getName());
     }
 }
