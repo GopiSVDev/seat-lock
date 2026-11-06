@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import tools.jackson.databind.JsonNode;
@@ -34,6 +35,9 @@ public abstract class IntegrationTest {
 
     @Autowired
     protected JdbcClient jdbc;
+
+    @Autowired
+    protected StringRedisTemplate redis;
 
     @Autowired
     private JsonMapper jsonMapper;
@@ -74,8 +78,18 @@ public abstract class IntegrationTest {
         return new TestShow(showId, movieId, theatreId, screenId, cityId, startTime, seats);
     }
 
+    protected Response hold(TestUser user, TestShow show, List<Long> seatIds) {
+        return api.post("/holds", user, Map.of("showId", show.showId(), "showSeatIds", seatIds));
+    }
+
+    protected Response confirm(TestUser user, String holdId) {
+        return api.post("/bookings", user, Map.of("holdId", holdId));
+    }
+
+    // Hold, then confirm: the only way to book. A failed hold is returned as is.
     protected Response book(TestUser user, TestShow show, List<Long> seatIds) {
-        return api.post("/bookings", user, Map.of("showId", show.showId(), "showSeatIds", seatIds));
+        Response hold = hold(user, show, seatIds);
+        return hold.status() == 201 ? confirm(user, hold.text("id")) : hold;
     }
 
     protected List<String> seatStatuses(List<Long> showSeatIds) {

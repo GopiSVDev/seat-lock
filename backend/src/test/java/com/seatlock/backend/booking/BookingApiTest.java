@@ -20,8 +20,7 @@ class BookingApiTest extends IntegrationTest {
     void bookingBelongsToTheTokenUserAndKeepsTheShow() {
         TestShow show = newShow();
 
-        Response response = api.post("/bookings", asha, Map.of(
-                "showId", show.showId(), "showSeatIds", show.seats("A", 2), "customerName", "hacker"));
+        Response response = book(asha, show, show.seats("A", 2));
 
         assertThat(response.status()).isEqualTo(201);
         assertThat(response.header("Location")).isEqualTo("/bookings/" + response.id());
@@ -37,6 +36,21 @@ class BookingApiTest extends IntegrationTest {
     }
 
     @Test
+    void confirmingTurnsTheHoldIntoABooking() {
+        TestShow show = newShow();
+        String holdId = hold(asha, show, show.seats("A", 2)).text("id");
+
+        Response booking = confirm(asha, holdId);
+
+        assertThat(booking.status()).isEqualTo(201);
+        assertThat(ids(booking.body().get("seats"), "showSeatId")).containsExactlyElementsOf(show.seats("A", 2));
+        assertThat(api.get("/holds/" + holdId, asha).status()).isEqualTo(404);
+        assertThat(redis.hasKey("hold:" + holdId)).isFalse();
+        assertThat(redis.hasKey("seat:" + show.showId() + ":" + show.seats("A", 1).getFirst())).isFalse();
+        assertThat(confirm(asha, holdId).status()).isEqualTo(404);
+    }
+
+    @Test
     void takenSeatsAreAConflict() {
         TestShow show = newShow();
         book(asha, show, show.seats("A", 2));
@@ -44,7 +58,20 @@ class BookingApiTest extends IntegrationTest {
         Response response = book(ravi, show, show.seats("A", 3));
 
         assertThat(response.status()).isEqualTo(409);
-        assertThat(seatStatuses(List.of(show.seats("A", 3).get(2)))).containsOnly("AVAILABLE");
+        Long third = show.seats("A", 3).get(2);
+        assertThat(seatStatuses(List.of(third))).containsOnly("AVAILABLE");
+        assertThat(redis.hasKey("seat:" + show.showId() + ":" + third)).as("failed hold is released").isFalse();
+    }
+
+    @Test
+    void onlyTheHolderCanConfirm() {
+        TestShow show = newShow();
+        String holdId = hold(asha, show, show.seats("A", 1)).text("id");
+
+        assertThat(confirm(ravi, holdId).status()).isEqualTo(404);
+        assertThat(confirm(asha, "no-such-hold").status()).isEqualTo(404);
+        assertThat(api.post("/bookings", asha, Map.of()).status()).isEqualTo(400);
+        assertThat(confirm(asha, holdId).status()).isEqualTo(201);
     }
 
     @Test
@@ -53,37 +80,6 @@ class BookingApiTest extends IntegrationTest {
         TestShow other = newShow();
 
         assertThat(book(asha, show, other.seats("A", 1)).status()).isEqualTo(404);
-    }
-
-    @Test
-    void bestAvailablePicksAnAdjacentBlock() {
-        TestShow show = newShow();
-
-        Response response = api.post("/bookings/best-available", asha,
-                Map.of("showId", show.showId(), "quantity", 2, "seatType", "RECLINER"));
-
-        assertThat(response.status()).isEqualTo(201);
-        List<Long> seats = ids(response.body().get("seats"), "showSeatId");
-        assertThat(show.seatIdsByRow().get("C")).containsSequence(seats);
-    }
-
-    @Test
-    void bestAvailableWithoutABlockBigEnoughIsAConflict() {
-        TestShow show = newShow();
-
-        Response response = api.post("/bookings/best-available", asha,
-                Map.of("showId", show.showId(), "quantity", 9, "seatType", "RECLINER"));
-
-        assertThat(response.status()).isEqualTo(409);
-    }
-
-    @Test
-    void unknownShowIsNotFound() {
-        Response response = api.post("/bookings/best-available", asha,
-                Map.of("showId", 999999999, "quantity", 1, "seatType", "REGULAR"));
-
-        assertThat(response.status()).isEqualTo(404);
-        assertThat(response.body().get("detail").asString()).isEqualTo("Show not found: 999999999");
     }
 
     @Test

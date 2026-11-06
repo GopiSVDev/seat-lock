@@ -61,6 +61,12 @@ class SecurityRulesTest extends IntegrationTest {
     }
 
     @Test
+    void holdsNeedLogin() {
+        assertThat(api.post("/holds", null, Map.of()).status()).isEqualTo(401);
+        assertThat(api.get("/holds/any", null).status()).isEqualTo(401);
+    }
+
+    @Test
     void unknownPathsAreClosedByDefault() {
         assertThat(api.get("/not-an-endpoint", null).status()).isEqualTo(401);
         assertThat(api.get("/not-an-endpoint", asha).status()).isEqualTo(404);

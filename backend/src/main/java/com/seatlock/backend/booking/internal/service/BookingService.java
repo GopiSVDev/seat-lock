@@ -9,10 +9,10 @@ import com.seatlock.backend.booking.internal.repository.BookingRepository;
 import com.seatlock.backend.booking.internal.repository.BookingSeatRepository;
 import com.seatlock.backend.booking.internal.repository.BookingWriteRepository;
 import com.seatlock.backend.booking.internal.web.dto.BookingResponse;
-import com.seatlock.backend.booking.internal.web.dto.CreateBestAvailableBookingRequest;
 import com.seatlock.backend.booking.internal.web.dto.CreateBookingRequest;
 import com.seatlock.backend.catalogue.CatalogueApi;
 import com.seatlock.backend.inventory.BookedSeat;
+import com.seatlock.backend.inventory.ConfirmedHold;
 import com.seatlock.backend.inventory.InventoryApi;
 import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
@@ -47,22 +47,11 @@ public class BookingService {
 
     @Transactional
     public BookingResponse create(CreateBookingRequest request, CurrentUser customer) {
-        ShowSnapshot show = new ShowSnapshot(catalogueApi.findShowSummary(request.showId()));
-        List<BookedSeat> bookedSeats = inventoryApi.bookSeats(request.showId(), request.showSeatIds());
-        return confirm(request.showId(), show, customer, bookedSeats);
-    }
+        ConfirmedHold hold = inventoryApi.confirmHold(request.holdId(), customer.id());
+        Long showId = hold.showId();
+        ShowSnapshot show = new ShowSnapshot(catalogueApi.findShowSummary(showId));
+        List<BookedSeat> bookedSeats = hold.seats();
 
-    @Transactional
-    public BookingResponse createBestAvailable(CreateBestAvailableBookingRequest request, CurrentUser customer) {
-        ShowSnapshot show = new ShowSnapshot(catalogueApi.findShowSummary(request.showId()));
-        List<BookedSeat> bookedSeats = inventoryApi.bookBestAvailable(request.showId(), request.quantity(),
-                request.seatType());
-        return confirm(request.showId(), show, customer, bookedSeats);
-    }
-
-    // Runs inside the caller's transaction, after inventory has booked the seats
-    private BookingResponse confirm(Long showId, ShowSnapshot show, CurrentUser customer,
-                                    List<BookedSeat> bookedSeats) {
         // Microseconds: what timestamptz stores, so this response matches GET /bookings/{id}
         Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Long id = bookingWriteRepository.insert(showId, show, customer.id(), customer.name(),
@@ -72,6 +61,7 @@ public class BookingService {
         List<BookingResponse.Seat> seats = bookedSeats.stream()
                 .map(seat -> new BookingResponse.Seat(seat.showSeatId(), seat.label()))
                 .toList();
+
         return new BookingResponse(id, customer.name(), BookingStatus.CONFIRMED, createdAt, null,
                 BookingResponse.Show.from(showId, show), seats);
     }
@@ -94,6 +84,7 @@ public class BookingService {
         } else if (booking.getStatus() == BookingStatus.CONFIRMED) {
             throw new ConflictException("Show has already started");
         }
+
         return BookingResponse.from(booking, seats);
     }
 
@@ -118,12 +109,13 @@ public class BookingService {
         List<Long> ids = bookings.map(Booking::getId).toList();
         Map<Long, List<BookingSeat>> seatsByBooking = ids.isEmpty() ? Map.of()
                 : bookingSeatRepository.findByBookingIdInOrderByIdAsc(ids).stream()
-                        .collect(Collectors.groupingBy(seat -> seat.getBooking().getId()));
+                .collect(Collectors.groupingBy(seat -> seat.getBooking().getId()));
 
         List<BookingResponse> items = bookings.stream()
                 .map(booking -> BookingResponse.from(booking,
                         seatsByBooking.getOrDefault(booking.getId(), List.of())))
                 .toList();
+        
         return PageResponse.of(items, page, size, bookings.getTotalElements());
     }
 }

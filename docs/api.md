@@ -10,7 +10,8 @@ For the big picture (modules, booking flow, caching) see the [README](../README.
 - [Errors](#errors)
 - [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
-- [Booking](#booking): [exact seats](#post-bookings), [best available](#post-bookingsbest-available), [mine](#get-bookings), [get](#get-bookingsid), [cancel](#post-bookingsidcancel)
+- [Holds](#holds): [exact seats](#post-holds), [best available](#post-holdsbest-available), [get](#get-holdsid), [release](#delete-holdsid)
+- [Booking](#booking): [book a hold](#post-bookings), [mine](#get-bookings), [get](#get-bookingsid), [cancel](#post-bookingsidcancel)
 - [Enums](#enums)
 
 ## Authentication
@@ -25,7 +26,7 @@ Keycloak per request: signature (Keycloak's public keys, fetched once and cached
 |---|---|
 | `GET` on `/cities/**`, `/movies/**`, `/theatres/**`, `/screens/**`, `/shows/**` (includes the seat map) | anyone, no token |
 | `POST` on `/cities/**`, `/movies/**`, `/theatres/**` (includes screens), `/shows/**` | `ADMIN` |
-| `/bookings/**` | any logged-in user (`CUSTOMER` or `ADMIN`) |
+| `/holds/**`, `/bookings/**` | any logged-in user (`CUSTOMER` or `ADMIN`) |
 | Swagger UI, `/v3/api-docs`, `/actuator/health`, `/actuator/prometheus` | anyone |
 | anything else | any logged-in user |
 
@@ -52,8 +53,8 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 {
   "title": "Conflict",
   "status": 409,
-  "detail": "One or more seats are already booked",
-  "instance": "/bookings"
+  "detail": "One or more seats are already held or booked",
+  "instance": "/holds"
 }
 ```
 
@@ -65,10 +66,12 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 400 | Filters that don't make sense together | see each endpoint |
 | 401 | No token, or a token that is invalid or expired (also sends a `WWW-Authenticate: Bearer` header) | `Authentication required` or `Invalid or expired token` |
 | 403 | Valid token, but the role may not call this endpoint (e.g. a CUSTOMER creating a movie) | `Not allowed for your role` |
-| 404 | An id in the path or body does not exist (or is another user's booking) | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
-| 409 | Seats already taken, no adjacent block left, or a booking cancelled after its show started | see each endpoint |
+| 404 | An id in the path or body does not exist (or is another user's hold or booking) | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
+| 409 | Seats already held or booked, no adjacent block left, or a booking cancelled after its show started | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
+| 429 | Too many hold requests from one user (also sends `Retry-After: <seconds>`) | `Too many hold requests, try again in 6 seconds` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
+| 503 | Redis or the database can't be reached; nothing is held or booked | `Service temporarily unavailable` |
 
 Validation example:
 
@@ -77,7 +80,7 @@ Validation example:
   "title": "Bad Request",
   "status": 400,
   "detail": "Validation failed",
-  "instance": "/bookings/best-available",
+  "instance": "/holds/best-available",
   "errors": {
     "quantity": "must be less than or equal to 10",
     "seatType": "must match \"REGULAR|PREMIUM|RECLINER\""
@@ -610,8 +613,8 @@ since a show's layout never changes.
 
 #### `GET /shows/{id}/availability`
 
-Free seat count and the ids of seats that are not available. May be up to 1 second stale (cached in the
-app). Booking always re-checks in the database, so staleness can cause a `409` but never a double sale.
+Free seat count and the ids of seats that are booked or held. May be up to 1 second stale (cached in the
+app). Holding always re-checks, so staleness can cause a `409` but never a double sale.
 
 ```json
 {
@@ -623,9 +626,109 @@ app). Booking always re-checks in the database, so staleness can cause a `409` b
 
 `404` if the show is unknown.
 
+## Holds
+
+Owned by the `inventory` module. Checkout is two steps, like on any ticket site: **hold** the seats
+(nobody else can take them for 5 minutes), then **book** the hold with [`POST /bookings`](#post-bookings).
+A hold that isn't booked expires by itself and its seats go back on sale; `DELETE` gives them back sooner
+(the back button). Holds live in Redis only: the database learns about seats when they are booked.
+
+- All or nothing: if any seat is held or booked, nothing is held (`409`).
+- One hold per user per show: a new hold replaces your previous one for that show (its seats are let go;
+  seats in both stay yours).
+- At most 10 seats per hold.
+- Each user only sees their own holds; another user's hold answers `404`, like one that doesn't exist.
+- Rate limited per user: `POST /holds` and `POST /holds/best-available` share a bucket of 10 requests that
+  refills at 10 per minute (one every 6 s). Beyond that: `429` with a `Retry-After` header in seconds.
+  A buyer changing seats a few times never hits it; a script holding and releasing in a loop does. Every
+  request counts, including ones that fail validation or conflict. `GET`, `DELETE` and booking a hold are
+  not limited. The buckets live in Redis, so the limit holds across backend instances; if Redis is down
+  the limit is skipped (holds then fail with `503` anyway).
+
+#### `POST /holds`
+
+Holds exactly the seats the customer picked.
+
+| Field | Type | Rules |
+|---|---|---|
+| `showId` | long | required |
+| `showSeatIds` | long[] | 1 to 10; show seat ids from the layout |
+
+```json
+{
+  "showId": 1,
+  "showSeatIds": [1, 2]
+}
+```
+
+Response `201` with `Location: /holds/{id}`:
+
+```json
+{
+  "id": "3f6c1e9a-7b2d-4c1e-9f0a-5d8e2b7c4a11",
+  "showId": 1,
+  "expiresAt": "2026-11-05T10:20:30.123Z",
+  "seats": [
+    {
+      "showSeatId": 1,
+      "label": "A1"
+    },
+    {
+      "showSeatId": 2,
+      "label": "A2"
+    }
+  ]
+}
+```
+
+`expiresAt` drives the checkout timer.
+
+| Error | When |
+|---|---|
+| `409 One or more seats are already held or booked` | any seat is in someone else's hold or booked |
+| `404 Seats for show not found: <showId>` | a seat id does not exist or belongs to another show |
+| `429 Too many hold requests, try again in N seconds` | more than the user's [hold rate limit](#holds) |
+
+#### `POST /holds/best-available`
+
+The server picks the best block of `quantity` adjacent seats (same row, consecutive numbers) of the
+requested type, by seat rank, skipping booked and held seats, and holds it. If another buyer holds a
+seat of that block first, it picks again (up to 3 times).
+
+| Field | Type | Rules |
+|---|---|---|
+| `showId` | long | required |
+| `quantity` | int | 1 to 10 |
+| `seatType` | [SeatType](#enums) | required |
+
+```json
+{
+  "showId": 1,
+  "quantity": 2,
+  "seatType": "RECLINER"
+}
+```
+
+Response `201`: same shape as `POST /holds`.
+
+| Error | When |
+|---|---|
+| `409 No 2 adjacent RECLINER seats available` | no free block of that size and type (free seats may still exist, but not side by side) |
+| `404 Show not found: <showId>` | unknown show |
+| `429 Too many hold requests, try again in N seconds` | shares the bucket with `POST /holds` |
+
+#### `GET /holds/{id}`
+
+The caller's hold, same shape as `POST /holds`. For a checkout page after a refresh. `404 Hold not found:
+<id>` once it has expired, been booked or released, or if it is someone else's.
+
+#### `DELETE /holds/{id}`
+
+Lets the seats go now. `204`, or `404 Hold not found: <id>` (as for `GET`).
+
 ## Booking
 
-Owned by the `booking` module. A booking is confirmed immediately (no hold or payment step yet). All
+Owned by the `booking` module. A booking is made from a [hold](#holds) (no payment step yet). All
 booking endpoints need a logged-in user, and each user only ever sees their own bookings: the owner is the
 token's `sub` (the user's permanent Keycloak id), never a field the client sends. Another user's booking
 answers `404`, exactly like a booking that doesn't exist, so booking ids can't be probed. `customerName` in
@@ -637,17 +740,16 @@ calling the catalogue endpoints, and still shows what was sold if catalogue data
 
 #### `POST /bookings`
 
-Books exactly the seats the customer picked. All or nothing: if any seat is taken, nothing is booked.
+Books the seats of one of your holds: they become booked and the hold is gone. The database only books
+seats that are still available, so a seat is never sold twice, even if Redis lost a hold.
 
 | Field | Type | Rules |
 |---|---|---|
-| `showId` | long | required |
-| `showSeatIds` | long[] | at least one; show seat ids from the layout |
+| `holdId` | string | required; from `POST /holds` |
 
 ```json
 {
-  "showId": 1,
-  "showSeatIds": [1, 2]
+  "holdId": "3f6c1e9a-7b2d-4c1e-9f0a-5d8e2b7c4a11"
 }
 ```
 
@@ -692,36 +794,8 @@ Response `201`:
 
 | Error | When |
 |---|---|
-| `409 One or more seats are already booked` | any requested seat is not AVAILABLE |
-| `404 Show not found: <showId>` | unknown show |
-| `404 Seats for show not found: <showId>` | a seat id does not exist or belongs to another show |
-
-#### `POST /bookings/best-available`
-
-The server picks the best block of `quantity` adjacent seats (same row, consecutive numbers) of the
-requested type, by seat rank. Concurrent requests skip seats another request is booking at that moment,
-so they get different seats instead of colliding.
-
-| Field | Type | Rules |
-|---|---|---|
-| `showId` | long | required |
-| `quantity` | int | 1 to 10 |
-| `seatType` | [SeatType](#enums) | required |
-
-```json
-{
-  "showId": 1,
-  "quantity": 2,
-  "seatType": "RECLINER"
-}
-```
-
-Response `201`: same shape as `POST /bookings`.
-
-| Error | When |
-|---|---|
-| `409 No 2 adjacent RECLINER seats available` | no block of that size and type is free (free seats may still exist, but not side by side) |
-| `404 Show not found: <showId>` | unknown show |
+| `404 Hold not found: <holdId>` | the hold expired, was already booked or released, or is someone else's |
+| `409 One or more seats are already booked` | rare: a double-tapped request that came second |
 
 #### `GET /bookings`
 

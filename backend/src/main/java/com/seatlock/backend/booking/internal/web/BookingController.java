@@ -3,7 +3,6 @@ package com.seatlock.backend.booking.internal.web;
 import com.seatlock.backend.booking.internal.domain.BookingPeriod;
 import com.seatlock.backend.booking.internal.service.BookingService;
 import com.seatlock.backend.booking.internal.web.dto.BookingResponse;
-import com.seatlock.backend.booking.internal.web.dto.CreateBestAvailableBookingRequest;
 import com.seatlock.backend.booking.internal.web.dto.CreateBookingRequest;
 import com.seatlock.backend.shared.security.CurrentUser;
 import com.seatlock.backend.shared.web.PageResponse;
@@ -29,13 +28,6 @@ public class BookingController {
     public ResponseEntity<BookingResponse> create(@Valid @RequestBody CreateBookingRequest request,
                                                   @AuthenticationPrincipal Jwt jwt) {
         BookingResponse response = bookingService.create(request, CurrentUser.from(jwt));
-        return ResponseEntity.created(URI.create("/bookings/" + response.id())).body(response);
-    }
-
-    @PostMapping("/best-available")
-    public ResponseEntity<BookingResponse> createBestAvailable(
-            @Valid @RequestBody CreateBestAvailableBookingRequest request, @AuthenticationPrincipal Jwt jwt) {
-        BookingResponse response = bookingService.createBestAvailable(request, CurrentUser.from(jwt));
         return ResponseEntity.created(URI.create("/bookings/" + response.id())).body(response);
     }
 

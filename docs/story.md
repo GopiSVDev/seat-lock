@@ -147,51 +147,83 @@ sequenceDiagram
 
 ## Chapter 3: Buying a ticket
 
-**What happens.** Asha picks chairs A3 and A4 and presses "Book".
+**What happens.** Asha picks chairs A3 and A4 and presses "Continue". Buying takes two steps, like at any
+real ticket counter.
 
-The ticket desk does not trust the picture on Asha's phone (it could be a second old). It asks the seat desk
-one careful question:
+**Step 1: the sticky notes.** Next to its notebook, the seat desk has a **board of sticky notes** with a
+timer on each. It writes "reserved for Asha" on two notes and sticks them on A3 and A4, both at once: if
+someone already has a note on either chair, it sticks neither and says "Sorry, taken". Then it glances at
+its notebook to make sure neither chair was already sold. Asha now has **5 minutes**. Everyone else's
+board shows A3 and A4 as taken. If Asha walks away or takes too long, the notes simply fade and the chairs
+are free again. Nobody has to go round removing them. If she taps "back", the desk peels them off at once.
+If she picks other chairs instead, her old notes go and new ones are stuck on.
 
-> "Please mark A3 and A4 as taken, **but only if they are still free right now.**"
+**Step 2: the ticket.** Asha presses "Book". The ticket desk asks the seat desk one careful question:
 
-The seat desk checks its notebook, finds both chairs free, marks them taken, and says "done". The ticket desk
-then writes Asha's ticket: *Asha, tonight's show, chairs A3 and A4*. Both notebooks are updated **together**:
-if anything goes wrong halfway, neither notebook changes. Asha never ends up with chairs but no ticket, or
-a ticket but no chairs.
+> "Please mark A3 and A4 as taken in your notebook, **but only if they are still free right now.**"
+
+They are, so the seat desk marks them taken and the ticket desk writes Asha's ticket: *Asha, tonight's
+show, chairs A3 and A4*. Both notebooks are updated **together**: if anything goes wrong halfway, neither
+notebook changes. Only then are the sticky notes thrown away.
 
 ```mermaid
 sequenceDiagram
     actor Asha
     participant Tickets as Ticket desk
     participant Seats as Seat desk
-    Asha->>Tickets: I want A3 and A4
+    participant Notes as Sticky-note board
+    Asha->>Seats: Reserve A3 and A4
+    Seats->>Notes: Stick notes on both, or neither (5-minute timer)
+    Seats-->>Asha: Reserved until 7:05
+    Asha->>Tickets: Book my reservation
     Tickets->>Seats: Mark A3 and A4 taken, only if still free
-    Seats-->>Tickets: Done, both were free
+    Seats-->>Tickets: Done
     Tickets->>Tickets: Write the ticket for Asha
+    Seats->>Notes: Throw the notes away
     Tickets-->>Asha: Here is your ticket
 ```
 
 **Behind the counter.**
-- This is `POST /bookings` with `showSeatIds: [3, 4]`. The answer is `201 Created` with the ticket.
-- "Only if still free" is one database statement:
+- Step 1 is `POST /holds` with `showSeatIds: [3, 4]`; the answer has the hold's id and `expiresAt` (the
+  timer). The sticky-note board is **Redis**, and the fading timer is a **TTL** on every key. Sticking all
+  notes or none is a small **Lua script** that Redis runs in one go.
+- Step 2 is `POST /bookings` with the hold's id. "Only if still free" is one database statement:
   `UPDATE show_seat SET status = 'BOOKED' WHERE id IN (3, 4) AND status = 'AVAILABLE'`.
   If fewer chairs were updated than asked for, the whole booking is cancelled and nothing changes.
 - "Both notebooks together" is a **transaction**: all of it happens, or none of it does.
+- The notebook (PostgreSQL) has the last word, not the notes. If the sticky-note board fell off the wall
+  and every note was lost, people would have to pick their chairs again, but a chair still could not be
+  sold twice.
+
+**A pad of sticky notes per person.** One day a man with a stopwatch stands at the board, sticking notes on
+the best chairs and pulling them off again, hundreds of times a minute, so that whenever a chair comes
+free his hand is already there. Now everyone gets a **small pad of 10 notes**; the board hands out one
+fresh note every 6 seconds, up to 10. A family changing their mind a few times never runs out. The man
+with the stopwatch runs out in a second, and then hears "Wait 6 seconds". The pads are kept at the board
+itself, so it doesn't matter which window he walks up to.
+
+- That is a per-user **rate limit** (a **token bucket**, Bucket4j) on `POST /holds` and
+  `POST /holds/best-available`: beyond it `429 Too Many Requests` with a `Retry-After` header. It counts
+  per wristband (the user id in the token), not per address: many phones share one address.
+- The pads are kept in Redis, so several seat desks (backend instances) share them. If the board is
+  down, the pad check is skipped; nobody can stick notes then anyway.
 
 ## Chapter 4: Two people, one chair
 
-**What happens.** Ravi wants chair A5. So does a stranger. They both press "Book" at **exactly the same
+**What happens.** Ravi wants chair A5. So does a stranger. They both press "Continue" at **exactly the same
 moment**.
 
-The seat desk has a simple rule: **when someone is handling a chair, they put their hand on it**, and anyone
+The sticky-note board takes **one request at a time**, so one of them gets the note on A5 and the other
+hears "Sorry, taken". That settles most fights. But the notebook has its own rule too, for the moment
+someone presses "Book", so that even a mistake with the notes could never sell a chair twice: **when someone is handling a chair, they put their hand on it**, and anyone
 else who wants that chair must wait until the hand is lifted.
 
-1. Ravi's request arrives a tiny moment first. The seat desk puts a hand on A5, sees it is free, marks it
+1. Ravi's booking arrives a tiny moment first. The seat desk puts a hand on A5, sees it is free, marks it
    taken.
-2. The stranger's request wants A5 too, sees the hand, and **waits**.
+2. Another booking for A5 sees the hand, and **waits**.
 3. Ravi's booking finishes and the hand is lifted.
-4. The stranger's request now looks at A5 again, sees it is **taken**, and gets "Sorry, that seat is
-   already booked."
+4. The other booking now looks at A5 again, sees it is **taken**, and gets "Sorry, that seat is already
+   booked."
 
 Only one person can ever win a chair. And there is a second safety rule in the ticket notebook itself:
 **it will refuse to write two valid tickets for the same chair**, even if everything else went wrong.
@@ -213,6 +245,8 @@ sequenceDiagram
 ```
 
 **Behind the counter.**
+- Redis runs one command or script at a time, so of two holds racing for A5 exactly one wins; the other
+  gets `409`. A test races 20 buyers for the same seats: one hold, one booking.
 - The hand on the chair is a **row lock**: PostgreSQL locks a row while one transaction changes it.
 - "Sorry, already booked" is the answer `409 Conflict`.
 - The second safety rule is a **unique index** on the ticket lines: at most one confirmed ticket per
@@ -274,10 +308,18 @@ sequenceDiagram
 | Fans who gave up | 1,627 | **160** |
 | Chairs sold twice | 0 | **0** |
 
+**Since the sticky notes (chapter 3).** The desk no longer needs hands on 50 chairs. It reads the free
+chairs from its notebook, leaves out every chair with a sticky note on it, picks the best pair, and sticks
+its notes on them. If another fan stuck a note on one of those chairs a moment earlier, it simply picks
+again.
+
 **Behind the counter.**
-- This is `POST /bookings/best-available` with `{"quantity": 2, "seatType": "REGULAR"}`.
-- "Put a hand on the 50 best free chairs, skip chairs someone else is holding" is
-  `SELECT ... ORDER BY seat_rank LIMIT 50 FOR UPDATE SKIP LOCKED`.
+- Today this is `POST /holds/best-available` with `{"quantity": 2, "seatType": "REGULAR"}`, then
+  `POST /bookings` with the hold's id. (The numbers above are from before holds, when it was
+  `POST /bookings/best-available`.)
+- The old "put a hand on the 50 best free chairs, skip chairs someone else is holding" was
+  `SELECT ... ORDER BY seat_rank LIMIT 50 FOR UPDATE SKIP LOCKED`. Now the read takes no locks; the
+  sticky-note script decides who gets a chair, and it picks again up to 3 times.
 - The pair is then booked with the same "only if still free" statement as in chapter 3, so all the safety
   rules from chapter 4 still apply.
 
@@ -290,10 +332,15 @@ A few fans were unlucky in between: they looked at the board, it still said "3 f
 moment, and by the time they pressed "Book" those chairs were gone. They hear "Sorry, no seats together
 left". The board was simply a second behind, and they took a few seconds to decide.
 
+With sticky notes, chairs show as taken the moment a fan reserves them, not only once they are sold, so
+the board is closer to the truth. And a sold-out show can come back to life for a moment: if a fan's notes
+fade without a ticket, those chairs go back on sale.
+
 **Behind the counter.**
-- Almost all failed tries in the rush happen in these last seconds around the sell-out.
-- The real fix is a **hold**: the moment a fan starts buying, their chairs show as "reserved" for a few
-  minutes while they pay. That is the next big feature (see below).
+- Almost all failed tries in the rush happened in these last seconds around the sell-out (measured before
+  holds existed).
+- Holds narrow that gap: held seats are listed as unavailable at once. The board is still up to a second
+  old, and fans still think before pressing, so a few late `409`s remain.
 
 ## Glossary: everyday words for technical ideas
 
@@ -311,8 +358,14 @@ left". The board was simply a second behind, and they took a few seconds to deci
 | Cache (1 second) | Rewriting the board once a second instead of for every person who asks |
 | Transaction | Writing in both notebooks together: all of it or none of it |
 | Row lock | Putting your hand on a chair: others must wait |
+| Hold (`POST /holds`) | Sticky notes on your chairs: reserved for you for 5 minutes |
+| Redis | The sticky-note board next to the seat desk's notebook |
+| TTL | The timer that makes a sticky note fade by itself |
+| Lua script | Sticking all your notes in one go, or none |
 | `SKIP LOCKED` | Seeing a hand on a chair and walking to the next free one instead of waiting |
 | `409 Conflict` | "Sorry, that seat is taken" |
+| Rate limit / token bucket | A pad of 10 sticky notes per person, one fresh note every 6 seconds |
+| `429 Too Many Requests` | "Out of notes: wait a few seconds" |
 | Unique index | The ticket notebook refusing to write two tickets for one chair |
 | Load test (k6) | A rehearsal with thousands of pretend fans |
 | Keycloak | The front desk that checks who you are and hands out wristbands |
@@ -322,6 +375,5 @@ left". The board was simply a second behind, and they took a few seconds to deci
 
 ## Not in the story yet
 
-- **Holding chairs while you pay**: today a ticket is final the moment you book.
-- **Paying** and refunds.
+- **Paying** and refunds: today a reservation becomes a ticket without paying.
 - **A queue at the door** for when far more fans arrive than the office can serve.

@@ -1592,11 +1592,122 @@
     },
     {
       "type": "folder",
-      "name": "07 Bookings (asha, then ravi)",
+      "name": "07 Holds and bookings (asha, then ravi)",
       "items": [
         {
           "type": "http",
-          "name": "Book exact seats A1, A2",
+          "name": "Asha holds A1, A2",
+          "request": {
+            "url": "{{baseUrl}}/holds",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"holdId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"held for 5 minutes\", function () {\n  expect(res.getBody().expiresAt).to.be.a(\"string\");\n  expect(res.getBody().seats.map(s => s.label)).to.eql([\"A1\", \"A2\"]);\n});\n",
+            "docs": "Seats are held in Redis for 5 minutes; Postgres still says AVAILABLE. Saves `holdId`."
+          },
+          "seq": 1
+        },
+        {
+          "type": "http",
+          "name": "Ravi tries the same seats",
+          "request": {
+            "url": "{{baseUrl}}/holds",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
+            "docs": "Held by Asha: all-or-nothing Lua script in Redis refuses the whole hold."
+          },
+          "seq": 2
+        },
+        {
+          "type": "http",
+          "name": "Get my hold (countdown)",
+          "request": {
+            "url": "{{baseUrl}}/holds/{{holdId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "What a checkout page reads after a refresh to show the timer."
+          },
+          "seq": 3
+        },
+        {
+          "type": "http",
+          "name": "Book the hold",
           "request": {
             "url": "{{baseUrl}}/bookings",
             "method": "POST",
@@ -1604,7 +1715,7 @@
             "params": [],
             "body": {
               "mode": "json",
-              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "json": "{\n  \"holdId\": \"{{holdId}}\"\n}",
               "text": null,
               "xml": null,
               "sparql": null,
@@ -1627,13 +1738,13 @@
             },
             "assertions": [],
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by asha, with show details\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().show.movie.title).to.equal(\"Interstellar\");\n});\n",
-            "docs": "Owner comes from the token, never the body. The booking keeps a copy of the show details. Saves `bookingId`."
+            "docs": "Seats become BOOKED (guarded UPDATE), then the hold is deleted. Owner comes from the token. Saves `bookingId`."
           },
-          "seq": 1
+          "seq": 4
         },
         {
           "type": "http",
-          "name": "Same seats again is a conflict",
+          "name": "Booking the same hold again",
           "request": {
             "url": "{{baseUrl}}/bookings",
             "method": "POST",
@@ -1641,7 +1752,7 @@
             "params": [],
             "body": {
               "mode": "json",
-              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "json": "{\n  \"holdId\": \"{{holdId}}\"\n}",
               "text": null,
               "xml": null,
               "sparql": null,
@@ -1663,22 +1774,59 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
-            "docs": "The guarded UPDATE only books AVAILABLE seats: never sold twice."
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "The hold is gone once booked."
           },
-          "seq": 2
+          "seq": 5
         },
         {
           "type": "http",
-          "name": "Best available: 2 recliners",
+          "name": "Best available: hold 2 recliners",
           "request": {
-            "url": "{{baseUrl}}/bookings/best-available",
+            "url": "{{baseUrl}}/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
             "body": {
               "mode": "json",
               "json": "{\n  \"showId\": {{showId}},\n  \"quantity\": 2,\n  \"seatType\": \"RECLINER\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"bestHoldId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": "The server picks the best adjacent block that is neither booked nor held."
+          },
+          "seq": 6
+        },
+        {
+          "type": "http",
+          "name": "Book the best-available hold",
+          "request": {
+            "url": "{{baseUrl}}/bookings",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"holdId\": \"{{bestHoldId}}\"\n}",
               "text": null,
               "xml": null,
               "sparql": null,
@@ -1701,15 +1849,15 @@
             },
             "assertions": [],
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
-            "docs": "The server picks the best adjacent block (SKIP LOCKED under load)."
+            "docs": "Saves `bestBookingId`."
           },
-          "seq": 3
+          "seq": 7
         },
         {
           "type": "http",
           "name": "Best available: 10 recliners don't fit",
           "request": {
-            "url": "{{baseUrl}}/bookings/best-available",
+            "url": "{{baseUrl}}/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1740,7 +1888,118 @@
             "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
             "docs": "Only 6 recliners are left, so no block of 10 exists."
           },
-          "seq": 4
+          "seq": 8
+        },
+        {
+          "type": "http",
+          "name": "Hold a seat to let it go",
+          "request": {
+            "url": "{{baseUrl}}/holds/best-available",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"quantity\": 1,\n  \"seatType\": \"REGULAR\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"tempHoldId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": ""
+          },
+          "seq": 9
+        },
+        {
+          "type": "http",
+          "name": "Let the hold go (back button)",
+          "request": {
+            "url": "{{baseUrl}}/holds/{{tempHoldId}}",
+            "method": "DELETE",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 204\", function () {\n  expect(res.getStatus()).to.equal(204);\n});\n",
+            "docs": "Frees the seat now instead of after 5 minutes."
+          },
+          "seq": 10
+        },
+        {
+          "type": "http",
+          "name": "Released hold is gone",
+          "request": {
+            "url": "{{baseUrl}}/holds/{{tempHoldId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": ""
+          },
+          "seq": 11
         },
         {
           "type": "http",
@@ -1777,7 +2036,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
             "docs": ""
           },
-          "seq": 5
+          "seq": 12
         },
         {
           "type": "http",
@@ -1821,7 +2080,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"contains the booking\", function () {\n  const ids = res.getBody().items.map(b => b.id);\n  expect(ids).to.include(bru.getVar(\"bookingId\"));\n});\n",
             "docs": "Shows that haven't started, soonest first (the default period)."
           },
-          "seq": 6
+          "seq": 13
         },
         {
           "type": "http",
@@ -1865,7 +2124,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
             "docs": "Shows that have started, latest first."
           },
-          "seq": 7
+          "seq": 14
         },
         {
           "type": "http",
@@ -1902,7 +2161,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"cancelled\", function () {\n  expect(res.getBody().status).to.equal(\"CANCELLED\");\n  expect(res.getBody().cancelledAt).to.be.a(\"string\");\n});\n",
             "docs": "Seats A1, A2 go back on sale in the same transaction. After the show starts this answers 409 `Show has already started` (needs a past show, so not part of this collection)."
           },
-          "seq": 8
+          "seq": 15
         },
         {
           "type": "http",
@@ -1939,11 +2198,48 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"same cancel time\", function () {\n  expect(res.getBody().cancelledAt).to.equal(bru.getVar(\"cancelledAt\"));\n});\n",
             "docs": "Idempotent: a retry gets the same answer, and the seats are not released twice."
           },
-          "seq": 9
+          "seq": 16
         },
         {
           "type": "http",
-          "name": "Ravi books the freed seats",
+          "name": "Ravi holds the freed seats",
+          "request": {
+            "url": "{{baseUrl}}/holds",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": "bru.setVar(\"raviHoldId\", res.getBody().id);\n"
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "docs": ""
+          },
+          "seq": 17
+        },
+        {
+          "type": "http",
+          "name": "Ravi books them",
           "request": {
             "url": "{{baseUrl}}/bookings",
             "method": "POST",
@@ -1951,7 +2247,7 @@
             "params": [],
             "body": {
               "mode": "json",
-              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "json": "{\n  \"holdId\": \"{{raviHoldId}}\"\n}",
               "text": null,
               "xml": null,
               "sparql": null,
@@ -1976,7 +2272,7 @@
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by ravi\", function () {\n  expect(res.getBody().customerName).to.equal(\"Ravi Shankar\");\n});\n",
             "docs": "Re-sale works: Asha's cancelled seat rows no longer block the seats."
           },
-          "seq": 10
+          "seq": 18
         }
       ],
       "root": {
@@ -2260,7 +2556,7 @@
           "type": "http",
           "name": "Unknown show",
           "request": {
-            "url": "{{baseUrl}}/bookings/best-available",
+            "url": "{{baseUrl}}/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2380,6 +2676,114 @@
             "docs": ""
           },
           "seq": 10
+        },
+        {
+          "type": "http",
+          "name": "No token: hold seats",
+          "request": {
+            "url": "{{baseUrl}}/holds",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": {{seatIds}}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\n",
+            "docs": ""
+          },
+          "seq": 11
+        },
+        {
+          "type": "http",
+          "name": "Ravi reads a hold that is not his",
+          "request": {
+            "url": "{{baseUrl}}/holds/{{holdId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Asha's hold is gone by now (booked); someone else's live hold answers 404 too."
+          },
+          "seq": 12
+        },
+        {
+          "type": "http",
+          "name": "Too many seats in one hold",
+          "request": {
+            "url": "{{baseUrl}}/holds",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"showId\": {{showId}},\n  \"showSeatIds\": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\n",
+            "docs": "At most 10 seats per hold."
+          },
+          "seq": 13
         }
       ],
       "root": {

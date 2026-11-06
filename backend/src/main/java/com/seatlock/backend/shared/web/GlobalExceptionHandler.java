@@ -3,7 +3,9 @@ package com.seatlock.backend.shared.web;
 import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
+import com.seatlock.backend.shared.exception.TooManyRequestsException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -38,11 +40,25 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ProblemDetail> handleTooManyRequests(TooManyRequestsException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage()));
+    }
+
     // Unique constraint hit; constraint names stay in the logs, not the response
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Request conflicts with existing data");
+    }
+
+    // Redis or the database unreachable: fail closed, nothing is held or sold
+    @ExceptionHandler(DataAccessResourceFailureException.class)
+    public ProblemDetail handleUnavailable(DataAccessResourceFailureException ex) {
+        log.error("Data store unavailable", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Service temporarily unavailable");
     }
 
     @Override
