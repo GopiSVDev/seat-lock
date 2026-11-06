@@ -1,8 +1,12 @@
 package com.seatlock.backend.shared.web;
 
+import com.seatlock.backend.shared.exception.TooManyRequestsException;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,5 +20,15 @@ class GlobalExceptionHandlerTest {
 
         assertThat(problem.getStatus()).isEqualTo(503);
         assertThat(problem.getDetail()).isEqualTo("Service temporarily unavailable");
+    }
+
+    @Test
+    void retryAfterIsRoundedUpToWholeSeconds() {
+        ResponseEntity<ProblemDetail> response = new GlobalExceptionHandler()
+                .handleTooManyRequests(new TooManyRequestsException("hold requests", Duration.ofMillis(5200)));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(429);
+        assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("6");
+        assertThat(response.getBody().getDetail()).isEqualTo("Too many hold requests, try again in 6 seconds");
     }
 }

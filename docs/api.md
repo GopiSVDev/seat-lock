@@ -69,6 +69,7 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 404 | An id in the path or body does not exist (or is another user's hold or booking) | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
 | 409 | Seats already held or booked, no adjacent block left, or a booking cancelled after its show started | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
+| 429 | Too many hold requests from one user (also sends `Retry-After: <seconds>`) | `Too many hold requests, try again in 6 seconds` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
 | 503 | Redis or the database can't be reached; nothing is held or booked | `Service temporarily unavailable` |
 
@@ -637,6 +638,12 @@ A hold that isn't booked expires by itself and its seats go back on sale; `DELET
   seats in both stay yours).
 - At most 10 seats per hold.
 - Each user only sees their own holds; another user's hold answers `404`, like one that doesn't exist.
+- Rate limited per user: `POST /holds` and `POST /holds/best-available` share a bucket of 10 requests that
+  refills at 10 per minute (one every 6 s). Beyond that: `429` with a `Retry-After` header in seconds.
+  A buyer changing seats a few times never hits it; a script holding and releasing in a loop does. Every
+  request counts, including ones that fail validation or conflict. `GET`, `DELETE` and booking a hold are
+  not limited. The buckets live in Redis, so the limit holds across backend instances; if Redis is down
+  the limit is skipped (holds then fail with `503` anyway).
 
 #### `POST /holds`
 
@@ -680,6 +687,7 @@ Response `201` with `Location: /holds/{id}`:
 |---|---|
 | `409 One or more seats are already held or booked` | any seat is in someone else's hold or booked |
 | `404 Seats for show not found: <showId>` | a seat id does not exist or belongs to another show |
+| `429 Too many hold requests, try again in N seconds` | more than the user's [hold rate limit](#holds) |
 
 #### `POST /holds/best-available`
 
@@ -707,6 +715,7 @@ Response `201`: same shape as `POST /holds`.
 |---|---|
 | `409 No 2 adjacent RECLINER seats available` | no free block of that size and type (free seats may still exist, but not side by side) |
 | `404 Show not found: <showId>` | unknown show |
+| `429 Too many hold requests, try again in N seconds` | shares the bucket with `POST /holds` |
 
 #### `GET /holds/{id}`
 

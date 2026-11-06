@@ -32,7 +32,8 @@ programming needed. API reference with request and response examples: **[docs/ap
    seats are taken right now).
 4. The customer **holds** seats for 5 minutes, either the exact seats they picked on the map or "best
    available N seats of a type", where the server chooses the best adjacent block for them. Nobody else
-   can take held seats; a hold that isn't booked expires by itself.
+   can take held seats; a hold that isn't booked expires by itself. Holding is rate limited per user, so a
+   script can't keep grabbing and releasing seats.
 5. The customer **books** the hold (later: after paying).
 
 26 endpoints in total, all JSON over HTTP. Errors use the standard
@@ -102,7 +103,8 @@ curl -s "$B/theatres?cityId=5&query=pvr"                 # cinemas in Chennai
 curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one cinema, by movie
 ```
 
-Holding seats someone else holds or booked returns `409 Conflict`. Without a token, `POST /movies` returns `401`; with
+Holding seats someone else holds or booked returns `409 Conflict`; more than 10 holds in a burst (then 1 every 6 s)
+returns `429 Too Many Requests` with `Retry-After`. Without a token, `POST /movies` returns `401`; with
 Asha's token (CUSTOMER) it returns `403`.
 
 Logins are handled by **Keycloak** (admin console at [localhost:8180/admin](http://localhost:8180/admin),
@@ -200,8 +202,9 @@ fails the build if a class breaks this rule.
   the same transaction. This matters: if a double-tapped cancel released the seats twice, the second
   release could free a seat someone else had booked in between, and it would be sold twice.
 
-`shared/` holds cross-cutting code: the global error handler and the `NotFoundException` /
-`ConflictException` types that services throw.
+`shared/` holds cross-cutting code: the global error handler, the exception types that services throw
+(`NotFoundException`, `ConflictException`, `TooManyRequestsException`, ...), security, and the Redis-backed
+`RateLimiter` that modules apply to their own endpoints (inventory limits holds).
 
 ## How a booking works
 
@@ -251,6 +254,14 @@ sequenceDiagram
   Checking first would leave a gap where a seat is booked between the check and the hold.
 - **One hold per user per show.** A new hold replaces the previous one (the script frees its seats), as when
   a buyer goes back and picks other seats.
+- **Rate limited per user.** Holding costs a Redis script and a Postgres read, and without a limit one
+  account's script could hold and release hundreds of times a second, competing with real buyers for every
+  freed seat. Both hold endpoints share a **token bucket** per user (Bucket4j): 10 tokens, refilled at 10 per
+  minute, so a buyer changing seats a few times never notices and a script gets one hold every 6 s; beyond
+  that `429` with `Retry-After`. Keyed by the user id from the JWT, not the IP: mobile carriers put thousands
+  of phones behind one IP. The buckets live in Redis (compare-and-swap updates), so with several backend
+  instances a user still gets 10, not 10 per instance. If Redis is down the limit is skipped (fails open): it
+  protects capacity, it never decides who gets a seat. Not covered: many accounts (bot detection).
 
 ### Booking a hold: `POST /bookings`
 
@@ -410,12 +421,13 @@ and ownership checks run unchanged (the real Keycloak path is covered by the Bru
 |---|---|
 | `BookingConcurrencyTest` | 20 buyers racing for the same seats: exactly 1 wins, also with seat ids in opposite orders; 30 parallel best-available buyers never share a seat and all can book; a double-tapped confirm books once; 10 simultaneous cancels release the seats once |
 | `BookingApiTest` | owner taken from the token, show copy on the booking, a booked hold is gone from Redis, 409 for taken seats, only the holder can book a hold, others' bookings are 404, upcoming/past split, cancel, idempotent cancel, no cancel after the show started |
+| `HoldRateLimitTest` | the 11th hold in a burst is 429 with `Retry-After` and problem details, the bucket lives in Redis with an expiry, both hold endpoints share it, other users keep their own bucket, release and booking aren't limited |
 | `HoldApiTest` | a hold lasts 5 minutes (TTL set in Redis), held seats are 409 for others and unavailable on the seat map, release, expiry frees the seats and the expired hold can't be booked, a new hold replaces the old one, others' holds are 404, booked seats can't be held, best-available blocks skip held seats, validation |
 | `BookingConstraintsTest` | the database itself refuses bad states: a cancelled booking without a time, unknown statuses, one seat in two confirmed bookings |
 | `SecurityRulesTest` | public reads, 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default |
 | `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
 | `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
-| `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable |
+| `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest`, `RateLimiterTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable, `Retry-After` rounded up to whole seconds, the rate limit lets requests through when Redis fails |
 
 ## Project layout
 

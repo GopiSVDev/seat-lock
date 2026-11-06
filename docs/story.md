@@ -195,6 +195,19 @@ sequenceDiagram
   and every note was lost, people would have to pick their chairs again, but a chair still could not be
   sold twice.
 
+**A pad of sticky notes per person.** One day a man with a stopwatch stands at the board, sticking notes on
+the best chairs and pulling them off again, hundreds of times a minute, so that whenever a chair comes
+free his hand is already there. Now everyone gets a **small pad of 10 notes**; the board hands out one
+fresh note every 6 seconds, up to 10. A family changing their mind a few times never runs out. The man
+with the stopwatch runs out in a second, and then hears "Wait 6 seconds". The pads are kept at the board
+itself, so it doesn't matter which window he walks up to.
+
+- That is a per-user **rate limit** (a **token bucket**, Bucket4j) on `POST /holds` and
+  `POST /holds/best-available`: beyond it `429 Too Many Requests` with a `Retry-After` header. It counts
+  per wristband (the user id in the token), not per address: many phones share one address.
+- The pads are kept in Redis, so several seat desks (backend instances) share them. If the board is
+  down, the pad check is skipped; nobody can stick notes then anyway.
+
 ## Chapter 4: Two people, one chair
 
 **What happens.** Ravi wants chair A5. So does a stranger. They both press "Continue" at **exactly the same
@@ -351,6 +364,8 @@ fade without a ticket, those chairs go back on sale.
 | Lua script | Sticking all your notes in one go, or none |
 | `SKIP LOCKED` | Seeing a hand on a chair and walking to the next free one instead of waiting |
 | `409 Conflict` | "Sorry, that seat is taken" |
+| Rate limit / token bucket | A pad of 10 sticky notes per person, one fresh note every 6 seconds |
+| `429 Too Many Requests` | "Out of notes: wait a few seconds" |
 | Unique index | The ticket notebook refusing to write two tickets for one chair |
 | Load test (k6) | A rehearsal with thousands of pretend fans |
 | Keycloak | The front desk that checks who you are and hands out wristbands |
