@@ -455,4 +455,6 @@ Deliberately left out until a test or feature needs them:
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
 - Notifications, search.
 - Show overlap checks.
-- **Horizontal scaling**: holds already live in Redis; the availability cache is still per instance (Caffeine).
+- **Horizontal scaling**: holds and rate limits already live in Redis; the availability cache stays per instance
+  (Caffeine) on purpose: sharing it in Redis would turn every ~1 µs hit into a network round trip to save a few
+  database queries per second per show. To be measured once there are several instances.
