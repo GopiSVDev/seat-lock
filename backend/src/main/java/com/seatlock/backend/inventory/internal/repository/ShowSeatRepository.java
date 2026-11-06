@@ -22,19 +22,24 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
             """, nativeQuery = true)
     List<BookedSeat> bookIfAvailable(Long showId, Collection<Long> ids);
 
-    // SKIP LOCKED: concurrent buyers lock different seats instead of waiting.
+    // No row locks: holds in Redis decide who gets a seat; held seats are filtered out by the caller.
     @Query(value = """
             select id, row_label as rowLabel, seat_number as seatNumber, seat_rank as seatRank
             from inventory.show_seat
             where show_id = :showId
               and seat_type = :seatType
               and status = 'AVAILABLE'
-              and seat_rank > :afterRank
             order by seat_rank
-            limit :limit
-            for update skip locked
             """, nativeQuery = true)
-    List<CandidateSeat> lockAvailable(Long showId, String seatType, int afterRank, int limit);
+    List<CandidateSeat> findAvailable(Long showId, String seatType);
+
+    @Query(value = """
+            select id as showSeatId, show_id as showId, row_label || seat_number as label, status
+            from inventory.show_seat
+            where id in (:ids)
+            order by seat_id
+            """, nativeQuery = true)
+    List<SeatState> findStates(Collection<Long> ids);
 
     @Modifying
     @Query(value = """

@@ -34,7 +34,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.POST, CATALOGUE).hasRole("ADMIN")
-                        .requestMatchers("/bookings/**").authenticated()
+                        .requestMatchers("/bookings/**", "/holds/**").authenticated()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakRoles()))

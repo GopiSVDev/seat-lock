@@ -1,12 +1,9 @@
 package com.seatlock.backend.booking.internal.web.dto;
 
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 
-import java.util.List;
-
+// Seats are held first (POST /holds); booking confirms the hold
 public record CreateBookingRequest(
-        @NotNull Long showId,
-        @NotEmpty List<@NotNull Long> showSeatIds
+        @NotBlank String holdId
 ) {
 }

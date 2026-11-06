@@ -31,6 +31,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Seat holds. noeviction: a full Redis refuses new holds instead of dropping live ones.
+  # No persistence: holds last 5 minutes; after a restart buyers just pick their seats again.
+  redis:
+    image: redis:8.2.1-alpine
+    container_name: seat-lock-redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -47,12 +60,16 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB is not set}
       DB_USERNAME: ${POSTGRES_USER:?POSTGRES_USER is not set}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       JWT_JWK_SET_URI: ${JWT_JWK_SET_URI:?JWT_JWK_SET_URI is not set}
       JWT_ISSUER_URI: ${JWT_ISSUER_URI:?JWT_ISSUER_URI is not set}
       JWT_AUDIENCE: ${JWT_AUDIENCE:?JWT_AUDIENCE is not set}
       SWAGGER_OAUTH_CLIENT_ID: ${SWAGGER_OAUTH_CLIENT_ID:?SWAGGER_OAUTH_CLIENT_ID is not set}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       keycloak:
         condition: service_healthy
@@ -98,7 +115,7 @@ services:
       start_period: 30s
 
   # --- Tests: docker compose run --rm backend-test ---
-  # Maven in a container; Testcontainers starts its own Postgres through the Docker socket (dev/CI only:
+  # Maven in a container; Testcontainers starts its own Postgres and Redis through the Docker socket (dev/CI only:
   # socket access is root on the host). Sources are copied, so the build writes nothing into ./backend.
   backend-test:
     image: maven:3.9.16-eclipse-temurin-25
@@ -109,7 +126,7 @@ services:
       - maven_repo:/root/.m2
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      # Testcontainers' Postgres runs beside this container; reach its published port through the host
+      # Testcontainers' Postgres and Redis run beside this container; reach its published port through the host
       TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"

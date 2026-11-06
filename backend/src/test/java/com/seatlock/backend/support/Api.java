@@ -73,6 +73,10 @@ public class Api {
             return body.get("id").asLong();
         }
 
+        public String text(String field) {
+            return body.get(field).asString();
+        }
+
         @Override
         public String toString() {
             return status + " " + body;
