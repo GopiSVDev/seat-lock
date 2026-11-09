@@ -59,6 +59,31 @@ class CatalogueApiTest extends IntegrationTest {
     }
 
     @Test
+    void showKeepsItsPricesPerSeatType() {
+        TestShow show = newShow();
+
+        Response response = api.get("/shows/" + show.showId(), null);
+
+        assertThat(response.body().get("prices").get("REGULAR").asLong()).isEqualTo(REGULAR_PRICE);
+        assertThat(response.body().get("prices").get("RECLINER").asLong()).isEqualTo(RECLINER_PRICE);
+        assertThat(response.body().get("prices").has("PREMIUM")).isFalse();
+    }
+
+    @Test
+    void pricesMustMatchTheScreensSeatTypes() {
+        TestShow show = newShow();
+
+        // The screen has REGULAR and RECLINER seats
+        assertThat(createShow(show, Map.of("REGULAR", 15000)).status()).as("missing type").isEqualTo(400);
+        assertThat(createShow(show, Map.of("REGULAR", 15000, "RECLINER", 40000, "PREMIUM", 25000)).status())
+                .as("extra type").isEqualTo(400);
+        assertThat(createShow(show, Map.of("REGULAR", 0, "RECLINER", 40000)).status())
+                .as("zero price").isEqualTo(400);
+        assertThat(createShow(show, Map.of()).status()).as("no prices").isEqualTo(400);
+        assertThat(createShow(show, Map.of("REGULAR", 15000, "RECLINER", 40000)).status()).isEqualTo(201);
+    }
+
+    @Test
     void showtimesForAPastDayAreRejected() {
         TestShow show = newShow();
 
@@ -76,6 +101,13 @@ class CatalogueApiTest extends IntegrationTest {
     @Test
     void unknownCityIsNotFound() {
         assertThat(api.get("/movies?cityId=999999999", null).status()).isEqualTo(404);
+    }
+
+    private Response createShow(TestShow show, Map<String, Integer> prices) {
+        return api.post("/shows", admin, Map.of(
+                "movieId", show.movieId(), "screenId", show.screenId(),
+                "startTime", show.startTime().plusSeconds(86400).toString(),
+                "language", "ENGLISH", "format", "TWO_D", "prices", prices));
     }
 
     @Test

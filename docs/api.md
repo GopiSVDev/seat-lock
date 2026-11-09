@@ -2,7 +2,8 @@
 
 Base URL locally: `http://localhost:8080`. All bodies are JSON (`Content-Type: application/json`). Times are
 ISO-8601 in UTC (`2030-01-01T13:30:00Z`). Every `POST` that creates something returns `201 Created` with a
-`Location` header pointing at the new resource.
+`Location` header pointing at the new resource. Money is an integer in **paise** (`15000` = ₹150), like
+payment providers use, so there is no rounding; India only, so no currency field.
 
 For the big picture (modules, booking flow, caching) see the [README](../README.md).
 
@@ -471,6 +472,9 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
 | `startTime` | instant | required, in the future |
 | `language` | [Language](#enums) | required |
 | `format` | [ShowFormat](#enums) | required |
+| `prices` | map [SeatType](#enums) → long | paise, each > 0; exactly the seat types the screen has (else `400`) |
+
+Prices are fixed once the show exists: show seats, holds and bookings copy them.
 
 ```json
 {
@@ -478,7 +482,11 @@ Schedules a movie on a screen. Also creates one bookable show seat per seat of t
   "screenId": 1,
   "startTime": "2030-01-01T13:30:00Z",
   "language": "ENGLISH",
-  "format": "IMAX_2D"
+  "format": "IMAX_2D",
+  "prices": {
+    "REGULAR": 15000,
+    "RECLINER": 40000
+  }
 }
 ```
 
@@ -494,9 +502,15 @@ Response `201` (`endTime` = start + movie duration):
   "startTime": "2030-01-01T13:30:00Z",
   "endTime": "2030-01-01T16:19:00Z",
   "language": "ENGLISH",
-  "format": "IMAX_2D"
+  "format": "IMAX_2D",
+  "prices": {
+    "REGULAR": 15000,
+    "RECLINER": 40000
+  }
 }
 ```
+
+`GET /shows/{id}` returns the same shape.
 
 #### `GET /shows`
 
@@ -571,7 +585,8 @@ grey out the ids listed in `unavailable`.
 
 #### `GET /shows/{id}/layout`
 
-The seats of a show in row order. The `id`s here are **show seat ids**, the ones you book.
+The seats of a show in row order. The `id`s here are **show seat ids**, the ones you book. Each row has
+one seat type, so one `price` (paise) for the price legend.
 
 Headers: `Cache-Control: max-age=86400, public, immutable`. Safe for browsers and CDNs to keep for a day,
 since a show's layout never changes.
@@ -584,6 +599,7 @@ since a show's layout never changes.
     {
       "label": "A",
       "seatType": "REGULAR",
+      "price": 15000,
       "seats": [
         {
           "id": 1,
@@ -598,6 +614,7 @@ since a show's layout never changes.
     {
       "label": "C",
       "seatType": "RECLINER",
+      "price": 40000,
       "seats": [
         {
           "id": 21,
@@ -668,20 +685,24 @@ Response `201` with `Location: /holds/{id}`:
   "id": "3f6c1e9a-7b2d-4c1e-9f0a-5d8e2b7c4a11",
   "showId": 1,
   "expiresAt": "2026-11-05T10:20:30.123Z",
+  "totalAmount": 30000,
   "seats": [
     {
       "showSeatId": 1,
-      "label": "A1"
+      "label": "A1",
+      "price": 15000
     },
     {
       "showSeatId": 2,
-      "label": "A2"
+      "label": "A2",
+      "price": 15000
     }
   ]
 }
 ```
 
-`expiresAt` drives the checkout timer.
+`expiresAt` drives the checkout timer. `totalAmount` is the sum of the seat prices (paise), what checkout
+will charge.
 
 | Error | When |
 |---|---|
@@ -738,6 +759,9 @@ Every booking also keeps a copy of its show (`show`: time, language, format, mov
 when it was booked, the way an order keeps the product name. A booking page renders from it alone, without
 calling the catalogue endpoints, and still shows what was sold if catalogue data changes later.
 
+Each seat keeps its `price` at booking time and the booking keeps `totalAmount` (paise), like order lines.
+A cancelled booking keeps its amounts.
+
 #### `POST /bookings`
 
 Books the seats of one of your holds: they become booked and the hold is gone. The database only books
@@ -762,6 +786,7 @@ Response `201`:
   "status": "CONFIRMED",
   "createdAt": "2026-11-03T10:15:30.123456Z",
   "cancelledAt": null,
+  "totalAmount": 30000,
   "show": {
     "id": 1,
     "startTime": "2030-01-01T13:30:00Z",
@@ -782,11 +807,13 @@ Response `201`:
   "seats": [
     {
       "showSeatId": 1,
-      "label": "A1"
+      "label": "A1",
+      "price": 15000
     },
     {
       "showSeatId": 2,
-      "label": "A2"
+      "label": "A2",
+      "price": 15000
     }
   ]
 }
@@ -818,6 +845,7 @@ Response `200`:
       "status": "CONFIRMED",
       "createdAt": "2026-11-03T10:15:30.123456Z",
       "cancelledAt": null,
+      "totalAmount": 30000,
       "show": {
         "id": 1,
         "startTime": "2030-01-01T13:30:00Z",
@@ -838,11 +866,13 @@ Response `200`:
       "seats": [
         {
           "showSeatId": 1,
-          "label": "A1"
+          "label": "A1",
+          "price": 15000
         },
         {
           "showSeatId": 2,
-          "label": "A2"
+          "label": "A2",
+          "price": 15000
         }
       ]
     }

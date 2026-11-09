@@ -84,13 +84,14 @@ curl -s -XPOST $B/theatres/1/screens -H "$ADMIN" -H 'Content-Type: application/j
                                  {"label":"B","seatCount":10,"seatType":"REGULAR"},
                                  {"label":"C","seatCount":8,"seatType":"RECLINER"}]}'
 curl -s -XPOST $B/shows -H "$ADMIN" -H 'Content-Type: application/json' \
-  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T13:30:00Z","language":"ENGLISH","format":"IMAX_2D"}'   # 7:00 PM in India
+  -d '{"movieId":1,"screenId":1,"startTime":"2030-01-01T13:30:00Z","language":"ENGLISH","format":"IMAX_2D",
+       "prices":{"REGULAR":15000,"RECLINER":40000}}'   # 7:00 PM in India; prices in paise (₹150, ₹400)
 
 curl -s $B/shows/1/layout          # rows and seat ids
 curl -s $B/shows/1/availability    # which seat ids are taken
 
 HOLD=$(curl -s -XPOST $B/holds -H "$ASHA" -H 'Content-Type: application/json' \
-  -d '{"showId":1,"showSeatIds":[1,2]}' | jq -r .id)     # A1, A2 held for 5 minutes
+  -d '{"showId":1,"showSeatIds":[1,2]}' | jq -r .id)     # A1, A2 held for 5 minutes (totalAmount 30000 = ₹300)
 curl -s -XPOST $B/bookings -H "$ASHA" -H 'Content-Type: application/json' -d "{\"holdId\":\"$HOLD\"}"
 curl -s -XPOST $B/holds/best-available -H "$ASHA" -H 'Content-Type: application/json' \
   -d '{"showId":1,"quantity":2,"seatType":"RECLINER"}'   # then book its id the same way, or let it expire
@@ -305,7 +306,7 @@ Viewing the map is far more frequent than booking, so it is split in two:
 
 | | `GET /shows/{id}/layout` | `GET /shows/{id}/availability` |
 |---|---|---|
-| Content | rows, seat ids, numbers, types | count of free seats + ids of taken seats |
+| Content | rows, seat ids, numbers, types, prices | count of free seats + ids of taken seats |
 | Changes | never (for a show) | on every hold and booking |
 | Caching | `Cache-Control: public, max-age=86400, immutable`: browsers and CDNs keep it; in-app cache too | in-app cache for 1 second |
 | Size | ~6 KB for 250 seats | ~50 bytes to ~2 KB |
@@ -324,6 +325,7 @@ erDiagram
     SCREEN ||--o{ SEAT : has
     MOVIE ||--o{ SHOWS : "is shown in"
     SCREEN ||--o{ SHOWS : hosts
+    SHOWS ||--o{ SHOW_PRICE : "priced by"
     SHOWS ||..o{ SHOW_SEAT : "show_id (plain id)"
     SEAT ||..o{ SHOW_SEAT : "seat_id (plain id)"
     BOOKING ||--o{ BOOKING_SEAT : contains
@@ -349,11 +351,16 @@ erDiagram
         string language
         string format
     }
+    SHOW_PRICE {
+        string seat_type
+        bigint price
+    }
     SHOW_SEAT {
         bigint show_id
         bigint seat_id
         string seat_type
         int seat_rank
+        bigint price
         string status
     }
     BOOKING {
@@ -363,6 +370,7 @@ erDiagram
         string status
         timestamptz created_at
         timestamptz cancelled_at
+        bigint total_amount
         timestamptz show_start_time
         string movie_title
         string theatre_name
@@ -370,6 +378,7 @@ erDiagram
     BOOKING_SEAT {
         bigint show_seat_id
         string seat_label
+        bigint price
         string status
     }
 ```
@@ -385,6 +394,10 @@ Solid lines are real foreign keys inside a schema; dotted lines are plain ids ac
   Bangalore, Gurgaon) is loaded by a migration; theatres point to a city by id, so a misspelt city can't get
   in. Search matches names and aliases by prefix and by trigram similarity (`pg_trgm`), so typos still
   find the right city.
+- **Prices.** Set per seat type when a show is created (`show_price`) and fixed after that. Show seats copy
+  their price like row and type, so inventory prices a hold alone; booking seats copy it again, so a
+  booking keeps what was paid. Money is integer paise (`15000` = ₹150): no rounding, and it is the unit
+  payment providers use.
 - Times are stored as UTC `timestamptz`. Enums are stored as text.
 - The schema is owned by **Flyway**: versioned SQL files in `backend/src/main/resources/db/migration`, applied
   at startup and recorded in `flyway.flyway_schema_history`. Hibernate only validates that the entities match

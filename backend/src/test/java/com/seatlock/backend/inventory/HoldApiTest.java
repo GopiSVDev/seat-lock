@@ -49,6 +49,21 @@ class HoldApiTest extends IntegrationTest {
     }
 
     @Test
+    void holdShowsEachSeatsPriceAndTheTotal() {
+        TestShow show = newShow();
+        List<Long> seats = new ArrayList<>(show.seats("A", 2));
+        seats.add(show.seats("C", 1).getFirst());
+
+        Response hold = hold(asha, show, seats);
+
+        assertThat(hold.body().get("totalAmount").asLong()).isEqualTo(2 * REGULAR_PRICE + RECLINER_PRICE);
+        assertThat(hold.body().get("seats").get(0).get("price").asLong()).isEqualTo(REGULAR_PRICE);
+        assertThat(hold.body().get("seats").get(2).get("price").asLong()).isEqualTo(RECLINER_PRICE);
+        assertThat(api.get("/holds/" + hold.text("id"), asha).body().get("totalAmount").asLong())
+                .isEqualTo(2 * REGULAR_PRICE + RECLINER_PRICE);
+    }
+
+    @Test
     void heldSeatsAreTakenForEveryoneElse() {
         TestShow show = newShow();
         hold(asha, show, show.seats("A", 2));

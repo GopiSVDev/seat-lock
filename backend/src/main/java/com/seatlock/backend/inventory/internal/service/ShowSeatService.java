@@ -46,7 +46,7 @@ public class ShowSeatService implements InventoryApi {
     public void on(ShowScheduled event) {
         List<ShowSeat> showSeats = event.seats().stream()
                 .map(seat -> new ShowSeat(event.showId(), seat.seatId(), seat.rowLabel(), seat.seatNumber(),
-                        SeatType.valueOf(seat.seatType()), seat.seatRank()))
+                        SeatType.valueOf(seat.seatType()), seat.seatRank(), seat.price()))
                 .toList();
 
         showSeatRepository.saveAll(showSeats);

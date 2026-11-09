@@ -14,11 +14,13 @@ public record BookingResponse(
         BookingStatus status,
         Instant createdAt,
         Instant cancelledAt,
+        long totalAmount,
         Show show,
         List<Seat> seats
 ) {
 
-    public record Seat(Long showSeatId, String label) {
+    // Amounts in paise, as they were when booked
+    public record Seat(Long showSeatId, String label, long price) {
     }
 
     // As it was when booked
@@ -42,7 +44,7 @@ public record BookingResponse(
 
     public static BookingResponse from(Booking booking, List<BookingSeat> bookingSeats) {
         List<Seat> seats = bookingSeats.stream()
-                .map(seat -> new Seat(seat.getShowSeatId(), seat.getSeatLabel()))
+                .map(seat -> new Seat(seat.getShowSeatId(), seat.getSeatLabel(), seat.getPrice()))
                 .toList();
 
         return new BookingResponse(
@@ -51,6 +53,7 @@ public record BookingResponse(
                 booking.getStatus(),
                 booking.getCreatedAt(),
                 booking.getCancelledAt(),
+                booking.getTotalAmount(),
                 Show.from(booking.getShowId(), booking.getShow()),
                 seats
         );

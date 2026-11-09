@@ -54,15 +54,15 @@ public class BookingService {
 
         // Microseconds: what timestamptz stores, so this response matches GET /bookings/{id}
         Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        long totalAmount = bookedSeats.stream().mapToLong(BookedSeat::price).sum();
         Long id = bookingWriteRepository.insert(showId, show, customer.id(), customer.name(),
-                BookingStatus.CONFIRMED, createdAt, bookedSeats.stream().map(BookedSeat::showSeatId).toList(),
-                bookedSeats.stream().map(BookedSeat::label).toList());
+                BookingStatus.CONFIRMED, createdAt, totalAmount, bookedSeats);
 
         List<BookingResponse.Seat> seats = bookedSeats.stream()
-                .map(seat -> new BookingResponse.Seat(seat.showSeatId(), seat.label()))
+                .map(seat -> new BookingResponse.Seat(seat.showSeatId(), seat.label(), seat.price()))
                 .toList();
 
-        return new BookingResponse(id, customer.name(), BookingStatus.CONFIRMED, createdAt, null,
+        return new BookingResponse(id, customer.name(), BookingStatus.CONFIRMED, createdAt, null, totalAmount,
                 BookingResponse.Show.from(showId, show), seats);
     }
 

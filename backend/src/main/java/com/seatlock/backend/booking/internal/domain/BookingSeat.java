@@ -27,6 +27,10 @@ public class BookingSeat {
     @Column(nullable = false)
     private String seatLabel;
 
+    // Paise, at booking time
+    @Column(nullable = false)
+    private long price;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BookingStatus status;

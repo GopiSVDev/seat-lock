@@ -35,6 +35,10 @@ public class Booking {
     @Column(nullable = false)
     private BookingStatus status;
 
+    // Paise: sum of the seats' prices at booking time
+    @Column(nullable = false)
+    private long totalAmount;
+
     @Column(nullable = false)
     private Instant createdAt;
 

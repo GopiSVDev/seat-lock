@@ -2,6 +2,7 @@ package com.seatlock.backend.booking.internal.repository;
 
 import com.seatlock.backend.booking.internal.domain.BookingStatus;
 import com.seatlock.backend.booking.internal.domain.ShowSnapshot;
+import com.seatlock.backend.inventory.BookedSeat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -18,21 +19,22 @@ public class BookingWriteRepository {
     private final JdbcClient jdbcClient;
 
     public Long insert(Long showId, ShowSnapshot show, String customerId, String customerName, BookingStatus status,
-                       Instant createdAt, List<Long> showSeatIds, List<String> seatLabels) {
+                       Instant createdAt, long totalAmount, List<BookedSeat> seats) {
         return jdbcClient.sql("""
                         with b as (
-                            insert into booking.booking (show_id, customer_id, customer_name, status, created_at,
+                            insert into booking.booking (show_id, customer_id, customer_name, status, created_at, total_amount,
                                 show_start_time, show_language, show_format, movie_id, movie_title,
                                 movie_poster_url, movie_certification, theatre_id, theatre_name, screen_name)
-                            values (:showId, :customerId, :customerName, :status, :createdAt,
+                            values (:showId, :customerId, :customerName, :status, :createdAt, :totalAmount,
                                 :startTime, :language, :format, :movieId, :movieTitle,
                                 :moviePosterUrl, :movieCertification, :theatreId, :theatreName, :screenName)
                             returning id
                         ), s as (
-                            insert into booking.booking_seat (booking_id, show_seat_id, seat_label, status)
-                            select b.id, seat.show_seat_id, seat.label, :status
-                            from b, unnest(cast(:showSeatIds as bigint[]), cast(:seatLabels as text[]))
-                                    with ordinality as seat(show_seat_id, label, position)
+                            insert into booking.booking_seat (booking_id, show_seat_id, seat_label, price, status)
+                            select b.id, seat.show_seat_id, seat.label, seat.price, :status
+                            from b, unnest(cast(:showSeatIds as bigint[]), cast(:seatLabels as text[]),
+                                    cast(:seatPrices as bigint[]))
+                                    with ordinality as seat(show_seat_id, label, price, position)
                             order by seat.position
                         )
                         select id from b
@@ -42,6 +44,7 @@ public class BookingWriteRepository {
                 .param("customerName", customerName)
                 .param("status", status.name())
                 .param("createdAt", Timestamp.from(createdAt))
+                .param("totalAmount", totalAmount)
                 .param("startTime", Timestamp.from(show.getStartTime()))
                 .param("language", show.getLanguage())
                 .param("format", show.getFormat())
@@ -52,8 +55,9 @@ public class BookingWriteRepository {
                 .param("theatreId", show.getTheatreId())
                 .param("theatreName", show.getTheatreName())
                 .param("screenName", show.getScreenName())
-                .param("showSeatIds", showSeatIds.toArray(Long[]::new))
-                .param("seatLabels", seatLabels.toArray(String[]::new))
+                .param("showSeatIds", seats.stream().map(BookedSeat::showSeatId).toArray(Long[]::new))
+                .param("seatLabels", seats.stream().map(BookedSeat::label).toArray(String[]::new))
+                .param("seatPrices", seats.stream().map(BookedSeat::price).toArray(Long[]::new))
                 .query(Long.class)
                 .single();
     }

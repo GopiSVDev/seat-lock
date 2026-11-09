@@ -79,7 +79,7 @@ flowchart LR
 2. **The cinema**: "PVR Grand, in Chennai."
 3. **The hall**: "Screen 1 has row A with 10 chairs, row B with 10 chairs, and row C with 8 big reclining
    chairs at the back."
-4. **The show**: "*Interstellar* plays in Screen 1 tonight at 18:30."
+4. **The show**: "*Interstellar* plays in Screen 1 tonight at 18:30. Ordinary chairs ₹150, recliners ₹400."
 
 When the hall is described, the office also gives **every chair a score**: chair number 1 is the best one,
 the one you would pick if you could have any. Good chairs are a bit more than halfway back and in the
@@ -87,7 +87,8 @@ middle of the row. Chairs at the very front corner get the worst scores.
 
 When the show is added, something important happens: the what's on desk tells the seat desk "there is a new
 show, here are all its chairs". The seat desk writes a fresh page for that show with **every chair marked
-free**. Screen 1 has 28 chairs, so the page for tonight's show has 28 lines.
+free** and its price next to it. Screen 1 has 28 chairs, so the page for tonight's show has 28 lines.
+Tomorrow's matinee can have other prices; once a show is announced, its prices don't change.
 
 ```mermaid
 flowchart TB
@@ -109,6 +110,10 @@ flowchart TB
   show. The same chair A1 has a different show seat for every show: free tonight, maybe taken tomorrow.
 - The message from the what's on desk to the seat desk is the `ShowScheduled` event. Both notebooks are
   updated together: there is never a show without its chairs.
+- Prices are per **seat type** for one show (`prices` in `POST /shows`, every type the hall has). They are
+  written in paise (`15000` = ₹150), whole numbers, so sums never get rounding errors. The seat desk copies
+  the price onto every chair's line, and later the ticket copies it again, so a ticket always says what was
+  paid.
 
 ## Chapter 2: Looking at the seats
 
@@ -184,8 +189,8 @@ sequenceDiagram
 ```
 
 **Behind the counter.**
-- Step 1 is `POST /holds` with `showSeatIds: [3, 4]`; the answer has the hold's id and `expiresAt` (the
-  timer). The sticky-note board is **Redis**, and the fading timer is a **TTL** on every key. Sticking all
+- Step 1 is `POST /holds` with `showSeatIds: [3, 4]`; the answer has the hold's id, `expiresAt` (the
+  timer) and `totalAmount` (what the chairs cost together). The sticky-note board is **Redis**, and the fading timer is a **TTL** on every key. Sticking all
   notes or none is a small **Lua script** that Redis runs in one go.
 - Step 2 is `POST /bookings` with the hold's id. "Only if still free" is one database statement:
   `UPDATE show_seat SET status = 'BOOKED' WHERE id IN (3, 4) AND status = 'AVAILABLE'`.
@@ -375,5 +380,5 @@ fade without a ticket, those chairs go back on sale.
 
 ## Not in the story yet
 
-- **Paying** and refunds: today a reservation becomes a ticket without paying.
+- **Paying** and refunds: the price is on the ticket, but today a reservation becomes a ticket without paying.
 - **A queue at the door** for when far more fans arrive than the office can serve.

@@ -18,7 +18,7 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
             where id in (:ids)
               and show_id = :showId
               and status = 'AVAILABLE'
-            returning id as showSeatId, row_label || seat_number as label
+            returning id as showSeatId, row_label || seat_number as label, price
             """, nativeQuery = true)
     List<BookedSeat> bookIfAvailable(Long showId, Collection<Long> ids);
 
@@ -34,7 +34,7 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeat, Long> {
     List<CandidateSeat> findAvailable(Long showId, String seatType);
 
     @Query(value = """
-            select id as showSeatId, show_id as showId, row_label || seat_number as label, status
+            select id as showSeatId, show_id as showId, row_label || seat_number as label, price, status
             from inventory.show_seat
             where id in (:ids)
             order by seat_id

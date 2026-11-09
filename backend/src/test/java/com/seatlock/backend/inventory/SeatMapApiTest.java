@@ -18,6 +18,8 @@ class SeatMapApiTest extends IntegrationTest {
         assertThat(layout.body().get("totalSeats").asInt()).isEqualTo(28);
         assertThat(layout.body().get("rows").get(2).get("label").asString()).isEqualTo("C");
         assertThat(layout.body().get("rows").get(2).get("seatType").asString()).isEqualTo("RECLINER");
+        assertThat(layout.body().get("rows").get(0).get("price").asLong()).isEqualTo(REGULAR_PRICE);
+        assertThat(layout.body().get("rows").get(2).get("price").asLong()).isEqualTo(RECLINER_PRICE);
         assertThat(layout.header("Cache-Control")).contains("max-age=86400");
     }
 

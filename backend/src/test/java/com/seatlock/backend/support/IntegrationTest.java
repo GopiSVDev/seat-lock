@@ -30,6 +30,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 public abstract class IntegrationTest {
 
     protected static final long CHENNAI = 5;
+    // Paise; prices of every newShow()
+    protected static final long REGULAR_PRICE = 15000;
+    protected static final long RECLINER_PRICE = 40000;
 
     protected final TestUser admin = TestUser.admin();
 
@@ -68,7 +71,8 @@ public abstract class IntegrationTest {
                         row("A", 10, "REGULAR"), row("B", 10, "REGULAR"), row("C", 8, "RECLINER")))));
         long showId = created(api.post("/shows", admin, Map.of(
                 "movieId", movieId, "screenId", screenId, "startTime", startTime.toString(),
-                "language", "ENGLISH", "format", "IMAX_2D")));
+                "language", "ENGLISH", "format", "IMAX_2D",
+                "prices", Map.of("REGULAR", REGULAR_PRICE, "RECLINER", RECLINER_PRICE))));
 
         JsonNode rows = api.get("/shows/" + showId + "/layout", null).body().get("rows");
         Map<String, List<Long>> seats = new LinkedHashMap<>();

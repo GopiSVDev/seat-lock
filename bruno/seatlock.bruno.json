@@ -959,7 +959,7 @@
             "params": [],
             "body": {
               "mode": "json",
-              "json": "{\n  \"movieId\": {{movieId}},\n  \"screenId\": {{screenId}},\n  \"startTime\": \"{{showStart}}\",\n  \"language\": \"ENGLISH\",\n  \"format\": \"IMAX_2D\"\n}",
+              "json": "{\n  \"movieId\": {{movieId}},\n  \"screenId\": {{screenId}},\n  \"startTime\": \"{{showStart}}\",\n  \"language\": \"ENGLISH\",\n  \"format\": \"IMAX_2D\",\n  \"prices\": { \"REGULAR\": 15000, \"RECLINER\": 40000 }\n}",
               "text": null,
               "xml": null,
               "sparql": null,
@@ -981,8 +981,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
-            "docs": "7:00 PM India time on 1 Jan 2030. Inventory creates one show seat per seat in the same transaction. Saves `showId`."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"prices in paise\", function () {\n  expect(res.getBody().prices).to.eql({ REGULAR: 15000, RECLINER: 40000 });\n});\n",
+            "docs": "7:00 PM India time on 1 Jan 2030. Inventory creates one show seat per seat in the same transaction. Saves `showId`. Prices are paise per seat type (15000 = ₹150) and must cover exactly the screen's seat types."
           },
           "seq": 5
         }
@@ -1626,7 +1626,7 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"held for 5 minutes\", function () {\n  expect(res.getBody().expiresAt).to.be.a(\"string\");\n  expect(res.getBody().seats.map(s => s.label)).to.eql([\"A1\", \"A2\"]);\n});\n",
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"held for 5 minutes\", function () {\n  expect(res.getBody().expiresAt).to.be.a(\"string\");\n  expect(res.getBody().seats.map(s => s.label)).to.eql([\"A1\", \"A2\"]);\n});\ntest(\"2 regular seats = ₹300\", function () {\n  expect(res.getBody().totalAmount).to.equal(30000);\n});\n",
             "docs": "Seats are held in Redis for 5 minutes; Postgres still says AVAILABLE. Saves `holdId`."
           },
           "seq": 1
@@ -1737,7 +1737,7 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by asha, with show details\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().show.movie.title).to.equal(\"Interstellar\");\n});\n",
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by asha, with show details\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().show.movie.title).to.equal(\"Interstellar\");\n});\ntest(\"amount kept\", function () {\n  expect(res.getBody().totalAmount).to.equal(30000);\n  expect(res.getBody().seats.map(s => s.price)).to.eql([15000, 15000]);\n});\n",
             "docs": "Seats become BOOKED (guarded UPDATE), then the hold is deleted. Owner comes from the token. Saves `bookingId`."
           },
           "seq": 4
@@ -1811,7 +1811,7 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"2 recliners = ₹800\", function () {\n  expect(res.getBody().totalAmount).to.equal(80000);\n});\n",
             "docs": "The server picks the best adjacent block that is neither booked nor held."
           },
           "seq": 6

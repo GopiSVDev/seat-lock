@@ -8,7 +8,9 @@ import com.seatlock.backend.catalogue.internal.movie.Movie;
 import com.seatlock.backend.catalogue.internal.movie.MovieRepository;
 import com.seatlock.backend.catalogue.internal.screen.Screen;
 import com.seatlock.backend.catalogue.internal.screen.ScreenRepository;
+import com.seatlock.backend.catalogue.internal.screen.Seat;
 import com.seatlock.backend.catalogue.internal.screen.SeatRepository;
+import com.seatlock.backend.catalogue.internal.screen.SeatType;
 import com.seatlock.backend.catalogue.internal.show.dto.CreateShowRequest;
 import com.seatlock.backend.catalogue.internal.show.dto.ShowResponse;
 import com.seatlock.backend.catalogue.internal.show.dto.ShowtimesResponse.Showtime;
@@ -30,9 +32,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -48,6 +53,7 @@ public class ShowService implements CatalogueApi {
     private final ShowtimeRepository showtimeRepository;
     private final CityService cityService;
     private final TheatreRepository theatreRepository;
+    private final ShowPriceRepository showPriceRepository;
 
     @Transactional
     public ShowResponse create(CreateShowRequest request) {
@@ -56,18 +62,30 @@ public class ShowService implements CatalogueApi {
         Screen screen = screenRepository.findById(request.screenId())
                 .orElseThrow(() -> new NotFoundException("Screen", request.screenId()));
 
+        List<Seat> screenSeats = seatRepository.findByScreenIdOrderByIdAsc(screen.getId());
+        Map<SeatType, Long> prices = request.prices();
+        Set<SeatType> seatTypes = screenSeats.stream()
+                .map(Seat::getSeatType)
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(SeatType.class)));
+        if (!seatTypes.equals(prices.keySet())) {
+            throw new BadRequestException("prices must cover exactly the screen's seat types " + seatTypes);
+        }
+
         Show show = showRepository.save(
                 new Show(movie, screen, request.startTime(), request.language(), request.format()));
+        List<ShowPrice> showPrices = showPriceRepository.saveAll(seatTypes.stream()
+                .map(type -> new ShowPrice(show, type, prices.get(type)))
+                .toList());
 
-        List<ShowScheduled.ScheduledSeat> seats = seatRepository.findByScreenIdOrderByIdAsc(screen.getId()).stream()
+        List<ShowScheduled.ScheduledSeat> seats = screenSeats.stream()
                 .map(seat -> new ShowScheduled.ScheduledSeat(
                         seat.getId(), seat.getRowLabel(), seat.getSeatNumber(), seat.getSeatType().name(),
-                        seat.getSeatRank()))
+                        seat.getSeatRank(), prices.get(seat.getSeatType())))
                 .toList();
-        
+
         eventPublisher.publishEvent(new ShowScheduled(show.getId(), seats));
 
-        return ShowResponse.from(show);
+        return ShowResponse.from(show, showPrices);
     }
 
     // Not paged: one movie, city and day is small.
@@ -143,7 +161,7 @@ public class ShowService implements CatalogueApi {
     @Transactional(readOnly = true)
     public ShowResponse getById(Long id) {
         return showRepository.findById(id)
-                .map(ShowResponse::from)
+                .map(show -> ShowResponse.from(show, showPriceRepository.findByShowId(id)))
                 .orElseThrow(() -> new NotFoundException("Show", id));
     }
 

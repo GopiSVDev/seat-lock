@@ -18,7 +18,7 @@ public class SeatMapRepository {
 
     public List<LayoutSeat> findLayout(Long showId) {
         return jdbcClient.sql("""
-                        select id, row_label, seat_number, seat_type
+                        select id, row_label, seat_number, seat_type, price
                         from inventory.show_seat
                         where show_id = :showId
                         order by seat_id
@@ -28,7 +28,8 @@ public class SeatMapRepository {
                         rs.getLong("id"),
                         rs.getString("row_label"),
                         rs.getInt("seat_number"),
-                        SeatType.valueOf(rs.getString("seat_type"))))
+                        SeatType.valueOf(rs.getString("seat_type")),
+                        rs.getLong("price")))
                 .list();
     }
 

@@ -36,17 +36,23 @@ public class ShowSeat {
     @Column(nullable = false)
     private int seatRank;
 
+    // Paise (copied from catalogue)
+    @Column(nullable = false)
+    private long price;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ShowSeatStatus status;
 
-    public ShowSeat(Long showId, Long seatId, String rowLabel, int seatNumber, SeatType seatType, int seatRank) {
+    public ShowSeat(Long showId, Long seatId, String rowLabel, int seatNumber, SeatType seatType, int seatRank,
+                    long price) {
         this.showId = showId;
         this.seatId = seatId;
         this.rowLabel = rowLabel;
         this.seatNumber = seatNumber;
         this.seatType = seatType;
         this.seatRank = seatRank;
+        this.price = price;
         this.status = ShowSeatStatus.AVAILABLE;
     }
 

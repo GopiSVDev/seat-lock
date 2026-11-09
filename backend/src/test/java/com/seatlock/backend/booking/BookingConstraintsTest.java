@@ -36,6 +36,21 @@ class BookingConstraintsTest extends IntegrationTest {
     }
 
     @Test
+    void amountsMustBePositive() {
+        TestShow show = newShow();
+        long bookingId = book(asha, show, show.seats("A", 1)).id();
+
+        assertThatThrownBy(() -> jdbc.sql("update booking.booking set total_amount = 0 where id = :id")
+                .param("id", bookingId).update())
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_booking_total_amount");
+        assertThatThrownBy(() -> jdbc.sql("update inventory.show_seat set price = -1 where show_id = :id")
+                .param("id", show.showId()).update())
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_show_seat_price");
+    }
+
+    @Test
     void aSeatIsInAtMostOneConfirmedBooking() {
         TestShow show = newShow();
         long first = book(asha, show, show.seats("A", 1)).id();

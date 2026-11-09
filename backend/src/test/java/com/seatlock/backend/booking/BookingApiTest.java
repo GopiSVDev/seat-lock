@@ -6,6 +6,7 @@ import com.seatlock.backend.support.TestShow;
 import com.seatlock.backend.support.TestUser;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -48,6 +49,21 @@ class BookingApiTest extends IntegrationTest {
         assertThat(redis.hasKey("hold:" + holdId)).isFalse();
         assertThat(redis.hasKey("seat:" + show.showId() + ":" + show.seats("A", 1).getFirst())).isFalse();
         assertThat(confirm(asha, holdId).status()).isEqualTo(404);
+    }
+
+    @Test
+    void bookingKeepsWhatEachSeatCost() {
+        TestShow show = newShow();
+        List<Long> seats = new ArrayList<>(show.seats("A", 1));
+        seats.add(show.seats("C", 1).getFirst());
+        long bookingId = book(asha, show, seats).id();
+
+        Response booking = api.get("/bookings/" + bookingId, asha);
+        assertThat(booking.body().get("totalAmount").asLong()).isEqualTo(REGULAR_PRICE + RECLINER_PRICE);
+        assertThat(ids(booking.body().get("seats"), "price")).containsExactlyInAnyOrder(REGULAR_PRICE, RECLINER_PRICE);
+
+        Response cancelled = api.post("/bookings/" + bookingId + "/cancel", asha);
+        assertThat(cancelled.body().get("totalAmount").asLong()).isEqualTo(REGULAR_PRICE + RECLINER_PRICE);
     }
 
     @Test
