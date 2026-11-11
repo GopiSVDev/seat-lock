@@ -43,4 +43,13 @@ public class Booking {
     private Instant createdAt;
 
     private Instant cancelledAt;
+
+    // One booking per hold
+    private String holdId;
+
+    // The payment service's id (another database, so no foreign key)
+    private Long paymentId;
+
+    // Deadline to pay; the hold lives until then
+    private Instant paymentExpiresAt;
 }

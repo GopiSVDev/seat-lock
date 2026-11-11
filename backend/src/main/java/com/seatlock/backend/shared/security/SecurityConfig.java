@@ -24,29 +24,30 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain apiSecurity(HttpSecurity http, ProblemDetailAuthHandler problemHandler) throws Exception {
         return http
-                // Tokens travel in a header, never a cookie, so there is nothing for CSRF to forge
+                // Tokens travel in a header, never a cookie, so there is nothing for CSRF to
+                // forge
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, CATALOGUE).permitAll()
+                .authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.GET, CATALOGUE).permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // Scraped without a token; production would serve actuator on an internal port
                         .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Dev checkout page (static, no data; its API calls carry the pasted token)
+                        .requestMatchers(HttpMethod.GET, "/dev/checkout.html").permitAll()
                         .requestMatchers(HttpMethod.POST, CATALOGUE).hasRole("ADMIN")
                         .requestMatchers("/bookings/**", "/holds/**").authenticated()
-                        .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth -> oauth
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakRoles()))
-                        .authenticationEntryPoint(problemHandler)
-                        .accessDeniedHandler(problemHandler))
-                .exceptionHandling(errors -> errors
-                        .authenticationEntryPoint(problemHandler)
-                        .accessDeniedHandler(problemHandler))
+                        // Service to service only: the payment service's client credentials token
+                        .requestMatchers("/internal/**").hasRole("BOOKING_CALLBACK").anyRequest().authenticated())
+                .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakRoles()))
+                        .authenticationEntryPoint(problemHandler).accessDeniedHandler(problemHandler))
+                .exceptionHandling(
+                        errors -> errors.authenticationEntryPoint(problemHandler).accessDeniedHandler(problemHandler))
                 .build();
     }
 
-    // Keycloak puts realm roles in realm_access.roles; Spring only reads "scope" by default
+    // Keycloak puts realm roles in realm_access.roles; Spring only reads "scope" by
+    // default
     private static JwtAuthenticationConverter keycloakRoles() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(SecurityConfig::realmRoles);
@@ -58,8 +59,6 @@ public class SecurityConfig {
         if (realmAccess == null || !(realmAccess.get("roles") instanceof List<?> roles)) {
             return List.of();
         }
-        return roles.stream()
-                .map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
-                .toList();
+        return roles.stream().map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role)).toList();
     }
 }

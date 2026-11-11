@@ -11,34 +11,15 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-public record ShowResponse(
-        Long id,
-        Long movieId,
-        String movieTitle,
-        Long screenId,
-        String screenName,
-        Instant startTime,
-        Instant endTime,
-        Language language,
-        ShowFormat format,
-        Map<SeatType, Long> prices
-) {
+public record ShowResponse(Long id, Long movieId, String movieTitle, Long screenId, String screenName,
+        Instant startTime, Instant endTime, Language language, ShowFormat format, Map<SeatType, Long> prices) {
 
     public static ShowResponse from(Show show, List<ShowPrice> prices) {
         Map<SeatType, Long> byType = new EnumMap<>(SeatType.class);
         prices.forEach(price -> byType.put(price.getSeatType(), price.getPrice()));
 
-        return new ShowResponse(
-                show.getId(),
-                show.getMovie().getId(),
-                show.getMovie().getTitle(),
-                show.getScreen().getId(),
-                show.getScreen().getName(),
-                show.getStartTime(),
-                show.getEndTime(),
-                show.getLanguage(),
-                show.getFormat(),
-                byType
-        );
+        return new ShowResponse(show.getId(), show.getMovie().getId(), show.getMovie().getTitle(),
+                show.getScreen().getId(), show.getScreen().getName(), show.getStartTime(), show.getEndTime(),
+                show.getLanguage(), show.getFormat(), byType);
     }
 }

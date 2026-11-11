@@ -23,8 +23,7 @@ public class HoldRateLimitInterceptor implements HandlerInterceptor {
     // A buyer changing seats a few times never notices; a script gets one hold every 6 seconds
     private static final int BURST = 10;
     private static final BucketConfiguration HOLDS = BucketConfiguration.builder()
-            .addLimit(limit -> limit.capacity(BURST).refillGreedy(BURST, Duration.ofMinutes(1)))
-            .build();
+            .addLimit(limit -> limit.capacity(BURST).refillGreedy(BURST, Duration.ofMinutes(1))).build();
 
     private final RateLimiter rateLimiter;
 
@@ -35,10 +34,9 @@ public class HoldRateLimitInterceptor implements HandlerInterceptor {
                 || !(SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken token)) {
             return true;
         }
-        rateLimiter.tryAcquire("rate:holds:" + CurrentUser.from(token.getToken()).id(), HOLDS)
-                .ifPresent(wait -> {
-                    throw new TooManyRequestsException("hold requests", wait);
-                });
+        rateLimiter.tryAcquire("rate:holds:" + CurrentUser.from(token.getToken()).id(), HOLDS).ifPresent(wait -> {
+            throw new TooManyRequestsException("hold requests", wait);
+        });
         return true;
     }
 }

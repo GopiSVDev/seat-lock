@@ -46,8 +46,8 @@ class CatalogueApiTest extends IntegrationTest {
         Response nowShowing = api.get("/movies?cityId=" + show.cityId(), null);
         assertThat(ids(nowShowing.body().get("items"), "id")).containsExactly(show.movieId());
 
-        Response showtimes = api.get("/shows?movieId=%d&cityId=%d&date=%s"
-                .formatted(show.movieId(), show.cityId(), day), null);
+        Response showtimes = api
+                .get("/shows?movieId=%d&cityId=%d&date=%s".formatted(show.movieId(), show.cityId(), day), null);
         assertThat(ids(showtimes.body().get("theatres"), "id")).containsExactly(show.theatreId());
         assertThat(ids(showtimes.body().get("theatres").get(0).get("shows"), "id")).containsExactly(show.showId());
 
@@ -77,8 +77,7 @@ class CatalogueApiTest extends IntegrationTest {
         assertThat(createShow(show, Map.of("REGULAR", 15000)).status()).as("missing type").isEqualTo(400);
         assertThat(createShow(show, Map.of("REGULAR", 15000, "RECLINER", 40000, "PREMIUM", 25000)).status())
                 .as("extra type").isEqualTo(400);
-        assertThat(createShow(show, Map.of("REGULAR", 0, "RECLINER", 40000)).status())
-                .as("zero price").isEqualTo(400);
+        assertThat(createShow(show, Map.of("REGULAR", 0, "RECLINER", 40000)).status()).as("zero price").isEqualTo(400);
         assertThat(createShow(show, Map.of()).status()).as("no prices").isEqualTo(400);
         assertThat(createShow(show, Map.of("REGULAR", 15000, "RECLINER", 40000)).status()).isEqualTo(201);
     }
@@ -87,8 +86,8 @@ class CatalogueApiTest extends IntegrationTest {
     void showtimesForAPastDayAreRejected() {
         TestShow show = newShow();
 
-        Response response = api.get("/shows?movieId=%d&cityId=%d&date=2020-01-01"
-                .formatted(show.movieId(), show.cityId()), null);
+        Response response = api
+                .get("/shows?movieId=%d&cityId=%d&date=2020-01-01".formatted(show.movieId(), show.cityId()), null);
 
         assertThat(response.status()).isEqualTo(400);
     }
@@ -104,10 +103,10 @@ class CatalogueApiTest extends IntegrationTest {
     }
 
     private Response createShow(TestShow show, Map<String, Integer> prices) {
-        return api.post("/shows", admin, Map.of(
-                "movieId", show.movieId(), "screenId", show.screenId(),
-                "startTime", show.startTime().plusSeconds(86400).toString(),
-                "language", "ENGLISH", "format", "TWO_D", "prices", prices));
+        return api.post("/shows", admin,
+                Map.of("movieId", show.movieId(), "screenId", show.screenId(), "startTime",
+                        show.startTime().plusSeconds(86400).toString(), "language", "ENGLISH", "format", "TWO_D",
+                        "prices", prices));
     }
 
     @Test

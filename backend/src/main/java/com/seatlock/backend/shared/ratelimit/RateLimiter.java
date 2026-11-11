@@ -27,7 +27,9 @@ public class RateLimiter {
     public Optional<Duration> tryAcquire(String key, BucketConfiguration limit) {
         try {
             ConsumptionProbe probe = buckets.getProxy(key, () -> limit).tryConsumeAndReturnRemaining(1);
-            return probe.isConsumed() ? Optional.empty() : Optional.of(Duration.ofNanos(probe.getNanosToWaitForRefill()));
+            return probe.isConsumed()
+                    ? Optional.empty()
+                    : Optional.of(Duration.ofNanos(probe.getNanosToWaitForRefill()));
         } catch (RuntimeException e) {
             log.warn("Rate limit skipped for {}: {}", key, e.toString());
             return Optional.empty();

@@ -23,8 +23,8 @@ public class CityController {
 
     @GetMapping
     public List<CityResponse> find(@RequestParam(required = false) @Size(max = 50) String query,
-                                   @RequestParam(defaultValue = "false") boolean popular,
-                                   @RequestParam(defaultValue = "false") boolean withTheatres) {
+            @RequestParam(defaultValue = "false") boolean popular,
+            @RequestParam(defaultValue = "false") boolean withTheatres) {
         return cityService.find(query, popular, withTheatres);
     }
 
@@ -41,7 +41,7 @@ public class CityController {
 
     @PostMapping("/{id}/aliases")
     public ResponseEntity<CityAliasResponse> addAlias(@PathVariable Long id,
-                                                      @Valid @RequestBody CreateCityAliasRequest request) {
+            @Valid @RequestBody CreateCityAliasRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(cityService.addAlias(id, request));
     }
 }

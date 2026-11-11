@@ -2,6 +2,7 @@ package com.seatlock.backend.shared.web;
 
 import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.ConflictException;
+import com.seatlock.backend.shared.exception.DownstreamException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import com.seatlock.backend.shared.exception.TooManyRequestsException;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage()));
     }
 
+    // Details (the other service's status and body) stay in the logs
+    @ExceptionHandler(DownstreamException.class)
+    public ProblemDetail handleDownstream(DownstreamException ex) {
+        log.error(ex.getMessage(), ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+    }
+
     // Unique constraint hit; constraint names stay in the logs, not the response
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
@@ -62,8 +70,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @Override
-    protected ResponseEntity<Object> handleMethodArgumentNotValid(
-            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         Map<String, String> errors = new LinkedHashMap<>();
         ex.getBindingResult().getFieldErrors()
                 .forEach(error -> errors.putIfAbsent(error.getField(), error.getDefaultMessage()));

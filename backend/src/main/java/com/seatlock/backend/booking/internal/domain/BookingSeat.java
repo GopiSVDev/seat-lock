@@ -6,8 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "booking_seat", schema = "booking",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"booking_id", "show_seat_id"}))
+@Table(name = "booking_seat", schema = "booking", uniqueConstraints = @UniqueConstraint(columnNames = {"booking_id",
+        "show_seat_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BookingSeat {

@@ -35,8 +35,8 @@ class HoldApiTest extends IntegrationTest {
         assertThat(hold.body().get("showId").asLong()).isEqualTo(show.showId());
         assertThat(ids(hold.body().get("seats"), "showSeatId")).containsExactlyElementsOf(show.seats("A", 2));
         assertThat(hold.body().get("seats").get(0).get("label").asString()).isEqualTo("A1");
-        assertThat(Instant.parse(hold.text("expiresAt")))
-                .isBetween(before.plus(Duration.ofMinutes(5)).minusSeconds(5), before.plus(Duration.ofMinutes(5)).plusSeconds(5));
+        assertThat(Instant.parse(hold.text("expiresAt"))).isBetween(before.plus(Duration.ofMinutes(5)).minusSeconds(5),
+                before.plus(Duration.ofMinutes(5)).plusSeconds(5));
         // Redis drops the keys by itself
         assertThat(redis.getExpire("hold:" + holdId)).isBetween(1L, 300L);
         assertThat(redis.getExpire("seat:" + show.showId() + ":" + show.seats("A", 1).getFirst())).isBetween(1L, 300L);

@@ -23,16 +23,15 @@ class BookingApiTest extends IntegrationTest {
 
         Response response = book(asha, show, show.seats("A", 2));
 
-        assertThat(response.status()).isEqualTo(201);
-        assertThat(response.header("Location")).isEqualTo("/bookings/" + response.id());
+        assertThat(response.status()).isEqualTo(200);
         assertThat(response.body().get("customerName").asString()).isEqualTo("Asha Kumar");
         assertThat(response.body().get("status").asString()).isEqualTo("CONFIRMED");
         assertThat(response.body().get("show").get("id").asLong()).isEqualTo(show.showId());
         assertThat(response.body().get("show").get("movie").get("id").asLong()).isEqualTo(show.movieId());
         assertThat(response.body().get("show").get("theatre").get("id").asLong()).isEqualTo(show.theatreId());
         assertThat(ids(response.body().get("seats"), "showSeatId")).containsExactlyElementsOf(show.seats("A", 2));
-        assertThat(jdbc.sql("select customer_id from booking.booking where id = :id")
-                .param("id", response.id()).query(String.class).single()).isEqualTo(asha.id());
+        assertThat(jdbc.sql("select customer_id from booking.booking where id = :id").param("id", response.id())
+                .query(String.class).single()).isEqualTo(asha.id());
         assertThat(seatStatuses(show.seats("A", 2))).containsOnly("BOOKED");
     }
 
@@ -43,12 +42,15 @@ class BookingApiTest extends IntegrationTest {
 
         Response booking = confirm(asha, holdId);
 
-        assertThat(booking.status()).isEqualTo(201);
+        assertThat(booking.status()).isEqualTo(200);
         assertThat(ids(booking.body().get("seats"), "showSeatId")).containsExactlyElementsOf(show.seats("A", 2));
         assertThat(api.get("/holds/" + holdId, asha).status()).isEqualTo(404);
         assertThat(redis.hasKey("hold:" + holdId)).isFalse();
         assertThat(redis.hasKey("seat:" + show.showId() + ":" + show.seats("A", 1).getFirst())).isFalse();
-        assertThat(confirm(asha, holdId).status()).isEqualTo(404);
+        // The hold is gone, but its booking is found again: no second booking
+        Response again = confirm(asha, holdId);
+        assertThat(again.status()).isEqualTo(200);
+        assertThat(again.id()).isEqualTo(booking.id());
     }
 
     @Test
@@ -87,7 +89,7 @@ class BookingApiTest extends IntegrationTest {
         assertThat(confirm(ravi, holdId).status()).isEqualTo(404);
         assertThat(confirm(asha, "no-such-hold").status()).isEqualTo(404);
         assertThat(api.post("/bookings", asha, Map.of()).status()).isEqualTo(400);
-        assertThat(confirm(asha, holdId).status()).isEqualTo(201);
+        assertThat(confirm(asha, holdId).status()).isEqualTo(200);
     }
 
     @Test
@@ -140,7 +142,7 @@ class BookingApiTest extends IntegrationTest {
         assertThat(cancelled.body().get("status").asString()).isEqualTo("CANCELLED");
         assertThat(cancelled.body().get("cancelledAt").isNull()).isFalse();
         assertThat(seatStatuses(show.seats("B", 2))).containsOnly("AVAILABLE");
-        assertThat(book(ravi, show, show.seats("B", 2)).status()).isEqualTo(201);
+        assertThat(book(ravi, show, show.seats("B", 2)).status()).isEqualTo(200);
     }
 
     @Test
@@ -172,7 +174,6 @@ class BookingApiTest extends IntegrationTest {
     // The API never creates past shows, so tests move the booking's copy of the show time
     private void moveShowSnapshotIntoThePast(long bookingId) {
         jdbc.sql("update booking.booking set show_start_time = now() - interval '1 hour' where id = :id")
-                .param("id", bookingId)
-                .update();
+                .param("id", bookingId).update();
     }
 }

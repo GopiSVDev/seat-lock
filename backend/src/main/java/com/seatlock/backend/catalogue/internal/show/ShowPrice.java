@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 
 // Fixed once the show exists: holds and bookings copy it
 @Entity
-@Table(name = "show_price", schema = "catalogue",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"show_id", "seat_type"}))
+@Table(name = "show_price", schema = "catalogue", uniqueConstraints = @UniqueConstraint(columnNames = {"show_id",
+        "seat_type"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ShowPrice {

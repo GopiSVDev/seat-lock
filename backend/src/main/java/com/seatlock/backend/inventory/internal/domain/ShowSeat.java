@@ -6,8 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "show_seat", schema = "inventory",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"show_id", "seat_id"}))
+@Table(name = "show_seat", schema = "inventory", uniqueConstraints = @UniqueConstraint(columnNames = {"show_id",
+        "seat_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ShowSeat {
@@ -45,7 +45,7 @@ public class ShowSeat {
     private ShowSeatStatus status;
 
     public ShowSeat(Long showId, Long seatId, String rowLabel, int seatNumber, SeatType seatType, int seatRank,
-                    long price) {
+            long price) {
         this.showId = showId;
         this.seatId = seatId;
         this.rowLabel = rowLabel;

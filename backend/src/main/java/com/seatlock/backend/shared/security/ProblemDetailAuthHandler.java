@@ -31,8 +31,8 @@ public class ProblemDetailAuthHandler implements AuthenticationEntryPoint, Acces
     private final JsonMapper jsonMapper;
 
     @Override
-    public void commence(HttpServletRequest request, HttpServletResponse response,
-                         AuthenticationException ex) throws IOException, ServletException {
+    public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException ex)
+            throws IOException, ServletException {
         bearerEntryPoint.commence(request, response, ex);
         String detail = ex instanceof InvalidBearerTokenException
                 ? "Invalid or expired token"
@@ -41,14 +41,14 @@ public class ProblemDetailAuthHandler implements AuthenticationEntryPoint, Acces
     }
 
     @Override
-    public void handle(HttpServletRequest request, HttpServletResponse response,
-                       AccessDeniedException ex) throws IOException, ServletException {
+    public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException ex)
+            throws IOException, ServletException {
         bearerDeniedHandler.handle(request, response, ex);
         write(request, response, HttpStatus.FORBIDDEN, "Not allowed for your role");
     }
 
-    private void write(HttpServletRequest request, HttpServletResponse response,
-                       HttpStatus status, String detail) throws IOException {
+    private void write(HttpServletRequest request, HttpServletResponse response, HttpStatus status, String detail)
+            throws IOException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("type", "about:blank");
         body.put("title", status.getReasonPhrase());

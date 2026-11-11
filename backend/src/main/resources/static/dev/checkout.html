@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- Dev only: drives Razorpay Checkout (test mode) until the real frontend exists. No secrets here:
+     the token is pasted by hand and Razorpay's key id is public. -->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SeatLock dev checkout</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+        label { display: block; margin-top: 1rem; font-weight: 600; }
+        textarea, input { width: 100%; box-sizing: border-box; font-family: monospace; }
+        button { margin-top: 1rem; padding: .5rem 1rem; }
+        pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; white-space: pre-wrap; }
+    </style>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+<h1>Dev checkout</h1>
+<p>1. Get a token (Bruno "01 log in", or curl) and hold seats (POST /holds). 2. Paste both, press Pay.
+    Razorpay test mode lets you pick success or failure.</p>
+
+<label for="token">Access token (customer)</label>
+<textarea id="token" rows="4"></textarea>
+
+<label for="holdId">Hold id</label>
+<input id="holdId">
+
+<button id="pay">Check out and pay</button>
+<pre id="log"></pre>
+
+<script>
+    const log = (title, value) => {
+        document.getElementById('log').textContent += title + '\n' + JSON.stringify(value, null, 2) + '\n\n';
+    };
+
+    async function call(method, path, body) {
+        const response = await fetch(path, {
+            method,
+            headers: {
+                'Authorization': 'Bearer ' + document.getElementById('token').value.trim(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        const json = await response.json();
+        log(method + ' ' + path + ' -> ' + response.status, json);
+        if (!response.ok) throw new Error(json.detail);
+        return json;
+    }
+
+    document.getElementById('pay').onclick = async () => {
+        const booking = await call('POST', '/bookings', {holdId: document.getElementById('holdId').value.trim()});
+        if (!booking.checkout) return;
+
+        // Close the widget a minute before the hold ends, so nobody pays for seats they no longer have
+        const secondsLeft = Math.floor((new Date(booking.paymentExpiresAt) - Date.now()) / 1000) - 60;
+        const checkout = new Razorpay({
+            key: booking.checkout.keyId,
+            order_id: booking.checkout.razorpayOrderId,
+            amount: booking.checkout.amount,
+            currency: booking.checkout.currency,
+            name: 'SeatLock',
+            description: booking.show.movie.title + ', ' + booking.seats.map(s => s.label).join(' '),
+            timeout: Math.max(secondsLeft, 60),
+            handler: result => call('POST', '/bookings/' + booking.id + '/payment', {
+                razorpayOrderId: result.razorpay_order_id,
+                razorpayPaymentId: result.razorpay_payment_id,
+                razorpaySignature: result.razorpay_signature
+            })
+        });
+        checkout.on('payment.failed', result => log('payment.failed (the order stays open, try again)', result.error));
+        checkout.open();
+    };
+</script>
+</body>
+</html>

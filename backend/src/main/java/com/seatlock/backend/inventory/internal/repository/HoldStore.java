@@ -29,6 +29,8 @@ public class HoldStore {
     private static final RedisScript<Long> RELEASE = script("release-hold", Long.class);
     @SuppressWarnings("rawtypes")
     private static final RedisScript<List> CLAIM = script("claim-hold", List.class);
+    @SuppressWarnings("rawtypes")
+    private static final RedisScript<List> EXTEND = script("extend-hold", List.class);
 
     private final StringRedisTemplate redis;
 
@@ -36,7 +38,8 @@ public class HoldStore {
     public Optional<Instant> place(String holdId, Long showId, String customerId, List<Long> seatIds, Duration ttl) {
         List<String> keys = new ArrayList<>(List.of(heldKey(showId), userHoldKey(showId, customerId), holdKey(holdId)));
 
-        List<String> args = new ArrayList<>(List.of(holdId, String.valueOf(ttl.toMillis()), customerId, showId.toString(), csv(seatIds)));
+        List<String> args = new ArrayList<>(
+                List.of(holdId, String.valueOf(ttl.toMillis()), customerId, showId.toString(), csv(seatIds)));
 
         for (Long seatId : seatIds) {
             keys.add("seat:" + showId + ":" + seatId);
@@ -55,8 +58,8 @@ public class HoldStore {
             return Optional.empty();
         }
 
-        return Optional.of(new HoldRecord(holdId, (String) fields.get(0), Long.valueOf((String) fields.get(1)), seatIds((String) fields.get(2)),
-                Instant.ofEpochMilli(Long.parseLong((String) fields.get(3)))));
+        return Optional.of(new HoldRecord(holdId, (String) fields.get(0), Long.valueOf((String) fields.get(1)),
+                seatIds((String) fields.get(2)), Instant.ofEpochMilli(Long.parseLong((String) fields.get(3)))));
     }
 
     // False if the hold is gone or someone else's
@@ -65,7 +68,8 @@ public class HoldStore {
     }
 
     public Optional<ClaimedHold> claim(String holdId, String customerId, Duration grace) {
-        List<?> result = redis.execute(CLAIM, List.of(holdKey(holdId)), holdId, customerId, String.valueOf(grace.toMillis()));
+        List<?> result = redis.execute(CLAIM, List.of(holdKey(holdId)), holdId, customerId,
+                String.valueOf(grace.toMillis()));
 
         if (result == null || result.isEmpty()) {
             return Optional.empty();
@@ -74,9 +78,24 @@ public class HoldStore {
         return Optional.of(new ClaimedHold(Long.valueOf((String) result.get(0)), seatIds((String) result.get(1))));
     }
 
-    // Expired entries stay in the set until the next hold on the show removes them, so filter by expiry
+    // Never shortens a hold; empty if it is gone or someone else's
+    public Optional<HoldRecord> extend(String holdId, String customerId, Duration window) {
+        List<?> result = redis.execute(EXTEND, List.of(holdKey(holdId)), holdId, customerId,
+                String.valueOf(window.toMillis()));
+
+        if (result == null || result.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new HoldRecord(holdId, customerId, Long.valueOf((String) result.get(0)),
+                seatIds((String) result.get(1)), Instant.ofEpochMilli(Long.parseLong((String) result.get(2)))));
+    }
+
+    // Expired entries stay in the set until the next hold on the show removes them,
+    // so filter by expiry
     public Set<Long> heldSeats(Long showId) {
-        Set<String> seats = redis.opsForZSet().rangeByScore(heldKey(showId), System.currentTimeMillis(), Double.POSITIVE_INFINITY);
+        Set<String> seats = redis.opsForZSet().rangeByScore(heldKey(showId), System.currentTimeMillis(),
+                Double.POSITIVE_INFINITY);
 
         return seats == null ? Set.of() : seats.stream().map(Long::valueOf).collect(Collectors.toSet());
     }

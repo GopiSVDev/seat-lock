@@ -7,6 +7,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is not set}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is not set}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
+      # Read by postgres/payment-db.sh
+      PAYMENT_DB: ${PAYMENT_DB:?PAYMENT_DB is not set}
+      PAYMENT_DB_USER: ${PAYMENT_DB_USER:?PAYMENT_DB_USER is not set}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is not set}
     # pg_stat_statements: per-statement stats for postgres-exporter (load tests)
     command:
       [
@@ -21,6 +25,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./monitoring/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./postgres/payment-db.sh:/docker-entrypoint-initdb.d/20-payment-db.sh:ro
     healthcheck:
       test:
         [
@@ -66,10 +71,56 @@ services:
       JWT_ISSUER_URI: ${JWT_ISSUER_URI:?JWT_ISSUER_URI is not set}
       JWT_AUDIENCE: ${JWT_AUDIENCE:?JWT_AUDIENCE is not set}
       SWAGGER_OAUTH_CLIENT_ID: ${SWAGGER_OAUTH_CLIENT_ID:?SWAGGER_OAUTH_CLIENT_ID is not set}
+      OAUTH_TOKEN_URI: http://keycloak:8080/realms/seatlock/protocol/openid-connect/token
+      OAUTH_CLIENT_ID: seatlock-backend
+      OAUTH_CLIENT_SECRET: ${BACKEND_CLIENT_SECRET:?BACKEND_CLIENT_SECRET is not set}
+      PAYMENT_URL: http://payment:${PAYMENT_PORT:?PAYMENT_PORT is not set}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:$${SERVER_PORT}/actuator/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Payment service: own database (same Postgres container), talks to Razorpay; the backend calls it
+  payment:
+    build:
+      context: ./payment
+    container_name: seat-lock-payment
+    restart: unless-stopped
+    ports:
+      - "${PAYMENT_PORT:?PAYMENT_PORT is not set}:${PAYMENT_PORT:?PAYMENT_PORT is not set}"
+    environment:
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=25
+      SERVER_PORT: ${PAYMENT_PORT:?PAYMENT_PORT is not set}
+      DB_URL: jdbc:postgresql://postgres:5432/${PAYMENT_DB:?PAYMENT_DB is not set}
+      DB_USERNAME: ${PAYMENT_DB_USER:?PAYMENT_DB_USER is not set}
+      DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is not set}
+      JWT_JWK_SET_URI: ${JWT_JWK_SET_URI:?JWT_JWK_SET_URI is not set}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:?JWT_ISSUER_URI is not set}
+      # Only tokens minted for this service (the backend's client adds this audience)
+      JWT_AUDIENCE: seatlock-payment-api
+      OAUTH_TOKEN_URI: http://keycloak:8080/realms/seatlock/protocol/openid-connect/token
+      OAUTH_CLIENT_ID: seatlock-payment
+      OAUTH_CLIENT_SECRET: ${PAYMENT_CLIENT_SECRET:?PAYMENT_CLIENT_SECRET is not set}
+      BACKEND_URL: http://backend:${BACKEND_PORT:?BACKEND_PORT is not set}
+      RAZORPAY_BASE_URL: https://api.razorpay.com
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:?RAZORPAY_KEY_ID is not set}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:?RAZORPAY_KEY_SECRET is not set}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:?RAZORPAY_WEBHOOK_SECRET is not set}
+    depends_on:
+      postgres:
         condition: service_healthy
       keycloak:
         condition: service_healthy
@@ -97,6 +148,9 @@ services:
       KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:?KEYCLOAK_PORT is not set}
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HEALTH_ENABLED: "true"
+      # Client secrets of the services, filled into the realm file on import
+      BACKEND_CLIENT_SECRET: ${BACKEND_CLIENT_SECRET:?BACKEND_CLIENT_SECRET is not set}
+      PAYMENT_CLIENT_SECRET: ${PAYMENT_CLIENT_SECRET:?PAYMENT_CLIENT_SECRET is not set}
     ports:
       - "${KEYCLOAK_PORT:?KEYCLOAK_PORT is not set}:8080"
     volumes:
@@ -131,6 +185,21 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Only pom + src, like the Dockerfile: a host target/ (e.g. from the IDE) may hold stale classes
+    command: ["sh", "-c", "cp /src/pom.xml /app/ && cp -r /src/src /app/ && mvn -B test"]
+
+  # docker compose run --rm payment-test   (same setup as backend-test)
+  payment-test:
+    image: maven:3.9.16-eclipse-temurin-25
+    profiles: [test]
+    working_dir: /app
+    volumes:
+      - ./payment:/src:ro
+      - maven_repo:/root/.m2
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["sh", "-c", "cp /src/pom.xml /app/ && cp -r /src/src /app/ && mvn -B test"]
 
   # --- Load test monitoring: runs on the laptop, the app (postgres, backend) runs in the LXD VM ---

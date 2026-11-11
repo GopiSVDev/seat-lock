@@ -21,15 +21,9 @@ public class SeatMapCacheConfig {
         cacheManager.setCacheNames(List.of()); // no caches created on demand: an unknown name fails
 
         // Layouts never change: no expiry (~6 KB each)
-        cacheManager.registerCustomCache(LAYOUTS, Caffeine.newBuilder()
-                .maximumSize(2000)
-                .recordStats()
-                .build());
-        cacheManager.registerCustomCache(AVAILABILITY, Caffeine.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(Duration.ofSeconds(1))
-                .recordStats()
-                .build());
+        cacheManager.registerCustomCache(LAYOUTS, Caffeine.newBuilder().maximumSize(2000).recordStats().build());
+        cacheManager.registerCustomCache(AVAILABILITY,
+                Caffeine.newBuilder().maximumSize(1000).expireAfterWrite(Duration.ofSeconds(1)).recordStats().build());
         return cacheManager;
     }
 }

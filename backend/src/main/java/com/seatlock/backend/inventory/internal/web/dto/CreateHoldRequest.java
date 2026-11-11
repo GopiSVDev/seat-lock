@@ -6,8 +6,5 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-public record CreateHoldRequest(
-        @NotNull Long showId,
-        @NotEmpty @Size(max = 10) List<@NotNull Long> showSeatIds
-) {
+public record CreateHoldRequest(@NotNull Long showId, @NotEmpty @Size(max = 10) List<@NotNull Long> showSeatIds) {
 }

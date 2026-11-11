@@ -28,6 +28,9 @@ desk keeps its own notebook:
 | **Seat desk** | for every show, which chairs are still free and which are taken | the `inventory` module |
 | **Ticket desk** | who bought which chairs | the `booking` module |
 
+Next door, in a separate room with its own locked notebook, sits the **cashier** (the payment service).
+The cashier talks to the **bank** (Razorpay) and is the only one who knows the bank's secret code words.
+
 The desks never read each other's notebooks. If the ticket desk needs a chair marked as taken, it **asks**
 the seat desk. That way each desk can be sure its notebook is always right.
 
@@ -50,7 +53,8 @@ It also copies the movie, the hall and the time onto the ticket, so the ticket s
 the posters change later, and Asha's "my tickets" list can show coming shows first and old ones apart.
 
 If Asha can't go, she can hand her ticket back before the show starts. The desk stamps it "cancelled"
-(she keeps it in her list) and tells the seat desk to put her chairs back on sale. If she nervously hands
+(she keeps it in her list), tells the seat desk to put her chairs back on sale and asks the cashier to give
+her money back. If she nervously hands
 it back twice, only the first stamp counts: otherwise the second could free a chair Ravi has just bought.
 Later, Asha can ask "show me my tickets" and gets only hers. If Ravi asks for Asha's ticket number, the desk
 says "no such ticket" (`404`), as if it didn't exist, so nobody can find out which ticket numbers are
@@ -69,6 +73,11 @@ flowchart LR
     people --> tickets
     whatson -- "a new show is on: here are its chairs" --> seats
     tickets -- "please mark these chairs taken" --> seats
+    cashier["Cashier (own room)<br/>payments, refunds"]
+    bank(["Bank: Razorpay"])
+    tickets -- "please collect / refund" --> cashier
+    cashier -- "Asha has paid" --> tickets
+    cashier --> bank
 ```
 
 ## Chapter 1: Getting a show ready
@@ -152,8 +161,8 @@ sequenceDiagram
 
 ## Chapter 3: Buying a ticket
 
-**What happens.** Asha picks chairs A3 and A4 and presses "Continue". Buying takes two steps, like at any
-real ticket counter.
+**What happens.** Asha picks chairs A3 and A4 and presses "Continue". Buying takes three steps, like at any
+real ticket counter: reserve, pay, get the ticket.
 
 **Step 1: the sticky notes.** Next to its notebook, the seat desk has a **board of sticky notes** with a
 timer on each. It writes "reserved for Asha" on two notes and sticks them on A3 and A4, both at once: if
@@ -163,13 +172,31 @@ board shows A3 and A4 as taken. If Asha walks away or takes too long, the notes 
 are free again. Nobody has to go round removing them. If she taps "back", the desk peels them off at once.
 If she picks other chairs instead, her old notes go and new ones are stuck on.
 
-**Step 2: the ticket.** Asha presses "Book". The ticket desk asks the seat desk one careful question:
+**Step 2: paying.** Asha presses "Pay". The ticket desk writes an **unpaid ticket** (*Asha, A3 and A4,
+₹300, pay by 7:15*), asks the seat desk to keep her sticky notes for **10 more minutes**, and asks the
+cashier to open a bill with the bank. Asha pays the bank directly, at the bank's own window (Razorpay
+Checkout): the cinema never sees her card. If her card is declined she can try UPI at the same window; the
+bill stays open.
+
+**Step 3: the ticket.** The bank gives Asha a **receipt with a stamp** only the bank and the cashier can
+check. She shows it at the ticket desk, the cashier checks the stamp, and only then does the ticket desk ask
+the seat desk one careful question:
 
 > "Please mark A3 and A4 as taken in your notebook, **but only if they are still free right now.**"
 
-They are, so the seat desk marks them taken and the ticket desk writes Asha's ticket: *Asha, tonight's
-show, chairs A3 and A4*. Both notebooks are updated **together**: if anything goes wrong halfway, neither
-notebook changes. Only then are the sticky notes thrown away.
+They are, so the seat desk marks them taken and the ticket desk stamps Asha's ticket **paid**. Both
+notebooks are updated **together**: if anything goes wrong halfway, neither notebook changes. Only then are
+the sticky notes thrown away.
+
+**And if her phone dies after paying?** The bank also sends the cashier a signed letter: "Asha paid bill
+42". The cashier tells the ticket desk, which does exactly the same as step 3. Whichever arrives second (her
+receipt or the letter) finds the ticket already stamped and changes nothing. If the ticket desk is closed
+when the letter comes, the cashier says "try again later" and the bank sends the letter again.
+
+**Paid, but the chairs are gone.** If Asha's notes faded before her money arrived (or she started picking
+other chairs meanwhile), the ticket desk can't give her A3 and A4. It stamps the ticket "failed" and the
+cashier gives the money back at once. If she never pays, a clerk walks round every 30 seconds and stamps
+overdue unpaid tickets "expired".
 
 ```mermaid
 sequenceDiagram
@@ -177,25 +204,46 @@ sequenceDiagram
     participant Tickets as Ticket desk
     participant Seats as Seat desk
     participant Notes as Sticky-note board
+    participant Cashier
+    participant Bank
     Asha->>Seats: Reserve A3 and A4
     Seats->>Notes: Stick notes on both, or neither (5-minute timer)
     Seats-->>Asha: Reserved until 7:05
-    Asha->>Tickets: Book my reservation
+    Asha->>Tickets: I want to pay
+    Tickets->>Notes: Keep the notes 10 more minutes
+    Tickets->>Cashier: Open a bill for ₹300
+    Cashier->>Bank: New bill
+    Tickets-->>Asha: Unpaid ticket, pay by 7:15
+    Asha->>Bank: Pays (card or UPI)
+    Bank-->>Asha: Stamped receipt
+    Asha->>Tickets: Here is my receipt
+    Tickets->>Cashier: Is this stamp real?
+    Cashier-->>Tickets: Yes
     Tickets->>Seats: Mark A3 and A4 taken, only if still free
     Seats-->>Tickets: Done
-    Tickets->>Tickets: Write the ticket for Asha
     Seats->>Notes: Throw the notes away
     Tickets-->>Asha: Here is your ticket
+    Bank->>Cashier: Letter: Asha paid (arrives later)
+    Cashier->>Tickets: Asha paid
+    Tickets-->>Cashier: Already stamped, nothing to do
 ```
 
 **Behind the counter.**
 - Step 1 is `POST /holds` with `showSeatIds: [3, 4]`; the answer has the hold's id, `expiresAt` (the
-  timer) and `totalAmount` (what the chairs cost together). The sticky-note board is **Redis**, and the fading timer is a **TTL** on every key. Sticking all
-  notes or none is a small **Lua script** that Redis runs in one go.
-- Step 2 is `POST /bookings` with the hold's id. "Only if still free" is one database statement:
+  timer) and `totalAmount` (what the chairs cost together). The sticky-note board is **Redis**, and the
+  fading timer is a **TTL** on every key. Sticking all notes or none is a small **Lua script** that Redis
+  runs in one go.
+- Step 2 is `POST /bookings` with the hold's id: a `PENDING_PAYMENT` booking and a Razorpay order. The
+  cashier is the separate **payment service**, with its own database; the desks talk to it over HTTP, each
+  showing its own staff wristband (a **client credentials** token).
+- Step 3 is `POST /bookings/{id}/payment` with Razorpay's three values. The stamp is an **HMAC signature**.
+  "Only if still free" is one database statement:
   `UPDATE show_seat SET status = 'BOOKED' WHERE id IN (3, 4) AND status = 'AVAILABLE'`.
-  If fewer chairs were updated than asked for, the whole booking is cancelled and nothing changes.
-- "Both notebooks together" is a **transaction**: all of it happens, or none of it does.
+  If fewer chairs were updated than asked for, nothing changes.
+- The bank's letter is a **webhook** (`payment.captured`); the cashier passes it on with
+  `POST /internal/bookings/{id}/paid`. Doing the same thing twice safely is called **idempotent**.
+- "Both notebooks together" is a **transaction**: all of it happens, or none of it does. Nobody ever waits
+  for the bank inside one.
 - The notebook (PostgreSQL) has the last word, not the notes. If the sticky-note board fell off the wall
   and every note was lost, people would have to pick their chairs again, but a chair still could not be
   sold twice.
@@ -377,8 +425,16 @@ fade without a ticket, those chairs go back on sale.
 | Access token (JWT) | The wristband: your name, your colour, an expiry time and the front desk's stamp |
 | Role (`CUSTOMER`, `ADMIN`) | The colour of the wristband |
 | `401` / `403` | "Get a wristband first" / "Your wristband doesn't open this counter" |
+| Payment service | The cashier in the room next door, with its own locked notebook |
+| Razorpay | The bank, where Asha pays at the bank's own window |
+| Client credentials token | A staff wristband one desk shows another |
+| Signature (HMAC) | The bank's stamp that only the bank and the cashier can check |
+| Webhook | The bank's letter to the cashier: "this bill is paid" |
+| Idempotent | Doing it twice changes nothing the second time |
+| Refund | The cashier giving the money back |
 
 ## Not in the story yet
 
-- **Paying** and refunds: the price is on the ticket, but today a reservation becomes a ticket without paying.
+- **Lost letters**: if both Asha's receipt and every one of the bank's letters got lost, or a refund request
+  itself failed, nobody checks again yet. A clerk who compares the cashier's book with the bank's comes later.
 - **A queue at the door** for when far more fans arrive than the office can serve.

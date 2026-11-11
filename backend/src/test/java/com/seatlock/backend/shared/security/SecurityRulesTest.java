@@ -19,6 +19,7 @@ class SecurityRulesTest extends IntegrationTest {
         assertThat(api.get("/movies", null).status()).isEqualTo(200);
         assertThat(api.get("/v3/api-docs", null).status()).isEqualTo(200);
         assertThat(api.get("/actuator/health", null).status()).isEqualTo(200);
+        assertThat(api.get("/dev/checkout.html", null).status()).isEqualTo(200);
     }
 
     @Test

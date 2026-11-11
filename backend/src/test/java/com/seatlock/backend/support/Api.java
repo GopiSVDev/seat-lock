@@ -41,8 +41,8 @@ public class Api {
             request.header("Authorization", "Bearer " + bearerToken);
         }
         if (body != null) {
-            request.header("Content-Type", "application/json")
-                    .method(method, HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
+            request.header("Content-Type", "application/json").method(method,
+                    HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
         } else {
             request.method(method, HttpRequest.BodyPublishers.noBody());
         }

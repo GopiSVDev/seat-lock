@@ -64,23 +64,20 @@ public class ShowService implements CatalogueApi {
 
         List<Seat> screenSeats = seatRepository.findByScreenIdOrderByIdAsc(screen.getId());
         Map<SeatType, Long> prices = request.prices();
-        Set<SeatType> seatTypes = screenSeats.stream()
-                .map(Seat::getSeatType)
+        Set<SeatType> seatTypes = screenSeats.stream().map(Seat::getSeatType)
                 .collect(Collectors.toCollection(() -> EnumSet.noneOf(SeatType.class)));
         if (!seatTypes.equals(prices.keySet())) {
             throw new BadRequestException("prices must cover exactly the screen's seat types " + seatTypes);
         }
 
-        Show show = showRepository.save(
-                new Show(movie, screen, request.startTime(), request.language(), request.format()));
-        List<ShowPrice> showPrices = showPriceRepository.saveAll(seatTypes.stream()
-                .map(type -> new ShowPrice(show, type, prices.get(type)))
-                .toList());
+        Show show = showRepository
+                .save(new Show(movie, screen, request.startTime(), request.language(), request.format()));
+        List<ShowPrice> showPrices = showPriceRepository
+                .saveAll(seatTypes.stream().map(type -> new ShowPrice(show, type, prices.get(type))).toList());
 
         List<ShowScheduled.ScheduledSeat> seats = screenSeats.stream()
-                .map(seat -> new ShowScheduled.ScheduledSeat(
-                        seat.getId(), seat.getRowLabel(), seat.getSeatNumber(), seat.getSeatType().name(),
-                        seat.getSeatRank(), prices.get(seat.getSeatType())))
+                .map(seat -> new ShowScheduled.ScheduledSeat(seat.getId(), seat.getRowLabel(), seat.getSeatNumber(),
+                        seat.getSeatType().name(), seat.getSeatRank(), prices.get(seat.getSeatType())))
                 .toList();
 
         eventPublisher.publishEvent(new ShowScheduled(show.getId(), seats));
@@ -89,8 +86,8 @@ public class ShowService implements CatalogueApi {
     }
 
     // Not paged: one movie, city and day is small.
-    public ShowtimesResponse findShowtimes(Long movieId, Long cityId, LocalDate date,
-                                           List<Language> languages, List<ShowFormat> formats) {
+    public ShowtimesResponse findShowtimes(Long movieId, Long cityId, LocalDate date, List<Language> languages,
+            List<ShowFormat> formats) {
         if (!movieRepository.existsById(movieId)) {
             throw new NotFoundException("Movie", movieId);
         }
@@ -108,8 +105,8 @@ public class ShowService implements CatalogueApi {
 
     // Transactional: the response reads the theatre's lazy city.
     @Transactional(readOnly = true)
-    public TheatreShowtimesResponse findTheatreShowtimes(Long theatreId, LocalDate date,
-                                                         List<Language> languages, List<ShowFormat> formats) {
+    public TheatreShowtimesResponse findTheatreShowtimes(Long theatreId, LocalDate date, List<Language> languages,
+            List<ShowFormat> formats) {
         Theatre theatre = theatreRepository.findById(theatreId)
                 .orElseThrow(() -> new NotFoundException("Theatre", theatreId));
 
@@ -136,8 +133,7 @@ public class ShowService implements CatalogueApi {
         Map<Long, MovieShows> movies = new LinkedHashMap<>();
         for (ShowtimeRow row : rows) {
             movies.computeIfAbsent(row.movieId(), id -> new MovieShows(id, row.movieTitle(), row.moviePosterUrl(),
-                            row.movieCertification(), row.movieDurationMinutes(), new ArrayList<>()))
-                    .shows()
+                    row.movieCertification(), row.movieDurationMinutes(), new ArrayList<>())).shows()
                     .add(showtime(row));
         }
         return List.copyOf(movies.values());
@@ -150,9 +146,8 @@ public class ShowService implements CatalogueApi {
     private static List<TheatreShows> groupByTheatre(List<ShowtimeRow> rows) {
         Map<Long, TheatreShows> theatres = new LinkedHashMap<>();
         for (ShowtimeRow row : rows) {
-            theatres.computeIfAbsent(row.theatreId(), id ->
-                            new TheatreShows(id, row.theatreName(), row.theatreAddress(), new ArrayList<>()))
-                    .shows()
+            theatres.computeIfAbsent(row.theatreId(),
+                    id -> new TheatreShows(id, row.theatreName(), row.theatreAddress(), new ArrayList<>())).shows()
                     .add(showtime(row));
         }
         return List.copyOf(theatres.values());
@@ -160,19 +155,17 @@ public class ShowService implements CatalogueApi {
 
     @Transactional(readOnly = true)
     public ShowResponse getById(Long id) {
-        return showRepository.findById(id)
-                .map(show -> ShowResponse.from(show, showPriceRepository.findByShowId(id)))
+        return showRepository.findById(id).map(show -> ShowResponse.from(show, showPriceRepository.findByShowId(id)))
                 .orElseThrow(() -> new NotFoundException("Show", id));
     }
 
     @Override
     public ShowSummary findShowSummary(Long showId) {
-        Show show = showRepository.findWithDetailsById(showId)
-                .orElseThrow(() -> new NotFoundException("Show", showId));
+        Show show = showRepository.findWithDetailsById(showId).orElseThrow(() -> new NotFoundException("Show", showId));
         Movie movie = show.getMovie();
         Theatre theatre = show.getScreen().getTheatre();
-        return new ShowSummary(show.getId(), show.getStartTime(), show.getLanguage().name(),
-                show.getFormat().name(), movie.getId(), movie.getTitle(), movie.getPosterUrl(),
-                movie.getCertification().name(), theatre.getId(), theatre.getName(), show.getScreen().getName());
+        return new ShowSummary(show.getId(), show.getStartTime(), show.getLanguage().name(), show.getFormat().name(),
+                movie.getId(), movie.getTitle(), movie.getPosterUrl(), movie.getCertification().name(), theatre.getId(),
+                theatre.getName(), show.getScreen().getName());
     }
 }

@@ -19,9 +19,18 @@ class BookingConstraintsTest extends IntegrationTest {
         long bookingId = book(asha, show, show.seats("A", 1)).id();
 
         assertThatThrownBy(() -> jdbc.sql("update booking.booking set status = 'CANCELLED' where id = :id")
-                .param("id", bookingId).update())
-                .isInstanceOf(DataIntegrityViolationException.class)
+                .param("id", bookingId).update()).isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("ck_booking_cancelled_at");
+    }
+
+    @Test
+    void unpaidBookingNeedsAPaymentDeadline() {
+        TestShow show = newShow();
+        long bookingId = checkout(asha, hold(asha, show, show.seats("A", 1)).text("id")).id();
+
+        assertThatThrownBy(() -> jdbc.sql("update booking.booking set payment_expires_at = null where id = :id")
+                .param("id", bookingId).update()).isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_booking_payment_expires_at");
     }
 
     @Test
@@ -30,8 +39,7 @@ class BookingConstraintsTest extends IntegrationTest {
         long bookingId = book(asha, show, show.seats("A", 1)).id();
 
         assertThatThrownBy(() -> jdbc.sql("update booking.booking set status = 'LOST' where id = :id")
-                .param("id", bookingId).update())
-                .isInstanceOf(DataIntegrityViolationException.class)
+                .param("id", bookingId).update()).isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("ck_booking_status");
     }
 
@@ -41,12 +49,10 @@ class BookingConstraintsTest extends IntegrationTest {
         long bookingId = book(asha, show, show.seats("A", 1)).id();
 
         assertThatThrownBy(() -> jdbc.sql("update booking.booking set total_amount = 0 where id = :id")
-                .param("id", bookingId).update())
-                .isInstanceOf(DataIntegrityViolationException.class)
+                .param("id", bookingId).update()).isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("ck_booking_total_amount");
         assertThatThrownBy(() -> jdbc.sql("update inventory.show_seat set price = -1 where show_id = :id")
-                .param("id", show.showId()).update())
-                .isInstanceOf(DataIntegrityViolationException.class)
+                .param("id", show.showId()).update()).isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("ck_show_seat_price");
     }
 
@@ -58,11 +64,10 @@ class BookingConstraintsTest extends IntegrationTest {
 
         // Point the second booking's seat at the first booking's seat
         assertThatThrownBy(() -> jdbc.sql("""
-                        update booking.booking_seat
-                        set show_seat_id = (select show_seat_id from booking.booking_seat where booking_id = :first)
-                        where booking_id = :second
-                        """)
-                .param("first", first).param("second", second).update())
+                update booking.booking_seat
+                set show_seat_id = (select show_seat_id from booking.booking_seat where booking_id = :first)
+                where booking_id = :second
+                """).param("first", first).param("second", second).update())
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("uk_booking_seat_active_show_seat");
     }

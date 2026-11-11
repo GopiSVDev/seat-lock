@@ -9,16 +9,9 @@ import jakarta.validation.constraints.Positive;
 
 import java.util.List;
 
-public record CreateScreenRequest(
-        @NotBlank String name,
-        @NotEmpty List<@Valid Row> rows
-) {
+public record CreateScreenRequest(@NotBlank String name, @NotEmpty List<@Valid Row> rows) {
 
     // One row of the layout; expanded into seats 1..seatCount
-    public record Row(
-            @NotBlank String label,
-            @Positive int seatCount,
-            @NotNull SeatType seatType
-    ) {
+    public record Row(@NotBlank String label, @Positive int seatCount, @NotNull SeatType seatType) {
     }
 }

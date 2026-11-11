@@ -25,25 +25,23 @@ public class TheatreService {
 
     public PageResponse<TheatreResponse> find(Long cityId, String query, int page, int size) {
         if (cityId != null) {
-            cityService.findCity(cityId);   // unknown city → 404, not an empty list
+            cityService.findCity(cityId); // unknown city → 404, not an empty list
         }
         String name = query == null || query.isBlank() ? null : query.strip();
         long offset = (long) page * size;
-        var items = theatreBrowseRepository.find(cityId, name, size, offset).stream()
-                .map(TheatreService::toResponse)
+        var items = theatreBrowseRepository.find(cityId, name, size, offset).stream().map(TheatreService::toResponse)
                 .toList();
         return PageResponse.of(items, page, size, theatreBrowseRepository.count(cityId, name));
     }
 
     private static TheatreResponse toResponse(TheatreRow row) {
-        return new TheatreResponse(row.id(), row.name(),
-                new TheatreResponse.CityInfo(row.cityId(), row.cityName()), row.address());
+        return new TheatreResponse(row.id(), row.name(), new TheatreResponse.CityInfo(row.cityId(), row.cityName()),
+                row.address());
     }
 
     @Transactional(readOnly = true)
     public TheatreResponse getById(Long id) {
-        return theatreRepository.findById(id)
-                .map(TheatreResponse::from)
+        return theatreRepository.findById(id).map(TheatreResponse::from)
                 .orElseThrow(() -> new NotFoundException("Theatre", id));
     }
 }

@@ -16,7 +16,8 @@ public class ScreenController {
     private final ScreenService screenService;
 
     @PostMapping("/theatres/{theatreId}/screens")
-    public ResponseEntity<ScreenResponse> create(@PathVariable Long theatreId, @Valid @RequestBody CreateScreenRequest request) {
+    public ResponseEntity<ScreenResponse> create(@PathVariable Long theatreId,
+            @Valid @RequestBody CreateScreenRequest request) {
         ScreenResponse response = screenService.create(theatreId, request);
         return ResponseEntity.created(URI.create("/screens/" + response.id())).body(response);
     }

@@ -3,7 +3,8 @@
 A movie ticket booking backend (in the spirit of BookMyShow or Ticketmaster) built to answer one question:
 **how do you never sell the same seat twice when thousands of people try to book at once?**
 
-It is a modular monolith (Spring Boot 4, Java 25, PostgreSQL 16). It started deliberately simple; each
+It is a modular monolith (Spring Boot 4, Java 25, PostgreSQL 16) plus a separate payment service that takes
+real payments through Razorpay (test mode). It started deliberately simple; each
 improvement was made only after a load test showed a real problem; the story is in
 [loadtest/results/SUMMARY.md](loadtest/results/SUMMARY.md), every run in
 [loadtest/results/RESULTS.md](loadtest/results/RESULTS.md).
@@ -34,9 +35,11 @@ programming needed. API reference with request and response examples: **[docs/ap
    available N seats of a type", where the server chooses the best adjacent block for them. Nobody else
    can take held seats; a hold that isn't booked expires by itself. Holding is rate limited per user, so a
    script can't keep grabbing and releasing seats.
-5. The customer **books** the hold (later: after paying).
+5. The customer **checks out**: the hold is kept for 10 more minutes and they **pay** with Razorpay. Only a
+   verified payment books the seats. If the money arrives but the seats were lost in the meantime, the
+   payment is refunded automatically; unpaid bookings expire.
 
-26 endpoints in total, all JSON over HTTP. Errors use the standard
+28 public endpoints plus one internal one, all JSON over HTTP. Errors use the standard
 [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) format.
 
 | Area | Endpoints |
@@ -44,7 +47,8 @@ programming needed. API reference with request and response examples: **[docs/ap
 | Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `GET /theatres`, `POST /theatres`, `GET /theatres/{id}`, `GET /theatres/{id}/shows`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `GET /shows`, `POST /shows`, `GET /shows/{id}` |
 | Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
 | Holds | `POST /holds`, `POST /holds/best-available`, `GET /holds/{id}`, `DELETE /holds/{id}` |
-| Booking | `POST /bookings`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel` |
+| Booking | `POST /bookings` (checkout), `POST /bookings/{id}/payment`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel` |
+| Internal (payment service only) | `POST /internal/bookings/{id}/paid` |
 
 Who may call what: `GET` on catalogue and seat maps is public, creating catalogue data needs the `ADMIN`
 role, and holds and bookings need a logged-in user. Logins come from **Keycloak**; the backend checks the JWT access
@@ -58,8 +62,17 @@ Everything runs in Docker.
 
 ```bash
 cp .env.example .env            # credentials, ports, Keycloak token settings, thread and pool sizes (no defaults in the app)
-docker compose up --build -d    # PostgreSQL on :5433, backend on :8080, Keycloak on :8180
+docker compose up --build -d    # PostgreSQL :5433, backend :8080, payment :8081, Keycloak :8180
 curl -s localhost:8080/actuator/health
+```
+
+`docker compose up --build -d` starts everything (Postgres, Redis, Keycloak, backend, payment service) in
+dependency order. On a new Postgres volume an init script creates the payment service's database; on a new
+Keycloak volume the realm is imported. After pulling changes to either (new realm clients, a new database),
+start over from empty volumes, which **deletes all data** (bookings, shows, Keycloak users created later):
+
+```bash
+docker compose down && docker volume rm -f seat-lock_postgres_data seat-lock_keycloak_data && docker compose up --build -d
 ```
 
 Then walk through the whole flow (ids assume an empty database). Tokens come from Keycloak's dev-only
@@ -92,10 +105,10 @@ curl -s $B/shows/1/availability    # which seat ids are taken
 
 HOLD=$(curl -s -XPOST $B/holds -H "$ASHA" -H 'Content-Type: application/json' \
   -d '{"showId":1,"showSeatIds":[1,2]}' | jq -r .id)     # A1, A2 held for 5 minutes (totalAmount 30000 = ₹300)
-curl -s -XPOST $B/bookings -H "$ASHA" -H 'Content-Type: application/json' -d "{\"holdId\":\"$HOLD\"}"
 curl -s -XPOST $B/holds/best-available -H "$ASHA" -H 'Content-Type: application/json' \
-  -d '{"showId":1,"quantity":2,"seatType":"RECLINER"}'   # then book its id the same way, or let it expire
-curl -s -H "$ASHA" $B/bookings/1
+  -d '{"showId":1,"quantity":2,"seatType":"RECLINER"}'   # the server picks 2 adjacent recliners
+echo "$HOLD"; echo "${ASHA#Authorization: Bearer }"     # paste both into localhost:8080/dev/checkout.html, pay
+curl -s -H "$ASHA" $B/bookings/1   # CONFIRMED once paid
 curl -s -XPOST -H "$ASHA" $B/bookings/1/cancel   # seats A1, A2 go back on sale
 curl -s -H "$ASHA" $B/bookings     # Asha's upcoming bookings, soonest first (?period=PAST for past)
 curl -s "$B/movies?cityId=5"       # now showing in Chennai
@@ -103,6 +116,11 @@ curl -s "$B/shows?movieId=1&cityId=5&date=2030-01-01"   # its shows that day, by
 curl -s "$B/theatres?cityId=5&query=pvr"                 # cinemas in Chennai
 curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one cinema, by movie
 ```
+
+Paying needs a browser: Razorpay Checkout is a widget, so `/dev/checkout.html` (a dev-only page served by the
+backend) calls `POST /bookings`, opens Checkout in test mode and sends the result to `/bookings/{id}/payment`.
+`curl -XPOST $B/bookings -d '{"holdId":...}'` alone gives a `PENDING_PAYMENT` booking that expires unpaid.
+The payment service needs Razorpay test keys in `.env` (see [Payments](#paying-checkout-razorpay-and-the-webhook)).
 
 Holding seats someone else holds or booked returns `409 Conflict`; more than 10 holds in a burst (then 1 every 6 s)
 returns `429 Too Many Requests` with `Retry-After`. Without a token, `POST /movies` returns `401`; with
@@ -112,10 +130,14 @@ Logins are handled by **Keycloak** (admin console at [localhost:8180/admin](http
 credentials from `.env`). The `seatlock` realm comes with test users `admin`/`admin` (ADMIN), `asha`/`asha`
 and `ravi`/`ravi` (CUSTOMER); new sign-ups get CUSTOMER. These are local development credentials only.
 
-**Bruno collection:** [bruno/seatlock.bruno.json](bruno/seatlock.bruno.json) holds every request above and
-more (66, in 8 folders: log in, health, cities, admin setup, browsing, seat map, holds and bookings, security checks
-that must fail), each with tests. Import it in [Bruno](https://www.usebruno.com/), pick the `local`
-environment, run "01 Log in", then run the collection; created ids are passed along automatically.
+**Bruno collection:** [collections/seatlock.bruno.json](collections/seatlock.bruno.json) holds every request above and
+more (77, in 8 folders: log in, health, cities, admin setup, browsing, seat map, holds/checkout/payment,
+security checks that must fail), each with tests. Import it in [Bruno](https://www.usebruno.com/), pick the
+`local` environment and set its secret `webhookSecret` to your `RAZORPAY_WEBHOOK_SECRET`, run "01 Log in",
+then run the collection; created ids are passed along automatically. Bookings are paid with a **simulated
+Razorpay webhook**: a script builds a `payment.captured` event and signs it with that secret, so the real
+chain runs (signature check, payment service, service token, internal callback). Cancelling such a booking
+asks Razorpay to refund a payment it never saw; Razorpay refuses and the backend logs it.
 
 API docs: Swagger UI at [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), the OpenAPI
 spec at `/v3/api-docs`. Its **Authorize** button logs in through Keycloak (client `seatlock-web`,
@@ -123,9 +145,11 @@ authorization code with PKCE) and sends the token with every call. The hand-writ
 
 ## Architecture
 
-One Spring Boot application split into three modules. Each module owns its own tables in its own
-PostgreSQL schema, and modules only talk through small public interfaces or events, so they could later be
-split into separate services. Redis holds the short-lived seat holds.
+One Spring Boot application (the backend) split into three modules, plus a separate **payment service**.
+Each backend module owns its own tables in its own PostgreSQL schema, and modules only talk through small
+public interfaces or events, so they could later be split into separate services. Redis holds the
+short-lived seat holds. Payment was split out first: it holds the payment provider's secrets, talks to an
+outside system that can be slow or down, and keeps its own database.
 
 ```mermaid
 flowchart LR
@@ -145,7 +169,18 @@ flowchart LR
 
     redis[(Redis<br/>seat holds)]
 
+    subgraph pay[Payment service]
+        payment[payment<br/>orders, captures,<br/>refunds, webhook]
+    end
+    paydb[(payment database)]
+    razorpay([Razorpay])
+
     client --> catalogue & inventory & booking
+    booking -- "REST + service token<br/>create / verify / refund" --> payment
+    payment -- "REST + service token<br/>/internal/bookings/{id}/paid" --> booking
+    payment --> razorpay
+    razorpay -- "webhook" --> payment
+    payment --- paydb
     catalogue -- "ShowScheduled event" --> inventory
     booking -- "InventoryApi<br/>confirmHold / releaseSeats" --> inventory
     booking -- "CatalogueApi<br/>findShowSummary" --> catalogue
@@ -159,9 +194,12 @@ flowchart LR
 |---|---|---|---|
 | **catalogue** | movies, theatres, screens, physical seats, shows | `CatalogueApi`, `ShowSummary`, `ShowScheduled` event | movies, theatres, screens, shows |
 | **inventory** | `show_seat`: every seat of every show and its status (AVAILABLE / BOOKED); seat holds (Redis) | `InventoryApi`, `ConfirmedHold`, `BookedSeat` | seat map (layout, availability), holds |
-| **booking** | bookings and the seats in each booking | none yet | bookings |
+| **booking** | bookings and the seats in each booking | none yet | bookings, internal paid callback |
+| **payment** (own app) | payments, payment attempts, refunds (own database `payment`) | REST, service tokens only | `/payments/**`, `/webhooks/razorpay` |
 
-**Dependencies point one way:** booking → inventory → catalogue, and booking → catalogue. Nothing depends on booking.
+**Dependencies point one way inside the backend:** booking → inventory → catalogue, and booking → catalogue.
+Nothing depends on booking. Booking and the payment service call each other over HTTP (a dependency cycle,
+on purpose for now; events in a later step remove the payment → booking call).
 
 **Package rule.** Each module is a package under `com.seatlock.backend`:
 
@@ -192,11 +230,13 @@ fails the build if a class breaks this rule.
   the screen's seats. Inventory listens and creates one `show_seat` row per seat, copying row, number,
   type and rank so it can serve the seat map without asking catalogue. The listener runs synchronously in
   the same transaction, so a show never exists without its seats.
-- **Booking** (`POST /bookings`): booking calls `InventoryApi.confirmHold` to mark the hold's seats BOOKED,
-  asks `CatalogueApi` for the show's details (one query), then inserts the booking with a copy of the show
-  details. All of it happens in one database transaction, so either everything succeeds or nothing does;
-  the hold is deleted from Redis only after the commit. The copy lets "my
-  bookings" render and split into upcoming/past by show time without asking catalogue.
+- **Checkout** (`POST /bookings`): booking calls `InventoryApi.startPayment` to keep the hold alive for the
+  payment window, asks `CatalogueApi` for the show's details (one query), then inserts an unpaid booking with
+  a copy of the show details. The copy lets "my bookings" render and split into upcoming/past by show time
+  without asking catalogue.
+- **Confirming a paid booking**: booking calls `InventoryApi.confirmHold` to mark the hold's seats BOOKED,
+  in the same transaction that marks the booking CONFIRMED; the hold is deleted from Redis only after the
+  commit.
 - **Cancelling** (`POST /bookings/{id}/cancel`): a guarded update
   `... set status = 'CANCELLED' where id = ? and customer_id = ? and status = 'CONFIRMED' and show_start_time > now`
   decides the winner. Only the request that changed the row releases the seats through `InventoryApi`, in
@@ -204,13 +244,22 @@ fails the build if a class breaks this rule.
   release could free a seat someone else had booked in between, and it would be sold twice.
 
 `shared/` holds cross-cutting code: the global error handler, the exception types that services throw
-(`NotFoundException`, `ConflictException`, `TooManyRequestsException`, ...), security, and the Redis-backed
+(`NotFoundException`, `ConflictException`, `TooManyRequestsException`, `DownstreamException` → 502, ...),
+security (user tokens in, the backend's own client-credentials token out), and the Redis-backed
 `RateLimiter` that modules apply to their own endpoints (inventory limits holds).
+
+**Service-to-service calls carry their own tokens.** Each service is a confidential Keycloak client
+(`seatlock-backend`, `seatlock-payment`) and gets a token with the client credentials grant; Spring caches it
+until it expires. The token names one role per service and is minted for one audience: the payment service
+accepts only tokens for `seatlock-payment-api` with role `PAYMENTS_CLIENT`, and the backend's `/internal/**`
+accepts only role `BOOKING_CALLBACK`. A user's token can't call either, and neither can a stolen token of the
+other direction.
 
 ## How a booking works
 
 This is the core of the project. Thousands of requests may target the same few seats at the same moment.
-Checkout has two steps, as on any ticket site: **hold** the seats for 5 minutes, then **book** the hold.
+Buying has three steps, as on any ticket site: **hold** the seats for 5 minutes, **check out** (the hold is
+kept for the 10-minute payment window), then **pay**; only a verified payment books the seats.
 
 ### Two stores, two jobs
 
@@ -264,13 +313,71 @@ sequenceDiagram
   instances a user still gets 10, not 10 per instance. If Redis is down the limit is skipped (fails open): it
   protects capacity, it never decides who gets a seat. Not covered: many accounts (bot detection).
 
-### Booking a hold: `POST /bookings`
+### Paying: checkout, Razorpay and the webhook
 
-1. A second Lua script checks the hold belongs to the caller and keeps its keys alive for at least 60 more
-   seconds, so the hold can't expire and be grabbed while the booking is being written.
-2. In one transaction: the same guarded update as always,
-   `UPDATE show_seat SET status = 'BOOKED' WHERE id IN (...) AND status = 'AVAILABLE' RETURNING id, label`,
-   then the booking and its seats are inserted.
+```mermaid
+sequenceDiagram
+    participant C as Browser
+    participant B as backend (booking)
+    participant P as payment service
+    participant RZ as Razorpay
+    C->>B: POST /bookings {holdId}
+    B->>B: extend hold to 10 min, insert booking PENDING_PAYMENT
+    B->>P: POST /payments {bookingId, amount}
+    P->>RZ: POST /v1/orders
+    B-->>C: 201 {checkout: {razorpayOrderId, keyId}, paymentExpiresAt}
+    C->>RZ: Razorpay Checkout (card, UPI, ...)
+    RZ-->>C: {paymentId, orderId, signature}
+    C->>B: POST /bookings/{id}/payment
+    B->>P: verify signature (HMAC with the key secret)
+    B->>B: confirm: seats BOOKED, booking CONFIRMED
+    RZ->>P: webhook payment.captured (signed)
+    P->>B: POST /internal/bookings/{id}/paid
+    B->>B: confirm again: already CONFIRMED, nothing changes
+```
+
+- **Seats are booked only after the money is verified.** The hold keeps them for the buyer while they pay;
+  checkout extends it once to 10 minutes (a repeated checkout finds the same booking and does not extend it
+  again). Booking first and charging second would leave unpaid seats BOOKED whenever a buyer walks away.
+- **No transaction waits on another service.** The booking is inserted, then the payment service is called
+  outside any transaction; a database connection is never held while Razorpay answers.
+- **Two paths, one confirm.** The browser reports the payment for an instant result; Razorpay's webhook
+  reports it too, even if the buyer closed the tab. Both end in the same guarded update
+  (`... set status = 'CONFIRMED' where id = ? and status in ('PENDING_PAYMENT', 'EXPIRED')`), so whichever
+  comes second changes nothing. If the backend is down when the webhook arrives, the payment service answers
+  5xx and Razorpay delivers it again later.
+- **Signatures, not trust.** The browser's result is checked with an HMAC of `order_id|payment_id` and the
+  webhook with an HMAC of the raw body, both with secrets only Razorpay and the payment service know. A forged
+  "paid" from a client or the internet is a 400.
+- **Paid, but the seats are gone** (the hold expired, or the buyer started a new hold meanwhile): the booking
+  becomes `FAILED` and the payment service refunds the money. A cancel of a paid booking refunds it too.
+- **Unpaid bookings expire.** A job runs every 30 s:
+  `update booking set status = 'EXPIRED' where status = 'PENDING_PAYMENT' and payment_expires_at < now()`
+  (a partial index keeps it to pending rows). It runs on every instance; the guarded update expires each row
+  once. Holds need no job: Redis expires them.
+- **Idempotent everywhere.** One booking per hold (`uk_booking_hold`), one payment per booking
+  (`booking_id` unique in the payment database, so a retry gets the same Razorpay order), one refund per
+  payment, and webhook handlers that can run twice.
+
+Booking states: `PENDING_PAYMENT → CONFIRMED → CANCELLED`, `PENDING_PAYMENT → EXPIRED` (unpaid),
+`PENDING_PAYMENT/EXPIRED → FAILED` (paid but seats lost, refunded). Payment states (payment service):
+`CREATED → CAPTURED → REFUND_PENDING → REFUNDED`; failed card attempts are recorded but keep the order open.
+
+**Known gap, closed in later steps:** if the money is captured but both the browser and every webhook
+delivery are lost, or a refund request itself fails, nothing retries yet. Steps 5 and 6 add reconciliation
+and events for that.
+
+**Running it with Razorpay test mode:** put the test Key ID and Key Secret in `.env`
+(`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`) plus a webhook secret of your own (`RAZORPAY_WEBHOOK_SECRET`).
+Razorpay's webhook needs a public HTTPS URL; a Cloudflare quick tunnel to the payment service gives one
+for local runs.
+
+### Confirming a paid booking
+
+1. A Lua script checks the hold belongs to the buyer and keeps its keys alive for at least 60 more
+   seconds, so the hold can't expire and be grabbed while the booking is being confirmed.
+2. In one transaction: the booking's guarded update to CONFIRMED, then the same guarded seat update as always,
+   `UPDATE show_seat SET status = 'BOOKED' WHERE id IN (...) AND status = 'AVAILABLE' RETURNING id, label`.
 3. After the commit, the hold's keys are deleted.
 
 **Why a seat is still never sold twice, even if Redis fails.** The guard `AND status = 'AVAILABLE'` decides,
@@ -371,6 +478,9 @@ erDiagram
         timestamptz created_at
         timestamptz cancelled_at
         bigint total_amount
+        string hold_id
+        bigint payment_id
+        timestamptz payment_expires_at
         timestamptz show_start_time
         string movie_title
         string theatre_name
@@ -389,7 +499,10 @@ Solid lines are real foreign keys inside a schema; dotted lines are plain ids ac
   one show; a 250-seat screen gives 250 show seats per show. Booking changes AVAILABLE → BOOKED.
 - **Booking vs booking seat.** Like an order and its order lines: one row per seat, so history survives a
   cancellation and re-sale of the same seat. A partial unique index allows only one CONFIRMED booking seat
-  per show seat; cancelled rows drop out of it, so the seat can be sold again.
+  per show seat; pending, expired, failed and cancelled rows drop out of it, so the seat can be sold again.
+- **Payments live in another database.** `booking.payment_id` is a plain id of the payment service's
+  `payment` table (database `payment`, its own user; tables `payment`, `payment_attempt`, `refund`). No
+  foreign key and no transaction spans the two.
 - **Cities are reference data.** The list (45 Indian cities, 10 marked popular, plus aliases like Madras,
   Bangalore, Gurgaon) is loaded by a migration; theatres point to a city by id, so a misspelt city can't get
   in. Search matches names and aliases by prefix and by trigram similarity (`pg_trgm`), so typos still
@@ -422,22 +535,28 @@ Oversold seats in every test so far: **0**. These runs predate seat holds (step 
 
 ```bash
 docker compose run --rm backend-test    # Maven in Docker; Testcontainers starts a throwaway PostgreSQL 16 and Redis 8
+docker compose run --rm payment-test    # the payment service's own tests (PostgreSQL + WireMock as Razorpay)
 ```
 
 Tests run against a **real PostgreSQL** with every Flyway migration applied and a **real Redis**, and talk to the app over **real
 HTTP** on a random port, so security filters, error handling, JSON and SQL are all part of each test. Each test
 creates its own city, theatre, show and users, so tests are independent of each other and of their order.
 Logins don't need Keycloak: a test-only `JwtDecoder` turns test tokens into JWTs, while the real role mapping
-and ownership checks run unchanged (the real Keycloak path is covered by the Bruno collection).
+and ownership checks run unchanged (the real Keycloak path is covered by the Bruno collection). Other
+services are **WireMock**: in backend tests it plays the payment service and Keycloak's token endpoint (every
+payment succeeds unless a test says otherwise); in payment tests it plays Razorpay, Keycloak and the backend.
 
 | Test | What it proves |
 |---|---|
-| `BookingConcurrencyTest` | 20 buyers racing for the same seats: exactly 1 wins, also with seat ids in opposite orders; 30 parallel best-available buyers never share a seat and all can book; a double-tapped confirm books once; 10 simultaneous cancels release the seats once |
+| `BookingConcurrencyTest` | 20 buyers racing for the same seats: exactly 1 wins, also with seat ids in opposite orders; 30 parallel best-available buyers never share a seat and all can book; a double-tapped checkout and pay books once; 10 simultaneous cancels release the seats once |
+| `BookingPaymentTest` | checkout extends the hold to the payment window without booking seats and calls the payment service with a service token; a repeated checkout finds the same booking; payment service down → 502, then a retry works; a verified payment books the seats; a rejected signature leaves the booking unpaid; the webhook callback confirms once; `/internal/**` refuses users, admins and other services; browser and webhook racing confirm once; paid after the hold was lost → FAILED + one refund; unpaid bookings expire and stay out of my bookings; cancelling a paid booking refunds it |
 | `BookingApiTest` | owner taken from the token, show copy on the booking, a booked hold is gone from Redis, 409 for taken seats, only the holder can book a hold, others' bookings are 404, upcoming/past split, cancel, idempotent cancel, no cancel after the show started |
 | `HoldRateLimitTest` | the 11th hold in a burst is 429 with `Retry-After` and problem details, the bucket lives in Redis with an expiry, both hold endpoints share it, other users keep their own bucket, release and booking aren't limited |
 | `HoldApiTest` | a hold lasts 5 minutes (TTL set in Redis), held seats are 409 for others and unavailable on the seat map, release, expiry frees the seats and the expired hold can't be booked, a new hold replaces the old one, others' holds are 404, booked seats can't be held, best-available blocks skip held seats, validation |
-| `BookingConstraintsTest` | the database itself refuses bad states: a cancelled booking without a time, unknown statuses, one seat in two confirmed bookings |
-| `SecurityRulesTest` | public reads, 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default |
+| `BookingConstraintsTest` | the database itself refuses bad states: a cancelled booking without a time, an unpaid booking without a deadline, unknown statuses, one seat in two confirmed bookings |
+| `PaymentApiTest` (payment) | one Razorpay order per booking, a different amount is 409, Razorpay down → 502 and nothing saved, only the `PAYMENTS_CLIENT` role gets in, a valid Checkout signature captures, forged signatures (or another order's) are 400, a refund is asked once, an unpaid payment can't be refunded, a refused refund can be asked again |
+| `WebhookTest` (payment) | unsigned or forged events are 400; `payment.captured` captures and calls the backend with a service token; repeats change nothing; backend down → 502 so Razorpay retries; a failed attempt keeps the order open; `refund.processed` completes the refund; unknown orders and other events are acknowledged |
+| `SecurityRulesTest` | public reads (and the dev checkout page), 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default |
 | `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
 | `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
 | `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest`, `RateLimiterTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable, `Retry-After` rounded up to whole seconds, the rate limit lets requests through when Redis fails |
@@ -446,14 +565,16 @@ and ownership checks run unchanged (the real Keycloak path is covered by the Bru
 
 ```
 backend/              Spring Boot application (Dockerfile, pom.xml, src/)
-keycloak/             Keycloak realm (roles, login clients, test users), imported on first start
-docker-compose.yml    postgres + redis + backend + keycloak; profiles: monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
+payment/              payment service, a separate Spring Boot application (Dockerfile, pom.xml, src/)
+keycloak/             Keycloak realm (roles, login and service clients, test users), imported on first start
+postgres/             init script: the payment database and its user
+docker-compose.yml    postgres + redis + backend + payment + keycloak; profiles: test, monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
 docker-compose.vm.yml host networking overrides for the load-test VM
 .env.example          every setting the app needs (copy to .env)
 loadtest/results/     SUMMARY.md: performance story; RESULTS.md + runs/: every load-test run and its report
 monitoring/           Prometheus config, PostgreSQL init (pg_stat_statements)
 docs/                 api.md (API reference), story.md (the app explained as a story)
-bruno/                Bruno collection: every endpoint with tests, importable
+collections/          Bruno collection: every endpoint with tests, importable
 ```
 
 Configuration comes only from environment variables (see `.env.example`); there are no defaults in the
@@ -464,7 +585,8 @@ app, so a missing value fails at startup instead of silently using a wrong one. 
 
 Deliberately left out until a test or feature needs them:
 
-- **Payment** and refunds (a hold is booked without paying; a cancelled booking just frees its seats).
+- **Payment reconciliation**: retrying lost confirmations and failed refund requests (steps 5 and 6);
+  partial refunds and cancellation fees.
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
 - Notifications, search.
 - Show overlap checks.

@@ -21,11 +21,10 @@ public class ShowController {
     private final ShowService showService;
 
     @GetMapping
-    public ShowtimesResponse find(@RequestParam Long movieId,
-                                  @RequestParam Long cityId,
-                                  @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-                                  @RequestParam(defaultValue = "") List<Language> language,
-                                  @RequestParam(defaultValue = "") List<ShowFormat> format) {
+    public ShowtimesResponse find(@RequestParam Long movieId, @RequestParam Long cityId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "") List<Language> language,
+            @RequestParam(defaultValue = "") List<ShowFormat> format) {
         return showService.findShowtimes(movieId, cityId, date, language, format);
     }
 

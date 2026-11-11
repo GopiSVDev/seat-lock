@@ -11,13 +11,8 @@ import jakarta.validation.constraints.Positive;
 import java.time.Instant;
 import java.util.Map;
 
-public record CreateShowRequest(
-        @NotNull Long movieId,
-        @NotNull Long screenId,
-        @NotNull @Future Instant startTime,
-        @NotNull Language language,
-        @NotNull ShowFormat format,
+public record CreateShowRequest(@NotNull Long movieId, @NotNull Long screenId, @NotNull @Future Instant startTime,
+        @NotNull Language language, @NotNull ShowFormat format,
         // Paise per seat type; exactly the screen's seat types
-        @NotEmpty Map<SeatType, @NotNull @Positive Long> prices
-) {
+        @NotEmpty Map<SeatType, @NotNull @Positive Long> prices) {
 }

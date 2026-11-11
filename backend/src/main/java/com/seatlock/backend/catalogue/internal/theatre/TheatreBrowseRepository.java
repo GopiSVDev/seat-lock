@@ -21,27 +21,18 @@ public class TheatreBrowseRepository {
 
     // lower(): byte collation would sort "AGS" before "Abirami"
     public List<TheatreRow> find(Long cityId, String nameContains, int limit, long offset) {
-        return jdbcClient.sql("select t.id, t.name, t.address, c.id as city_id, c.name as city_name " + FILTERED
+        return jdbcClient
+                .sql("select t.id, t.name, t.address, c.id as city_id, c.name as city_name " + FILTERED
                         + " order by lower(t.name), t.id limit :limit offset :offset")
-                .param("cityId", cityId)
-                .param("pattern", pattern(nameContains))
-                .param("limit", limit)
-                .param("offset", offset)
-                .query((rs, rowNum) -> new TheatreRow(
-                        rs.getLong("id"),
-                        rs.getString("name"),
-                        rs.getString("address"),
-                        rs.getLong("city_id"),
-                        rs.getString("city_name")))
+                .param("cityId", cityId).param("pattern", pattern(nameContains)).param("limit", limit)
+                .param("offset", offset).query((rs, rowNum) -> new TheatreRow(rs.getLong("id"), rs.getString("name"),
+                        rs.getString("address"), rs.getLong("city_id"), rs.getString("city_name")))
                 .list();
     }
 
     public long count(Long cityId, String nameContains) {
-        return jdbcClient.sql("select count(*) " + FILTERED)
-                .param("cityId", cityId)
-                .param("pattern", pattern(nameContains))
-                .query(Long.class)
-                .single();
+        return jdbcClient.sql("select count(*) " + FILTERED).param("cityId", cityId)
+                .param("pattern", pattern(nameContains)).query(Long.class).single();
     }
 
     // Escape LIKE wildcards in user text

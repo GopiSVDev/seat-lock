@@ -23,12 +23,14 @@ public class HoldController {
     private final SeatHoldService seatHoldService;
 
     @PostMapping
-    public ResponseEntity<HoldResponse> hold(@Valid @RequestBody CreateHoldRequest request, @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<HoldResponse> hold(@Valid @RequestBody CreateHoldRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
         return created(seatHoldService.hold(request.showId(), request.showSeatIds(), CurrentUser.from(jwt).id()));
     }
 
     @PostMapping("/best-available")
-    public ResponseEntity<HoldResponse> holdBestAvailable(@Valid @RequestBody CreateBestAvailableHoldRequest request, @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<HoldResponse> holdBestAvailable(@Valid @RequestBody CreateBestAvailableHoldRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
         return created(seatHoldService.holdBestAvailable(request.showId(), request.quantity(), request.seatType(),
                 CurrentUser.from(jwt).id()));
     }

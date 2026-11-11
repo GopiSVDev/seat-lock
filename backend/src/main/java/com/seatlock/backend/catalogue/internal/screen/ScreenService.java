@@ -57,8 +57,7 @@ public class ScreenService {
             }
         }
 
-        places.sort(Comparator.comparingDouble(Place::distance)
-                .thenComparingInt(Place::row)
+        places.sort(Comparator.comparingDouble(Place::distance).thenComparingInt(Place::row)
                 .thenComparingInt(Place::number));
         int[] ranks = new int[places.size()];
         for (int i = 0; i < places.size(); i++) {
@@ -69,8 +68,7 @@ public class ScreenService {
 
     @Transactional(readOnly = true)
     public ScreenResponse getById(Long id) {
-        Screen screen = screenRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Screen", id));
+        Screen screen = screenRepository.findById(id).orElseThrow(() -> new NotFoundException("Screen", id));
         return ScreenResponse.from(screen, seatRepository.findByScreenIdOrderByIdAsc(id));
     }
 }

@@ -32,7 +32,8 @@ class HoldRateLimitTest extends IntegrationTest {
         assertThat(limited.header("Content-Type")).contains("application/problem+json");
         assertThat(Long.parseLong(limited.header("Retry-After"))).isBetween(1L, 6L);
         assertThat(limited.text("detail")).startsWith("Too many hold requests");
-        // The bucket lives in Redis (shared by every instance) and expires once it would be full again
+        // The bucket lives in Redis (shared by every instance) and expires once it
+        // would be full again
         assertThat(redis.getExpire("rate:holds:" + asha.id())).isBetween(1L, 70L);
     }
 
@@ -53,8 +54,9 @@ class HoldRateLimitTest extends IntegrationTest {
         TestShow show = newShow();
         exhaust(asha, show);
 
-        assertThat(api.post("/holds", ravi, Map.of("showId", show.showId(), "showSeatIds", show.seats("B", 1)))
-                .status()).isEqualTo(201);
+        assertThat(
+                api.post("/holds", ravi, Map.of("showId", show.showId(), "showSeatIds", show.seats("B", 1))).status())
+                .isEqualTo(201);
     }
 
     @Test
@@ -67,10 +69,11 @@ class HoldRateLimitTest extends IntegrationTest {
 
         // Ravi's own bucket is fresh: hold, then use up the rest and confirm after
         String raviHold = exhaust(ravi, show);
-        assertThat(confirm(ravi, raviHold).status()).isEqualTo(201);
+        assertThat(confirm(ravi, raviHold).status()).isEqualTo(200);
     }
 
-    // Uses the whole burst, checks the next hold is refused, returns the last hold that got through
+    // Uses the whole burst, checks the next hold is refused, returns the last hold
+    // that got through
     private String exhaust(TestUser user, TestShow show) {
         String last = null;
         for (int i = 0; i < BURST; i++) {

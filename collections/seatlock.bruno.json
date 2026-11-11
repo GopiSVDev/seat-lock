@@ -1592,7 +1592,7 @@
     },
     {
       "type": "folder",
-      "name": "07 Holds and bookings (asha, then ravi)",
+      "name": "07 Holds, checkout and payment (asha, then ravi)",
       "items": [
         {
           "type": "http",
@@ -1707,7 +1707,7 @@
         },
         {
           "type": "http",
-          "name": "Book the hold",
+          "name": "Check out the hold",
           "request": {
             "url": "{{baseUrl}}/bookings",
             "method": "POST",
@@ -1730,21 +1730,21 @@
             },
             "script": {
               "req": "",
-              "res": "bru.setVar(\"bookingId\", res.getBody().id);\n"
+              "res": "bru.setVar(\"bookingId\", res.getBody().id);\nbru.setVar(\"orderId\", res.getBody().checkout.razorpayOrderId);\n"
             },
             "vars": {
               "req": [],
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by asha, with show details\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().show.movie.title).to.equal(\"Interstellar\");\n});\ntest(\"amount kept\", function () {\n  expect(res.getBody().totalAmount).to.equal(30000);\n  expect(res.getBody().seats.map(s => s.price)).to.eql([15000, 15000]);\n});\n",
-            "docs": "Seats become BOOKED (guarded UPDATE), then the hold is deleted. Owner comes from the token. Saves `bookingId`."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"unpaid, with a Razorpay order\", function () {\n  expect(res.getBody().status).to.equal(\"PENDING_PAYMENT\");\n  expect(res.getBody().checkout.razorpayOrderId).to.match(/^order_/);\n  expect(res.getBody().paymentExpiresAt).to.be.a(\"string\");\n});\ntest(\"owned by asha, amount kept\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().totalAmount).to.equal(30000);\n  expect(res.getBody().checkout.amount).to.equal(30000);\n});\n",
+            "docs": "Unpaid booking + Razorpay order; the hold now lasts 10 minutes. Seats are still AVAILABLE. Saves `bookingId` and `orderId`."
           },
           "seq": 4
         },
         {
           "type": "http",
-          "name": "Booking the same hold again",
+          "name": "Check out the same hold again",
           "request": {
             "url": "{{baseUrl}}/bookings",
             "method": "POST",
@@ -1774,10 +1774,124 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
-            "docs": "The hold is gone once booked."
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"same booking, same order\", function () {\n  expect(res.getBody().id).to.equal(Number(bru.getVar(\"bookingId\")));\n  expect(res.getBody().checkout.razorpayOrderId).to.equal(bru.getVar(\"orderId\"));\n});\n",
+            "docs": "One booking per hold: a double tap or refresh finds the same booking (200), and the hold is not extended again."
           },
           "seq": 5
+        },
+        {
+          "type": "http",
+          "name": "Forged browser receipt is refused",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{bookingId}}/payment",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"razorpayOrderId\": \"{{orderId}}\",\n  \"razorpayPaymentId\": \"pay_forged\",\n  \"razorpaySignature\": \"0000000000000000000000000000000000000000000000000000000000000000\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\ntest(\"signature checked\", function () {\n  expect(res.getBody().detail).to.equal(\"Invalid payment signature\");\n});\n",
+            "docs": "The payment service checks Checkout's HMAC of `order_id|payment_id` with the key secret."
+          },
+          "seq": 6
+        },
+        {
+          "type": "http",
+          "name": "Razorpay webhook: Asha paid (simulated)",
+          "request": {
+            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "{{webhookSignature}}",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{{webhookBody}}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "const CryptoJS = require(\"crypto-js\");\nconst body = JSON.stringify({\n  entity: \"event\", event: \"payment.captured\", contains: [\"payment\"],\n  payload: { payment: { entity: {\n    id: \"pay_sim\" + Date.now(), entity: \"payment\", status: \"captured\", method: \"card\",\n    order_id: bru.getVar(\"orderId\")\n  } } },\n  created_at: Math.floor(Date.now() / 1000)\n});\nbru.setVar(\"webhookBody\", body);\nbru.setVar(\"webhookSignature\", CryptoJS.HmacSHA256(body, bru.getEnvVar(\"webhookSecret\")).toString(CryptoJS.enc.Hex));\n",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Simulates Razorpay's `payment.captured` webhook: the pre-request script builds the event for the booking's order and signs it with the `webhookSecret` environment variable (must equal `RAZORPAY_WEBHOOK_SECRET` in `.env`). Real payments come from Razorpay itself (`/dev/checkout.html`)."
+          },
+          "seq": 7
+        },
+        {
+          "type": "http",
+          "name": "Booking is confirmed",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"confirmed\", function () {\n  expect(res.getBody().status).to.equal(\"CONFIRMED\");\n  expect(res.getBody().paymentExpiresAt).to.equal(null);\n});\n",
+            "docs": "The webhook went Razorpay → payment service → `POST /internal/bookings/{id}/paid` → seats BOOKED."
+          },
+          "seq": 8
         },
         {
           "type": "http",
@@ -1814,11 +1928,11 @@
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"2 recliners = ₹800\", function () {\n  expect(res.getBody().totalAmount).to.equal(80000);\n});\n",
             "docs": "The server picks the best adjacent block that is neither booked nor held."
           },
-          "seq": 6
+          "seq": 9
         },
         {
           "type": "http",
-          "name": "Book the best-available hold",
+          "name": "Check out the best-available hold",
           "request": {
             "url": "{{baseUrl}}/bookings",
             "method": "POST",
@@ -1841,17 +1955,57 @@
             },
             "script": {
               "req": "",
-              "res": "bru.setVar(\"bestBookingId\", res.getBody().id);\n"
+              "res": "bru.setVar(\"bestBookingId\", res.getBody().id);\nbru.setVar(\"bestOrderId\", res.getBody().checkout.razorpayOrderId);\n"
             },
             "vars": {
               "req": [],
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
-            "docs": "Saves `bestBookingId`."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"unpaid, with a Razorpay order\", function () {\n  expect(res.getBody().status).to.equal(\"PENDING_PAYMENT\");\n  expect(res.getBody().checkout.razorpayOrderId).to.match(/^order_/);\n  expect(res.getBody().paymentExpiresAt).to.be.a(\"string\");\n});\n",
+            "docs": "Saves `bestBookingId` and `bestOrderId`."
           },
-          "seq": 7
+          "seq": 10
+        },
+        {
+          "type": "http",
+          "name": "Razorpay webhook: recliners paid (simulated)",
+          "request": {
+            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "{{webhookSignature}}",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{{webhookBody}}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "const CryptoJS = require(\"crypto-js\");\nconst body = JSON.stringify({\n  entity: \"event\", event: \"payment.captured\", contains: [\"payment\"],\n  payload: { payment: { entity: {\n    id: \"pay_sim\" + Date.now(), entity: \"payment\", status: \"captured\", method: \"card\",\n    order_id: bru.getVar(\"bestOrderId\")\n  } } },\n  created_at: Math.floor(Date.now() / 1000)\n});\nbru.setVar(\"webhookBody\", body);\nbru.setVar(\"webhookSignature\", CryptoJS.HmacSHA256(body, bru.getEnvVar(\"webhookSecret\")).toString(CryptoJS.enc.Hex));\n",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Simulates Razorpay's `payment.captured` webhook: the pre-request script builds the event for the booking's order and signs it with the `webhookSecret` environment variable (must equal `RAZORPAY_WEBHOOK_SECRET` in `.env`). Real payments come from Razorpay itself (`/dev/checkout.html`)."
+          },
+          "seq": 11
         },
         {
           "type": "http",
@@ -1888,7 +2042,7 @@
             "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
             "docs": "Only 6 recliners are left, so no block of 10 exists."
           },
-          "seq": 8
+          "seq": 12
         },
         {
           "type": "http",
@@ -1925,7 +2079,7 @@
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
             "docs": ""
           },
-          "seq": 9
+          "seq": 13
         },
         {
           "type": "http",
@@ -1962,7 +2116,7 @@
             "tests": "test(\"status 204\", function () {\n  expect(res.getStatus()).to.equal(204);\n});\n",
             "docs": "Frees the seat now instead of after 5 minutes."
           },
-          "seq": 10
+          "seq": 14
         },
         {
           "type": "http",
@@ -1999,7 +2153,7 @@
             "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
             "docs": ""
           },
-          "seq": 11
+          "seq": 15
         },
         {
           "type": "http",
@@ -2036,7 +2190,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
             "docs": ""
           },
-          "seq": 12
+          "seq": 16
         },
         {
           "type": "http",
@@ -2080,7 +2234,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"contains the booking\", function () {\n  const ids = res.getBody().items.map(b => b.id);\n  expect(ids).to.include(bru.getVar(\"bookingId\"));\n});\n",
             "docs": "Shows that haven't started, soonest first (the default period)."
           },
-          "seq": 13
+          "seq": 17
         },
         {
           "type": "http",
@@ -2124,7 +2278,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
             "docs": "Shows that have started, latest first."
           },
-          "seq": 14
+          "seq": 18
         },
         {
           "type": "http",
@@ -2159,9 +2313,9 @@
             },
             "assertions": [],
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"cancelled\", function () {\n  expect(res.getBody().status).to.equal(\"CANCELLED\");\n  expect(res.getBody().cancelledAt).to.be.a(\"string\");\n});\n",
-            "docs": "Seats A1, A2 go back on sale in the same transaction. After the show starts this answers 409 `Show has already started` (needs a past show, so not part of this collection)."
+            "docs": "Seats go back on sale and a refund is requested. The payment was simulated, so Razorpay refuses the refund (unknown payment id): the backend logs it; the cancel still succeeds. Real payments refund."
           },
-          "seq": 15
+          "seq": 19
         },
         {
           "type": "http",
@@ -2198,7 +2352,7 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"same cancel time\", function () {\n  expect(res.getBody().cancelledAt).to.equal(bru.getVar(\"cancelledAt\"));\n});\n",
             "docs": "Idempotent: a retry gets the same answer, and the seats are not released twice."
           },
-          "seq": 16
+          "seq": 20
         },
         {
           "type": "http",
@@ -2235,11 +2389,11 @@
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
             "docs": ""
           },
-          "seq": 17
+          "seq": 21
         },
         {
           "type": "http",
-          "name": "Ravi books them",
+          "name": "Ravi checks out",
           "request": {
             "url": "{{baseUrl}}/bookings",
             "method": "POST",
@@ -2262,17 +2416,131 @@
             },
             "script": {
               "req": "",
-              "res": "bru.setVar(\"raviBookingId\", res.getBody().id);\n"
+              "res": "bru.setVar(\"raviBookingId\", res.getBody().id);\nbru.setVar(\"raviOrderId\", res.getBody().checkout.razorpayOrderId);\n"
             },
             "vars": {
               "req": [],
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by ravi\", function () {\n  expect(res.getBody().customerName).to.equal(\"Ravi Shankar\");\n});\n",
-            "docs": "Re-sale works: Asha's cancelled seat rows no longer block the seats."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"unpaid, with a Razorpay order\", function () {\n  expect(res.getBody().status).to.equal(\"PENDING_PAYMENT\");\n  expect(res.getBody().checkout.razorpayOrderId).to.match(/^order_/);\n  expect(res.getBody().paymentExpiresAt).to.be.a(\"string\");\n});\n",
+            "docs": "Saves `raviBookingId` and `raviOrderId`."
           },
-          "seq": 18
+          "seq": 22
+        },
+        {
+          "type": "http",
+          "name": "Cancel before paying is refused",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{raviBookingId}}/cancel",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\ntest(\"only confirmed bookings\", function () {\n  expect(res.getBody().detail).to.equal(\"Only confirmed bookings can be cancelled\");\n});\n",
+            "docs": ""
+          },
+          "seq": 23
+        },
+        {
+          "type": "http",
+          "name": "Razorpay webhook: Ravi paid (simulated)",
+          "request": {
+            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "{{webhookSignature}}",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{{webhookBody}}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "const CryptoJS = require(\"crypto-js\");\nconst body = JSON.stringify({\n  entity: \"event\", event: \"payment.captured\", contains: [\"payment\"],\n  payload: { payment: { entity: {\n    id: \"pay_sim\" + Date.now(), entity: \"payment\", status: \"captured\", method: \"card\",\n    order_id: bru.getVar(\"raviOrderId\")\n  } } },\n  created_at: Math.floor(Date.now() / 1000)\n});\nbru.setVar(\"webhookBody\", body);\nbru.setVar(\"webhookSignature\", CryptoJS.HmacSHA256(body, bru.getEnvVar(\"webhookSecret\")).toString(CryptoJS.enc.Hex));\n",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Simulates Razorpay's `payment.captured` webhook: the pre-request script builds the event for the booking's order and signs it with the `webhookSecret` environment variable (must equal `RAZORPAY_WEBHOOK_SECRET` in `.env`). Real payments come from Razorpay itself (`/dev/checkout.html`)."
+          },
+          "seq": 24
+        },
+        {
+          "type": "http",
+          "name": "Ravi's booking is confirmed",
+          "request": {
+            "url": "{{baseUrl}}/bookings/{{raviBookingId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"confirmed\", function () {\n  expect(res.getBody().status).to.equal(\"CONFIRMED\");\n  expect(res.getBody().paymentExpiresAt).to.equal(null);\n});\n",
+            "docs": "The webhook went Razorpay → payment service → `POST /internal/bookings/{id}/paid` → seats BOOKED."
+          },
+          "seq": 25
         }
       ],
       "root": {
@@ -2784,6 +3052,154 @@
             "docs": "At most 10 seats per hold."
           },
           "seq": 13
+        },
+        {
+          "type": "http",
+          "name": "Customer calls the internal paid endpoint",
+          "request": {
+            "url": "{{baseUrl}}/internal/bookings/{{bookingId}}/paid",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"paymentId\": 1\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 403\", function () {\n  expect(res.getStatus()).to.equal(403);\n});\n",
+            "docs": "Only the payment service's client credentials token (role BOOKING_CALLBACK) may call `/internal/**`."
+          },
+          "seq": 14
+        },
+        {
+          "type": "http",
+          "name": "Webhook with a forged signature",
+          "request": {
+            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "0000000000000000000000000000000000000000000000000000000000000000",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\n",
+            "docs": "The signature is the webhook's only authentication."
+          },
+          "seq": 15
+        },
+        {
+          "type": "http",
+          "name": "Payment service without a token",
+          "request": {
+            "url": "{{paymentUrl}}/payments/1",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\n",
+            "docs": ""
+          },
+          "seq": 16
+        },
+        {
+          "type": "http",
+          "name": "Payment service with a customer token",
+          "request": {
+            "url": "{{paymentUrl}}/payments/1",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\ntest(\"wrong audience\", function () {\n  expect(res.getBody().detail).to.equal(\"Invalid or expired token\");\n});\n",
+            "docs": "A user token is minted for `seatlock-api`; the payment service only accepts tokens for `seatlock-payment-api`, so it is not even a valid token there."
+          },
+          "seq": 17
         }
       ],
       "root": {
@@ -2915,6 +3331,20 @@
           "enabled": true,
           "secret": false,
           "type": "text"
+        },
+        {
+          "name": "paymentUrl",
+          "value": "http://localhost:8081",
+          "enabled": true,
+          "secret": false,
+          "type": "text"
+        },
+        {
+          "name": "webhookSecret",
+          "value": "",
+          "enabled": true,
+          "secret": true,
+          "type": "text"
         }
       ]
     }
@@ -2935,7 +3365,7 @@
       },
       "tests": ""
     },
-    "docs": "SeatLock API tour. Select the `local` environment, run folder 01 to log in, then run the collection top to bottom (the Runner works too). Created ids are saved as variables and reused by later requests. Local development credentials only."
+    "docs": "SeatLock API tour. Select the `local` environment and set its secret `webhookSecret` to your `RAZORPAY_WEBHOOK_SECRET`. Run folder 01 to log in, then run the collection top to bottom (the Runner works too). Created ids are saved as variables and reused by later requests. Payments are completed with a simulated, signed Razorpay webhook. Local development credentials only."
   },
   "brunoConfig": {
     "version": "1",

@@ -12,7 +12,8 @@ For the big picture (modules, booking flow, caching) see the [README](../README.
 - [Catalogue](#catalogue): [cities](#cities), [movies](#movies), [theatres](#theatres), [screens](#screens), [shows](#shows)
 - [Seat map](#seat-map): [layout](#get-showsidlayout), [availability](#get-showsidavailability)
 - [Holds](#holds): [exact seats](#post-holds), [best available](#post-holdsbest-available), [get](#get-holdsid), [release](#delete-holdsid)
-- [Booking](#booking): [book a hold](#post-bookings), [mine](#get-bookings), [get](#get-bookingsid), [cancel](#post-bookingsidcancel)
+- [Booking](#booking): [check out](#post-bookings), [pay](#post-bookingsidpayment), [mine](#get-bookings), [get](#get-bookingsid), [cancel](#post-bookingsidcancel)
+- [Internal](#internal-payment-service-only): [paid callback](#post-internalbookingsidpaid)
 - [Enums](#enums)
 
 ## Authentication
@@ -68,10 +69,11 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 401 | No token, or a token that is invalid or expired (also sends a `WWW-Authenticate: Bearer` header) | `Authentication required` or `Invalid or expired token` |
 | 403 | Valid token, but the role may not call this endpoint (e.g. a CUSTOMER creating a movie) | `Not allowed for your role` |
 | 404 | An id in the path or body does not exist (or is another user's hold or booking) | `<Resource> not found: <id>`, e.g. `Show not found: 42` |
-| 409 | Seats already held or booked, no adjacent block left, or a booking cancelled after its show started | see each endpoint |
+| 409 | Seats already held or booked, no adjacent block left, a booking cancelled after its show started or before it was paid | see each endpoint |
 | 409 | A unique rule broken, e.g. a duplicate screen name in a theatre, city or alias | `Request conflicts with existing data` |
 | 429 | Too many hold requests from one user (also sends `Retry-After: <seconds>`) | `Too many hold requests, try again in 6 seconds` |
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
+| 502 | The payment service failed or could not be reached (details only in the server log) | e.g. `Payment service could not create payment` |
 | 503 | Redis or the database can't be reached; nothing is held or booked | `Service temporarily unavailable` |
 
 Validation example:
@@ -645,10 +647,11 @@ app). Holding always re-checks, so staleness can cause a `409` but never a doubl
 
 ## Holds
 
-Owned by the `inventory` module. Checkout is two steps, like on any ticket site: **hold** the seats
-(nobody else can take them for 5 minutes), then **book** the hold with [`POST /bookings`](#post-bookings).
-A hold that isn't booked expires by itself and its seats go back on sale; `DELETE` gives them back sooner
-(the back button). Holds live in Redis only: the database learns about seats when they are booked.
+Owned by the `inventory` module. Buying is three steps, like on any ticket site: **hold** the seats
+(nobody else can take them for 5 minutes), **check out** the hold with [`POST /bookings`](#post-bookings)
+(the hold is kept for the 10-minute payment window), then **pay**. A hold that isn't paid expires by itself
+and its seats go back on sale; `DELETE` gives them back sooner (the back button). Holds live in Redis only:
+the database learns about seats when they are paid for.
 
 - All or nothing: if any seat is held or booked, nothing is held (`409`).
 - One hold per user per show: a new hold replaces your previous one for that show (its seats are let go;
@@ -658,8 +661,8 @@ A hold that isn't booked expires by itself and its seats go back on sale; `DELET
 - Rate limited per user: `POST /holds` and `POST /holds/best-available` share a bucket of 10 requests that
   refills at 10 per minute (one every 6 s). Beyond that: `429` with a `Retry-After` header in seconds.
   A buyer changing seats a few times never hits it; a script holding and releasing in a loop does. Every
-  request counts, including ones that fail validation or conflict. `GET`, `DELETE` and booking a hold are
-  not limited. The buckets live in Redis, so the limit holds across backend instances; if Redis is down
+  request counts, including ones that fail validation or conflict. `GET`, `DELETE`, checkout and payment
+  are not limited. The buckets live in Redis, so the limit holds across backend instances; if Redis is down
   the limit is skipped (holds then fail with `503` anyway).
 
 #### `POST /holds`
@@ -701,7 +704,7 @@ Response `201` with `Location: /holds/{id}`:
 }
 ```
 
-`expiresAt` drives the checkout timer. `totalAmount` is the sum of the seat prices (paise), what checkout
+`expiresAt` drives the seat-selection timer (checkout replaces it with the booking's `paymentExpiresAt`). `totalAmount` is the sum of the seat prices (paise), what checkout
 will charge.
 
 | Error | When |
@@ -741,7 +744,7 @@ Response `201`: same shape as `POST /holds`.
 #### `GET /holds/{id}`
 
 The caller's hold, same shape as `POST /holds`. For a checkout page after a refresh. `404 Hold not found:
-<id>` once it has expired, been booked or released, or if it is someone else's.
+<id>` once it has expired, been paid for or released, or if it is someone else's.
 
 #### `DELETE /holds/{id}`
 
@@ -749,11 +752,12 @@ Lets the seats go now. `204`, or `404 Hold not found: <id>` (as for `GET`).
 
 ## Booking
 
-Owned by the `booking` module. A booking is made from a [hold](#holds) (no payment step yet). All
-booking endpoints need a logged-in user, and each user only ever sees their own bookings: the owner is the
-token's `sub` (the user's permanent Keycloak id), never a field the client sends. Another user's booking
-answers `404`, exactly like a booking that doesn't exist, so booking ids can't be probed. `customerName` in
-responses is the user's name from the token at booking time.
+Owned by the `booking` module. A booking is made from a [hold](#holds) and paid with **Razorpay**: the
+seats are booked only once the payment is verified. All booking endpoints need a logged-in user, and each
+user only ever sees their own bookings: the owner is the token's `sub` (the user's permanent Keycloak id),
+never a field the client sends. Another user's booking answers `404`, exactly like a booking that doesn't
+exist, so booking ids can't be probed. `customerName` in responses is the user's name from the token at
+booking time.
 
 Every booking also keeps a copy of its show (`show`: time, language, format, movie, theatre, screen) taken
 when it was booked, the way an order keeps the product name. A booking page renders from it alone, without
@@ -762,10 +766,34 @@ calling the catalogue endpoints, and still shows what was sold if catalogue data
 Each seat keeps its `price` at booking time and the booking keeps `totalAmount` (paise), like order lines.
 A cancelled booking keeps its amounts.
 
+**Statuses:**
+
+| Status | Meaning | Seats | In `GET /bookings` |
+|---|---|---|---|
+| `PENDING_PAYMENT` | checked out, waiting for payment until `paymentExpiresAt` | held (Redis), not booked | no |
+| `CONFIRMED` | paid; the seats are yours | booked | yes |
+| `EXPIRED` | not paid in time (a job marks it within 30 s of the deadline) | free again | no |
+| `FAILED` | paid, but the hold was lost before the seats could be booked (e.g. a new hold for the same show replaced it); the payment is refunded automatically | free | yes |
+| `CANCELLED` | cancelled by the customer; the payment is refunded | free again | yes |
+
+**The flow in a browser:**
+
+1. `POST /bookings {holdId}` → `PENDING_PAYMENT` booking with a `checkout` object.
+2. Open [Razorpay Checkout](https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/)
+   with `key = checkout.keyId`, `order_id = checkout.razorpayOrderId`, `amount`, `currency`, and a `timeout`
+   that ends before `paymentExpiresAt`. A declined card doesn't end the order: the buyer can try again.
+3. Checkout's success handler gets `razorpay_order_id`, `razorpay_payment_id` and `razorpay_signature`;
+   send them to `POST /bookings/{id}/payment` → `CONFIRMED`.
+
+If the browser never gets to step 3 (tab closed, network lost), Razorpay's webhook confirms the booking
+anyway, through the payment service and [`POST /internal/bookings/{id}/paid`](#post-internalbookingsidpaid).
+`/dev/checkout.html` on the backend is a dev-only page that does all three steps (paste a token and a hold
+id).
+
 #### `POST /bookings`
 
-Books the seats of one of your holds: they become booked and the hold is gone. The database only books
-seats that are still available, so a seat is never sold twice, even if Redis lost a hold.
+Checkout: turns one of your holds into an unpaid booking and starts its payment. The hold is kept alive
+for the 10-minute payment window (`paymentExpiresAt`); the seats stay held, not booked.
 
 | Field | Type | Rules |
 |---|---|---|
@@ -777,16 +805,23 @@ seats that are still available, so a seat is never sold twice, even if Redis los
 }
 ```
 
-Response `201`:
+Response `201` with `Location: /bookings/{id}`:
 
 ```json
 {
   "id": 1,
   "customerName": "Asha Kumar",
-  "status": "CONFIRMED",
+  "status": "PENDING_PAYMENT",
   "createdAt": "2026-11-03T10:15:30.123456Z",
   "cancelledAt": null,
   "totalAmount": 30000,
+  "paymentExpiresAt": "2026-11-03T10:25:30.123Z",
+  "checkout": {
+    "razorpayOrderId": "order_Nx2kZq8V1aBcDe",
+    "keyId": "rzp_test_1aB2c3D4e5F6g7",
+    "amount": 30000,
+    "currency": "INR"
+  },
   "show": {
     "id": 1,
     "startTime": "2030-01-01T13:30:00Z",
@@ -819,14 +854,49 @@ Response `201`:
 }
 ```
 
+One booking per hold: calling it again with the same `holdId` (a double tap, a page refresh, a retry after
+a `502`) returns that booking with `200` and the same Razorpay order; the payment window is not extended
+again. `keyId` is Razorpay's public key id; the secret never leaves the payment service. `checkout` appears
+only in this response; `paymentExpiresAt` is set while the booking is `PENDING_PAYMENT`.
+
 | Error | When |
 |---|---|
-| `404 Hold not found: <holdId>` | the hold expired, was already booked or released, or is someone else's |
-| `409 One or more seats are already booked` | rare: a double-tapped request that came second |
+| `404 Hold not found: <holdId>` | the hold expired, was released, or is someone else's |
+| `502 Payment service could not create payment` | the payment service or Razorpay failed; the booking exists, retry the same request |
+
+#### `POST /bookings/{id}/payment`
+
+What the browser sends after Razorpay Checkout succeeded. The payment service checks the signature (an
+HMAC of `order_id|payment_id` with the Razorpay key secret), then the seats are booked. Safe to repeat.
+
+| Field | Type | Rules |
+|---|---|---|
+| `razorpayOrderId` | string | required, from Checkout |
+| `razorpayPaymentId` | string | required, from Checkout |
+| `razorpaySignature` | string | required, from Checkout |
+
+```json
+{
+  "razorpayOrderId": "order_Nx2kZq8V1aBcDe",
+  "razorpayPaymentId": "pay_Nx2lA9cQ3dEfGh",
+  "razorpaySignature": "9f1c...e4"
+}
+```
+
+Response `200`: the booking (same shape as `GET /bookings/{id}`), usually `CONFIRMED`. It is `FAILED` if
+the hold was lost before the payment arrived; the money is then refunded automatically.
+
+| Error | When |
+|---|---|
+| `400 Invalid payment signature` | the three values don't match (forged, or from another order) |
+| `404 Booking not found: <id>` | unknown, or another user's booking |
+| `409 Payment has not been started` | checkout never reached the payment service (retry `POST /bookings`) |
+| `502` | the payment service failed or could not be reached |
 
 #### `GET /bookings`
 
-The caller's bookings, as two tabs. Paged like the other lists.
+The caller's orders, as two tabs: `CONFIRMED`, `CANCELLED` and `FAILED` bookings (unpaid ones aren't
+orders yet). Paged like the other lists.
 
 | Query parameter | Rules |
 |---|---|
@@ -890,9 +960,10 @@ Returns the same shape as the create response. `404` if unknown or owned by anot
 
 #### `POST /bookings/{id}/cancel`
 
-Cancels the whole booking before its show starts: the booking becomes `CANCELLED` (it stays in the
-caller's list, with `cancelledAt` set) and its seats go back on sale. The seat map shows them free within
-about a second (availability is cached for 1 s). No body. No refund yet: payment isn't built.
+Cancels a confirmed booking before its show starts: the booking becomes `CANCELLED` (it stays in the
+caller's list, with `cancelledAt` set), its seats go back on sale and the full amount is refunded through
+Razorpay (normal speed: days, not seconds). The seat map shows the seats free within about a second
+(availability is cached for 1 s). No body.
 
 Idempotent: cancelling an already cancelled booking returns it unchanged with `200`, so a client can safely
 retry after a timeout. Two cancels arriving at once release the seats only once.
@@ -904,6 +975,28 @@ Response `200`: the booking, same shape as `GET /bookings/{id}`, with `"status":
 |---|---|
 | `404 Booking not found: <id>` | unknown, or another user's booking |
 | `409 Show has already started` | the show's start time has passed |
+| `409 Only confirmed bookings can be cancelled` | the booking is unpaid, expired or failed |
+
+## Internal (payment service only)
+
+Not for browsers. Callers authenticate with a Keycloak **client credentials** token of the payment
+service's own client (`seatlock-payment`), which carries the realm role `BOOKING_CALLBACK`; any other token
+gets `403`.
+
+#### `POST /internal/bookings/{id}/paid`
+
+The payment service calls this when Razorpay's `payment.captured` webhook arrives. It confirms the booking
+exactly like [`POST /bookings/{id}/payment`](#post-bookingsidpayment) (the second of the two changes
+nothing), so a buyer who paid and closed the tab still gets the seats.
+
+```json
+{
+  "paymentId": 7
+}
+```
+
+Response `204`. `404` if the booking is unknown, `409 Booking has another payment` if the id doesn't match.
+Any failure makes the payment service answer the webhook with an error, so Razorpay delivers it again.
 
 ## Enums
 
@@ -914,7 +1007,7 @@ Response `200`: the booking, same shape as `GET /bookings/{id}`, with `"status":
 | Genre | `ACTION`, `ADVENTURE`, `ANIMATION`, `BIOGRAPHY`, `COMEDY`, `CRIME`, `DOCUMENTARY`, `DRAMA`, `FAMILY`, `FANTASY`, `HISTORICAL`, `HORROR`, `MUSICAL`, `MYSTERY`, `ROMANCE`, `SCI_FI`, `SPORTS`, `THRILLER`, `WAR` |
 | SeatType | `REGULAR`, `PREMIUM`, `RECLINER` |
 | ShowFormat | `TWO_D`, `THREE_D`, `IMAX_2D`, `IMAX_3D`, `FOUR_DX` |
-| Booking status | `CONFIRMED`, `CANCELLED` |
+| Booking status | `PENDING_PAYMENT`, `CONFIRMED`, `EXPIRED`, `FAILED`, `CANCELLED` |
 
 ## Operations
 
