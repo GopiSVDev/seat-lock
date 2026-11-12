@@ -6,6 +6,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +35,17 @@ class RequestLogTest extends IntegrationTest {
 
         awaitLogged(output, "GET /api/v1/shows/999999999 -> 404");
         assertThat(output.getAll()).doesNotContain("/actuator/health");
+    }
+
+    @Test
+    void clientAddressComesFromTheGatewaysForwardedFor(CapturedOutput output) throws IOException, InterruptedException {
+        // Tests call from 127.0.0.1, a trusted proxy address like the gateway's Docker address
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/shows/999999999"))
+                .header("X-Forwarded-For", "203.0.113.7").build();
+        HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build().send(request,
+                HttpResponse.BodyHandlers.discarding());
+
+        awaitLogged(output, "203.0.113.7 GET /api/v1/shows/999999999 -> 404");
     }
 
     // The line is written once the response is done, which can be just after the client has it

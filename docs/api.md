@@ -1,6 +1,7 @@
 # API reference
 
-Base URL locally: `http://localhost:8080`. The API lives under **`/api/v1`** (`/api/v1/cities`,
+Base URL locally: `http://localhost:8080`, the API gateway (the services themselves are not reachable from
+outside). The API lives under **`/api/v1`** (`/api/v1/cities`,
 `/api/v1/bookings/{id}` …), so a later `v2` can run beside it; webhooks, the internal endpoint, Swagger and
 actuator sit outside it. All bodies are JSON (`Content-Type: application/json`). Times are
 ISO-8601 in UTC (`2030-01-01T13:30:00Z`). Every `POST` that creates something returns `201 Created` with a
@@ -31,7 +32,7 @@ Keycloak per request: signature (Keycloak's public keys, fetched once and cached
 | `GET` on `/api/v1/cities/**`, `/api/v1/movies/**`, `/api/v1/theatres/**`, `/api/v1/screens/**`, `/api/v1/shows/**` (includes the seat map) | anyone, no token |
 | `POST` on `/api/v1/cities/**`, `/api/v1/movies/**`, `/api/v1/theatres/**` (includes screens), `/api/v1/shows/**` | `ADMIN` |
 | `/api/v1/holds/**`, `/api/v1/bookings/**` | any logged-in user (`CUSTOMER` or `ADMIN`) |
-| Swagger UI, `/v3/api-docs`, `/actuator/health`, `/actuator/prometheus` | anyone |
+| Swagger UI, `/v3/api-docs` | anyone |
 | anything else | any logged-in user |
 
 Test users: `admin`/`admin` (ADMIN and CUSTOMER), `asha`/`asha` and `ravi`/`ravi` (CUSTOMER). New sign-ups
@@ -981,7 +982,7 @@ Response `200`: the booking, same shape as `GET /api/v1/bookings/{id}`, with `"s
 
 ## Internal (payment service only)
 
-Not for browsers. Callers authenticate with a Keycloak **client credentials** token of the payment
+Not for browsers, and not reachable through the gateway (`404` from outside). Inside Docker, callers authenticate with a Keycloak **client credentials** token of the payment
 service's own client (`seatlock-payment`), which carries the realm role `BOOKING_CALLBACK`; any other token
 gets `403`.
 
@@ -1012,6 +1013,8 @@ Any failure makes the payment service answer the webhook with an error, so Razor
 | Booking status | `PENDING_PAYMENT`, `CONFIRMED`, `EXPIRED`, `FAILED`, `CANCELLED` |
 
 ## Operations
+
+Inside Docker only: the gateway does not route `/actuator/**` (`404` from outside).
 
 | Endpoint | Purpose |
 |---|---|

@@ -73,7 +73,7 @@ public abstract class IntegrationTest {
     private JsonMapper jsonMapper;
 
     @Value("${local.server.port}")
-    private int port;
+    protected int port;
 
     protected Api api;
 

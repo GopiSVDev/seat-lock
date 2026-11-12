@@ -31,6 +31,11 @@ desk keeps its own notebook:
 Next door, in a separate room with its own locked notebook, sits the **cashier** (the payment service).
 The cashier talks to the **bank** (Razorpay) and is the only one who knows the bank's secret code words.
 
+Everyone comes in through **one entrance with a doorman** (the API gateway). The doorman sells
+nothing and only knows which way each visitor must go: customers to the desks, the bank's messenger to the
+cashier. The corridor behind the desks, where the cashier and the ticket desk pass notes to each other,
+has no door to the street: if a stranger asks for it, the doorman says there is no such room (`404`).
+
 The desks never read each other's notebooks. If the ticket desk needs a chair marked as taken, it **asks**
 the seat desk. That way each desk can be sure its notebook is always right.
 
@@ -68,9 +73,11 @@ flowchart LR
         seats["Seat desk<br/>free or taken, per show"]
         tickets["Ticket desk<br/>who bought what"]
     end
-    people --> whatson
-    people --> seats
-    people --> tickets
+    door["Doorman: api-gateway"]
+    people --> door
+    door --> whatson
+    door --> seats
+    door --> tickets
     whatson -- "a new show is on: here are its chairs" --> seats
     tickets -- "please mark these chairs taken" --> seats
     cashier["Cashier (own room)<br/>payments, refunds"]
@@ -78,6 +85,8 @@ flowchart LR
     tickets -- "please collect / refund" --> cashier
     cashier -- "Asha has paid" --> tickets
     cashier --> bank
+    bank -- "messenger: payment done" --> door
+    door --> cashier
 ```
 
 ## Chapter 1: Getting a show ready
@@ -400,6 +409,7 @@ fade without a ticket, those chairs go back on sale.
 | In the app | In the cinema story |
 |---|---|
 | Module (`catalogue`, `inventory`, `booking`) | A desk in the ticket office, with its own notebook |
+| API gateway (`api-gateway`) | The doorman at the only entrance, sending each visitor the right way |
 | Database schema | Each desk's own notebook |
 | Seat (`seat`) | A chair in the hall, there forever |
 | Show seat (`show_seat`) | That chair for one evening's show |

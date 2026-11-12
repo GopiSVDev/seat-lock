@@ -12,7 +12,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-// One line per request, outside Spring Security so 401/403 are logged too.
+// One line per request, outside Spring Security so 401/403 are logged too. The address is the client's,
+// taken from the gateway's X-Forwarded-For (server.forward-headers-strategy).
 // Never headers or bodies: they carry tokens and signatures.
 @Slf4j
 @Component
@@ -33,7 +34,7 @@ public class RequestLogFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         } finally {
             String query = request.getQueryString();
-            log.info("{} {} -> {} ({} ms)", request.getMethod(),
+            log.info("{} {} {} -> {} ({} ms)", request.getRemoteAddr(), request.getMethod(),
                     query == null ? request.getRequestURI() : request.getRequestURI() + "?" + query,
                     response.getStatus(), (System.nanoTime() - start) / 1_000_000);
         }

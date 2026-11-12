@@ -304,11 +304,11 @@
     },
     {
       "type": "folder",
-      "name": "02 Health and API docs (public)",
+      "name": "02 API docs (public); operations stay inside",
       "items": [
         {
           "type": "http",
-          "name": "Health",
+          "name": "Health is not exposed",
           "request": {
             "url": "{{baseUrl}}/actuator/health",
             "method": "GET",
@@ -335,8 +335,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"UP\", function () {\n  expect(res.getBody().status).to.equal(\"UP\");\n});\n",
-            "docs": ""
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Actuator never leaves Docker: the gateway does not route it. Check health with `docker compose ps`."
           },
           "seq": 1
         },
@@ -376,7 +376,7 @@
         },
         {
           "type": "http",
-          "name": "Prometheus metrics",
+          "name": "Metrics are not exposed",
           "request": {
             "url": "{{baseUrl}}/actuator/prometheus",
             "method": "GET",
@@ -403,8 +403,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
-            "docs": "Public on purpose (scraped without a token); production would serve actuator on an internal port."
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Prometheus scrapes inside Docker; the gateway does not route `/actuator/**`."
           },
           "seq": 3
         }
@@ -1820,7 +1820,7 @@
           "type": "http",
           "name": "Razorpay webhook: Asha paid (simulated)",
           "request": {
-            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "url": "{{baseUrl}}/webhooks/razorpay",
             "method": "POST",
             "headers": [
               {
@@ -1971,7 +1971,7 @@
           "type": "http",
           "name": "Razorpay webhook: recliners paid (simulated)",
           "request": {
-            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "url": "{{baseUrl}}/webhooks/razorpay",
             "method": "POST",
             "headers": [
               {
@@ -2469,7 +2469,7 @@
           "type": "http",
           "name": "Razorpay webhook: Ravi paid (simulated)",
           "request": {
-            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "url": "{{baseUrl}}/webhooks/razorpay",
             "method": "POST",
             "headers": [
               {
@@ -3055,7 +3055,7 @@
         },
         {
           "type": "http",
-          "name": "Customer calls the internal paid endpoint",
+          "name": "Internal paid endpoint is not reachable from outside",
           "request": {
             "url": "{{baseUrl}}/internal/bookings/{{bookingId}}/paid",
             "method": "POST",
@@ -3085,8 +3085,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 403\", function () {\n  expect(res.getStatus()).to.equal(403);\n});\n",
-            "docs": "Only the payment service's client credentials token (role BOOKING_CALLBACK) may call `/internal/**`."
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "The gateway does not route `/internal/**`; inside Docker it also needs the payment service's role BOOKING_CALLBACK (backend tests cover that)."
           },
           "seq": 14
         },
@@ -3094,7 +3094,7 @@
           "type": "http",
           "name": "Webhook with a forged signature",
           "request": {
-            "url": "{{paymentUrl}}/webhooks/razorpay",
+            "url": "{{baseUrl}}/webhooks/razorpay",
             "method": "POST",
             "headers": [
               {
@@ -3132,9 +3132,9 @@
         },
         {
           "type": "http",
-          "name": "Payment service without a token",
+          "name": "Payment API is not reachable from outside",
           "request": {
-            "url": "{{paymentUrl}}/payments/1",
+            "url": "{{baseUrl}}/payments/1",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -3159,16 +3159,16 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\n",
-            "docs": ""
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Only the backend calls `/payments/**`, inside Docker; the gateway routes nothing but the webhook to the payment service."
           },
           "seq": 16
         },
         {
           "type": "http",
-          "name": "Payment service with a customer token",
+          "name": "Payment API is not reachable even with a token",
           "request": {
-            "url": "{{paymentUrl}}/payments/1",
+            "url": "{{baseUrl}}/payments/1",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -3196,8 +3196,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 401\", function () {\n  expect(res.getStatus()).to.equal(401);\n});\ntest(\"wrong audience\", function () {\n  expect(res.getBody().detail).to.equal(\"Invalid or expired token\");\n});\n",
-            "docs": "A user token is minted for `seatlock-api`; the payment service only accepts tokens for `seatlock-payment-api`, so it is not even a valid token there."
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Inside Docker a user token would also fail there: the payment service only accepts tokens for `seatlock-payment-api` (payment tests cover that)."
           },
           "seq": 17
         }
@@ -3328,13 +3328,6 @@
         {
           "name": "showDate",
           "value": "2030-01-01",
-          "enabled": true,
-          "secret": false,
-          "type": "text"
-        },
-        {
-          "name": "paymentUrl",
-          "value": "http://localhost:8081",
           "enabled": true,
           "secret": false,
           "type": "text"

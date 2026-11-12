@@ -54,8 +54,7 @@ services:
       context: ./backend
     container_name: seat-lock-backend
     restart: unless-stopped
-    ports:
-      - "${BACKEND_PORT:?BACKEND_PORT is not set}:${BACKEND_PORT:?BACKEND_PORT is not set}"
+    # No published port: reached through api-gateway only
     environment:
       # Heap as a share of the machine's RAM, leaving room for Postgres (512 MB on the 2 GB VM)
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=25
@@ -99,8 +98,7 @@ services:
       context: ./payment
     container_name: seat-lock-payment
     restart: unless-stopped
-    ports:
-      - "${PAYMENT_PORT:?PAYMENT_PORT is not set}:${PAYMENT_PORT:?PAYMENT_PORT is not set}"
+    # No published port: the backend calls it inside Docker, Razorpay's webhook comes through api-gateway
     environment:
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=25
       SERVER_PORT: ${PAYMENT_PORT:?PAYMENT_PORT is not set}
@@ -135,16 +133,44 @@ services:
       retries: 5
       start_period: 20s
 
+  # The only way in from outside (besides Keycloak's login pages): routes /api/v1/** and the tooling pages to
+  # the backend and /webhooks/razorpay to the payment service; everything else is 404
+  api-gateway:
+    build:
+      context: ./api-gateway
+    container_name: seat-lock-api-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:?GATEWAY_PORT is not set}:${GATEWAY_PORT:?GATEWAY_PORT is not set}"
+    environment:
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=25
+      SERVER_PORT: ${GATEWAY_PORT:?GATEWAY_PORT is not set}
+      # Actuator, not published
+      MANAGEMENT_PORT: "9000"
+      BACKEND_URL: http://backend:${BACKEND_PORT:?BACKEND_PORT is not set}
+      PAYMENT_URL: http://payment:${PAYMENT_PORT:?PAYMENT_PORT is not set}
+    depends_on:
+      backend:
+        condition: service_healthy
+      payment:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   # Public HTTPS URL for Razorpay's webhook (dev only): docker compose --profile tunnel up -d tunnel
   # Quick tunnel: no Cloudflare account, a new random *.trycloudflare.com URL on every start (see the logs).
-  # Exposes the whole payment port; everything but the signed webhook needs a service token.
+  # Points at the gateway, so only routed paths are reachable through it.
   tunnel:
     image: cloudflare/cloudflared:2026.10.7
     container_name: seat-lock-tunnel
     profiles: [tunnel]
-    command: ["tunnel", "--no-autoupdate", "--url", "http://payment:${PAYMENT_PORT:?PAYMENT_PORT is not set}"]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://api-gateway:${GATEWAY_PORT:?GATEWAY_PORT is not set}"]
     depends_on:
-      payment:
+      api-gateway:
         condition: service_healthy
 
   # Dev mode; production would run `start` with HTTPS and its own database
@@ -212,6 +238,16 @@ services:
       TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    command: ["sh", "-c", "cp /src/pom.xml /app/ && cp -r /src/src /app/ && mvn -B test"]
+
+  # docker compose run --rm api-gateway-test   (same setup as backend-test; WireMock plays both services)
+  api-gateway-test:
+    image: maven:3.9.16-eclipse-temurin-25
+    profiles: [test]
+    working_dir: /app
+    volumes:
+      - ./api-gateway:/src:ro
+      - maven_repo:/root/.m2
     command: ["sh", "-c", "cp /src/pom.xml /app/ && cp -r /src/src /app/ && mvn -B test"]
 
   # --- Load test monitoring: runs on the laptop, the app (postgres, backend) runs in the LXD VM ---

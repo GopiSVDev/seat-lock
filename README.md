@@ -62,12 +62,12 @@ Everything runs in Docker.
 
 ```bash
 cp .env.example .env            # credentials, ports, Keycloak token settings, thread and pool sizes (no defaults in the app)
-docker compose up --build -d    # PostgreSQL :5433, backend :8080, payment :8081, Keycloak :8180
-curl -s localhost:8080/actuator/health
+docker compose up --build -d    # API gateway :8080 (the only app port), Keycloak :8180, PostgreSQL :5433
+docker compose ps               # every service healthy
 ```
 
-`docker compose up --build -d` starts everything (Postgres, Redis, Keycloak, backend, payment service) in
-dependency order. On a new Postgres volume an init script creates the payment service's database; on a new
+`docker compose up --build -d` starts everything (Postgres, Redis, Keycloak, backend, payment service, API
+gateway) in dependency order. Every request goes through the gateway on port 8080. On a new Postgres volume an init script creates the payment service's database; on a new
 Keycloak volume the realm is imported. After pulling changes to either (new realm clients, a new database),
 start over from empty volumes, which **deletes all data** (bookings, shows, Keycloak users created later):
 
@@ -131,8 +131,8 @@ credentials from `.env`). The `seatlock` realm comes with test users `admin`/`ad
 and `ravi`/`ravi` (CUSTOMER); new sign-ups get CUSTOMER. These are local development credentials only.
 
 **Bruno collection:** [collections/seatlock.bruno.json](collections/seatlock.bruno.json) holds every request above and
-more (77, in 8 folders: log in, health, cities, admin setup, browsing, seat map, holds/checkout/payment,
-security checks that must fail), each with tests. Import it in [Bruno](https://www.usebruno.com/), pick the
+more (77, in 8 folders: log in, API docs, cities, admin setup, browsing, seat map, holds/checkout/payment,
+security checks that must fail, including paths the gateway must not route), each with tests. Import it in [Bruno](https://www.usebruno.com/), pick the
 `local` environment and set its secret `webhookSecret` to your `RAZORPAY_WEBHOOK_SECRET`, run "01 Log in",
 then run the collection; created ids are passed along automatically. Bookings are paid with a **simulated
 Razorpay webhook**: a script builds a `payment.captured` event and signs it with that secret, so the real
@@ -145,7 +145,8 @@ authorization code with PKCE) and sends the token with every call. The hand-writ
 
 ## Architecture
 
-One Spring Boot application (the backend) split into three modules, plus a separate **payment service**.
+One Spring Boot application (the backend) split into three modules, plus a separate **payment service**,
+both behind an **API gateway**.
 Each backend module owns its own tables in its own PostgreSQL schema, and modules only talk through small
 public interfaces or events, so they could later be split into separate services. Redis holds the
 short-lived seat holds. Payment was split out first: it holds the payment provider's secrets, talks to an
@@ -154,6 +155,7 @@ outside system that can be slow or down, and keeps its own database.
 ```mermaid
 flowchart LR
     client([Client / CDN])
+    gateway[api-gateway<br/>the only public port]
 
     subgraph app[Spring Boot backend]
         catalogue[catalogue<br/>movies, theatres, screens,<br/>seats, shows]
@@ -175,11 +177,13 @@ flowchart LR
     paydb[(payment database)]
     razorpay([Razorpay])
 
-    client --> catalogue & inventory & booking
+    client -- "/api/v1/**" --> gateway
+    gateway --> catalogue & inventory & booking
     booking -- "REST + service token<br/>create / verify / refund" --> payment
     payment -- "REST + service token<br/>/internal/bookings/{id}/paid" --> booking
     payment --> razorpay
-    razorpay -- "webhook" --> payment
+    razorpay -- "webhook" --> gateway
+    gateway -- "/webhooks/razorpay" --> payment
     payment --- paydb
     catalogue -- "ShowScheduled event" --> inventory
     booking -- "InventoryApi<br/>confirmHold / releaseSeats" --> inventory
@@ -196,6 +200,26 @@ flowchart LR
 | **inventory** | `show_seat`: every seat of every show and its status (AVAILABLE / BOOKED); seat holds (Redis) | `InventoryApi`, `ConfirmedHold`, `BookedSeat` | seat map (layout, availability), holds |
 | **booking** | bookings and the seats in each booking | none yet | bookings, internal paid callback |
 | **payment** (own app) | payments, payment attempts, refunds (own database `payment`) | REST, service tokens only | `/payments/**`, `/webhooks/razorpay` |
+| **api-gateway** (own app) | nothing: routes requests | none | everything public, forwarded |
+
+### The API gateway
+
+`api-gateway` (Spring Cloud Gateway, Server Web MVC) is the **only published port** besides Keycloak's login
+pages. The backend and the payment service listen inside Docker only, so the gateway decides what the world
+can reach:
+
+| Path | Goes to |
+|---|---|
+| `/api/v1/**` | backend: the whole public API |
+| `/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/**`, `/dev/**` | backend: API docs and the dev checkout page |
+| `POST /webhooks/razorpay` | payment service: Razorpay's webhook, the only public payment endpoint |
+| anything else, e.g. `/internal/**`, `/payments/**`, `/actuator/**` | nowhere: `404` |
+
+Paths, headers and bodies are forwarded unchanged (the webhook's signature covers the raw bytes). The
+services learn the caller's address from `X-Forwarded-For` and log it. A service that is down is `502`, one
+slower than 20 s is `504`, both as problem details. Redirects go back to the browser instead of being
+followed. Checking tokens and rate limiting at the edge are not done yet: the services check every token
+themselves, and no test has shown a need for edge limits.
 
 **Dependencies point one way inside the backend:** booking → inventory → catalogue, and booking → catalogue.
 Nothing depends on booking. Booking and the payment service call each other over HTTP (a dependency cycle,
@@ -555,6 +579,7 @@ Oversold seats in every test so far: **0**. These runs predate seat holds (step 
 ```bash
 docker compose run --rm backend-test    # Maven in Docker; Testcontainers starts a throwaway PostgreSQL 16 and Redis 8
 docker compose run --rm payment-test    # the payment service's own tests (PostgreSQL + WireMock as Razorpay)
+docker compose run --rm api-gateway-test   # the gateway's routes (WireMock plays the backend and the payment service)
 ```
 
 Tests run against a **real PostgreSQL** with every Flyway migration applied and a **real Redis**, and talk to the app over **real
@@ -576,7 +601,8 @@ payment succeeds unless a test says otherwise); in payment tests it plays Razorp
 | `PaymentApiTest` (payment) | one Razorpay order per booking, a different amount is 409, Razorpay down → 502 and nothing saved, only the `PAYMENTS_CLIENT` role gets in, a valid Checkout signature captures, forged signatures (or another order's) are 400, a refund is asked once, an unpaid payment can't be refunded, a refused refund can be asked again |
 | `WebhookTest` (payment) | unsigned or forged events are 400; `payment.captured` captures and calls the backend with a service token; repeats change nothing; backend down → 502 so Razorpay retries; a failed attempt keeps the order open; `refund.processed` completes the refund; unknown orders and other events are acknowledged; the payment method survives the browser reporting first; every event is logged with its ids, a forged one with a warning |
 | `SecurityRulesTest` | public reads (and the dev checkout page), 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default, the API only under `/api/v1` and the internal endpoint outside it |
-| `RequestLogTest` | every request logs method, path, status and time, rejections log their reason; health checks are not logged |
+| `RequestLogTest` | every request logs the caller's address, method, path, status and time (the address from the gateway's `X-Forwarded-For`), rejections log their reason; health checks are not logged |
+| `RoutingTest` (api-gateway) | API calls reach the backend with path, query, token and body unchanged and answers come back as they are; the tooling pages too, with redirects passed back; the webhook reaches the payment service byte for byte; `/internal`, `/payments`, `/actuator` and unknown paths are 404 and never forwarded; forwarded headers; a service that is down is 502, a slow one 504 |
 | `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
 | `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
 | `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest`, `RateLimiterTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable, `Retry-After` rounded up to whole seconds, the rate limit lets requests through when Redis fails |
@@ -586,9 +612,10 @@ payment succeeds unless a test says otherwise); in payment tests it plays Razorp
 ```
 backend/              Spring Boot application (Dockerfile, pom.xml, src/)
 payment/              payment service, a separate Spring Boot application (Dockerfile, pom.xml, src/)
+api-gateway/          API gateway, the single entry point (Dockerfile, pom.xml, src/)
 keycloak/             Keycloak realm (roles, login and service clients, test users), imported on first start
 postgres/             init script: the payment database and its user
-docker-compose.yml    postgres + redis + backend + payment + keycloak; profiles: test, tunnel (Razorpay webhook), monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
+docker-compose.yml    postgres + redis + backend + payment + api-gateway + keycloak; profiles: test, tunnel (Razorpay webhook), monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
 docker-compose.vm.yml host networking overrides for the load-test VM
 .env.example          every setting the app needs (copy to .env)
 loadtest/results/     SUMMARY.md: performance story; RESULTS.md + runs/: every load-test run and its report
@@ -599,11 +626,12 @@ collections/          Bruno collection: every endpoint with tests, importable
 
 Configuration comes only from environment variables (see `.env.example`); there are no defaults in the
 app, so a missing value fails at startup instead of silently using a wrong one. Metrics are exposed at
-`/actuator/prometheus`.
+`/actuator/prometheus` inside Docker only: the gateway does not route `/actuator`, and its own actuator listens
+on port 9000, which is not published.
 
-**Logs** (plain text on stdout, `docker compose logs <service>`), the same in both applications:
+**Logs** (plain text on stdout, `docker compose logs <service>`), the same in all three applications:
 
-- one line per request: `POST /api/v1/bookings/7/payment -> 200 (85 ms)`; health checks and metric scrapes are skipped
+- one line per request: `172.18.0.1 POST /api/v1/bookings/7/payment -> 200 (85 ms)` (the caller's address); health checks and metric scrapes are skipped
 - every rejection with its reason: `Rejected with 409: Show has already started`, `Rejected with 401: Jwt expired at …`
 - every state change in the booking flow, with ids: hold placed, kept for payment, confirmed or released;
   booking started, confirmed (and whether the browser or the webhook reported it), failed, cancelled;
@@ -621,6 +649,8 @@ Deliberately left out until a test or feature needs them:
 
 - **Payment reconciliation**: retrying lost confirmations and failed refund requests (steps 5 and 6);
   partial refunds and cancellation fees.
+- **Edge checks at the gateway**: token checks and per-IP rate limits for anonymous reads (the services
+  check every token themselves today).
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
 - Notifications, search.
 - Show overlap checks.
