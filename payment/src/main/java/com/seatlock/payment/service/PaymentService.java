@@ -47,6 +47,8 @@ public class PaymentService {
     public Created create(CreatePaymentRequest request) {
         var existing = paymentRepository.findByBookingId(request.bookingId());
         if (existing.isPresent()) {
+            log.info("Booking {} already has payment {} (order {})", request.bookingId(), existing.get().getId(),
+                    existing.get().getRazorpayOrderId());
             return new Created(sameRequestOrConflict(existing.get(), request), false);
         }
 
@@ -54,11 +56,15 @@ public class PaymentService {
         try {
             Payment payment = paymentRepository.saveAndFlush(
                     new Payment(request.bookingId(), request.customerId(), request.amount(), CURRENCY, orderId, now()));
+            log.info("Payment {} created for booking {}: order {}, {} paise", payment.getId(), request.bookingId(),
+                    orderId, request.amount());
             return new Created(response(payment), true);
         } catch (DataIntegrityViolationException e) {
             // A parallel retry saved first; its order is used. Ours stays unpaid at
             // Razorpay, which is harmless.
             Payment winner = paymentRepository.findByBookingId(request.bookingId()).orElseThrow(() -> e);
+            log.info("Booking {}: a parallel request created payment {} first; order {} stays unused",
+                    request.bookingId(), winner.getId(), orderId);
             return new Created(sameRequestOrConflict(winner, request), false);
         }
     }
@@ -71,20 +77,27 @@ public class PaymentService {
         Payment payment = find(id);
         if (!payment.getRazorpayOrderId().equals(request.razorpayOrderId()) || !signature
                 .validPayment(request.razorpayOrderId(), request.razorpayPaymentId(), request.razorpaySignature())) {
+            log.warn("Payment {}: browser report with an invalid signature (order {}, payment {})", id,
+                    request.razorpayOrderId(), request.razorpayPaymentId());
             throw new BadRequestException("Invalid payment signature");
         }
-        markCaptured(payment, request.razorpayPaymentId(), null);
+        markCaptured(payment, request.razorpayPaymentId(), null, "browser");
         return response(find(id));
     }
 
     // Browser and webhook both land here; whichever is first captures, the other changes nothing
-    public void markCaptured(Payment payment, String razorpayPaymentId, String method) {
+    // reportedBy: "browser" or "webhook", for the logs
+    public void markCaptured(Payment payment, String razorpayPaymentId, String method, String reportedBy) {
         Instant now = now();
         paymentWriteRepository.recordAttempt(payment.getId(), razorpayPaymentId, AttemptStatus.CAPTURED, method, null,
                 now);
-        if (!paymentWriteRepository.capture(payment.getId(), razorpayPaymentId, now)) {
+        if (paymentWriteRepository.capture(payment.getId(), razorpayPaymentId, now)) {
+            log.info("Payment {} captured ({}, reported by {})", payment.getId(), razorpayPaymentId, reportedBy);
+        } else {
             String capturedBy = find(payment.getId()).getRazorpayPaymentId();
-            if (!razorpayPaymentId.equals(capturedBy)) {
+            if (razorpayPaymentId.equals(capturedBy)) {
+                log.info("Payment {} already captured; {} report changes nothing", payment.getId(), reportedBy);
+            } else {
                 // Paid twice for one order: needs a refund by hand (not automated yet)
                 log.warn("Payment {} already captured by {}, ignoring second capture {}", payment.getId(), capturedBy,
                         razorpayPaymentId);
@@ -97,6 +110,7 @@ public class PaymentService {
         if (!paymentWriteRepository.startRefund(id, now())) {
             Payment current = find(id);
             if (current.getStatus() == PaymentStatus.REFUND_PENDING || current.getStatus() == PaymentStatus.REFUNDED) {
+                log.info("Payment {} refund asked again; already {}", id, current.getStatus());
                 return response(current);
             }
             throw new ConflictException("Payment is not captured");
@@ -107,7 +121,10 @@ public class PaymentService {
             String refundId = razorpay.refund(payment.getRazorpayPaymentId(), payment.getAmount(),
                     request.reason().name());
             paymentWriteRepository.insertRefund(id, refundId, payment.getAmount(), request.reason(), now());
+            log.info("Payment {} refund {} requested ({}, {} paise)", id, refundId, request.reason(),
+                    payment.getAmount());
         } catch (DownstreamException e) {
+            log.warn("Payment {} refund request failed; back to CAPTURED", id);
             paymentWriteRepository.undoRefund(id, now());
             throw e;
         }

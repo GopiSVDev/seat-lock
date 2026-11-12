@@ -367,10 +367,29 @@ Booking states: `PENDING_PAYMENT → CONFIRMED → CANCELLED`, `PENDING_PAYMENT 
 delivery are lost, or a refund request itself fails, nothing retries yet. Steps 5 and 6 add reconciliation
 and events for that.
 
+**Refunds take days.** Razorpay sends `refund.created` within seconds (logged and ignored: the refund id is
+already known from the refund request) but `refund.processed` only once the bank has credited the money,
+which takes days for a normal-speed refund. Until then the payment stays `REFUND_PENDING`, which is the true
+state. `refund.failed` is not handled yet (the payment would stay `REFUND_PENDING`); reconciliation covers it.
+
 **Running it with Razorpay test mode:** put the test Key ID and Key Secret in `.env`
 (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`) plus a webhook secret of your own (`RAZORPAY_WEBHOOK_SECRET`).
 Razorpay's webhook needs a public HTTPS URL; a Cloudflare quick tunnel to the payment service gives one
-for local runs.
+for local runs (no Cloudflare account needed):
+
+```bash
+docker compose --profile tunnel up -d tunnel
+docker compose logs tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com'
+```
+
+The URL changes every time the tunnel starts, so after each start update the webhook in the Razorpay dashboard
+(test mode, Settings → Webhooks): URL = tunnel URL + `/webhooks/razorpay`, secret = `RAZORPAY_WEBHOOK_SECRET`,
+events `payment.captured`, `payment.failed` and `refund.processed`. Without the tunnel everything still works
+through the browser path; only the webhook backup is missing.
+
+To see whether Razorpay's webhooks arrive: `docker compose logs -f payment | grep -E 'webhooks|Razorpay event'`.
+Each delivery logs its event and ids, then `POST /webhooks/razorpay -> 200`; a wrong secret shows as
+`Rejected Razorpay webhook: invalid signature` and `-> 400`.
 
 ### Confirming a paid booking
 
@@ -549,14 +568,15 @@ payment succeeds unless a test says otherwise); in payment tests it plays Razorp
 | Test | What it proves |
 |---|---|
 | `BookingConcurrencyTest` | 20 buyers racing for the same seats: exactly 1 wins, also with seat ids in opposite orders; 30 parallel best-available buyers never share a seat and all can book; a double-tapped checkout and pay books once; 10 simultaneous cancels release the seats once |
-| `BookingPaymentTest` | checkout extends the hold to the payment window without booking seats and calls the payment service with a service token; a repeated checkout finds the same booking; payment service down → 502, then a retry works; a verified payment books the seats; a rejected signature leaves the booking unpaid; the webhook callback confirms once; `/internal/**` refuses users, admins and other services; browser and webhook racing confirm once; paid after the hold was lost → FAILED + one refund; unpaid bookings expire and stay out of my bookings; cancelling a paid booking refunds it |
+| `BookingPaymentTest` | checkout extends the hold to the payment window without booking seats and calls the payment service with a service token; a repeated checkout finds the same booking; payment service down → 502, then a retry works; a verified payment books the seats; a rejected signature leaves the booking unpaid; the webhook callback confirms once; `/internal/**` refuses users, admins and other services; browser and webhook racing confirm once; paid after the hold was lost → FAILED + one refund; unpaid bookings expire and stay out of my bookings; cancelling a paid booking refunds it; the logs say who confirmed a payment (browser or webhook) |
 | `BookingApiTest` | owner taken from the token, show copy on the booking, a booked hold is gone from Redis, 409 for taken seats, only the holder can book a hold, others' bookings are 404, upcoming/past split, cancel, idempotent cancel, no cancel after the show started |
 | `HoldRateLimitTest` | the 11th hold in a burst is 429 with `Retry-After` and problem details, the bucket lives in Redis with an expiry, both hold endpoints share it, other users keep their own bucket, release and booking aren't limited |
 | `HoldApiTest` | a hold lasts 5 minutes (TTL set in Redis), held seats are 409 for others and unavailable on the seat map, release, expiry frees the seats and the expired hold can't be booked, a new hold replaces the old one, others' holds are 404, booked seats can't be held, best-available blocks skip held seats, validation |
 | `BookingConstraintsTest` | the database itself refuses bad states: a cancelled booking without a time, an unpaid booking without a deadline, unknown statuses, one seat in two confirmed bookings |
 | `PaymentApiTest` (payment) | one Razorpay order per booking, a different amount is 409, Razorpay down → 502 and nothing saved, only the `PAYMENTS_CLIENT` role gets in, a valid Checkout signature captures, forged signatures (or another order's) are 400, a refund is asked once, an unpaid payment can't be refunded, a refused refund can be asked again |
-| `WebhookTest` (payment) | unsigned or forged events are 400; `payment.captured` captures and calls the backend with a service token; repeats change nothing; backend down → 502 so Razorpay retries; a failed attempt keeps the order open; `refund.processed` completes the refund; unknown orders and other events are acknowledged |
+| `WebhookTest` (payment) | unsigned or forged events are 400; `payment.captured` captures and calls the backend with a service token; repeats change nothing; backend down → 502 so Razorpay retries; a failed attempt keeps the order open; `refund.processed` completes the refund; unknown orders and other events are acknowledged; the payment method survives the browser reporting first; every event is logged with its ids, a forged one with a warning |
 | `SecurityRulesTest` | public reads (and the dev checkout page), 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default |
+| `RequestLogTest` | every request logs method, path, status and time, rejections log their reason; health checks are not logged |
 | `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
 | `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
 | `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest`, `RateLimiterTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable, `Retry-After` rounded up to whole seconds, the rate limit lets requests through when Redis fails |
@@ -568,7 +588,7 @@ backend/              Spring Boot application (Dockerfile, pom.xml, src/)
 payment/              payment service, a separate Spring Boot application (Dockerfile, pom.xml, src/)
 keycloak/             Keycloak realm (roles, login and service clients, test users), imported on first start
 postgres/             init script: the payment database and its user
-docker-compose.yml    postgres + redis + backend + payment + keycloak; profiles: test, monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
+docker-compose.yml    postgres + redis + backend + payment + keycloak; profiles: test, tunnel (Razorpay webhook), monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
 docker-compose.vm.yml host networking overrides for the load-test VM
 .env.example          every setting the app needs (copy to .env)
 loadtest/results/     SUMMARY.md: performance story; RESULTS.md + runs/: every load-test run and its report
@@ -580,6 +600,20 @@ collections/          Bruno collection: every endpoint with tests, importable
 Configuration comes only from environment variables (see `.env.example`); there are no defaults in the
 app, so a missing value fails at startup instead of silently using a wrong one. Metrics are exposed at
 `/actuator/prometheus`.
+
+**Logs** (plain text on stdout, `docker compose logs <service>`), the same in both applications:
+
+- one line per request: `POST /bookings/7/payment -> 200 (85 ms)`; health checks and metric scrapes are skipped
+- every rejection with its reason: `Rejected with 409: Show has already started`, `Rejected with 401: Jwt expired at …`
+- every state change in the booking flow, with ids: hold placed, kept for payment, confirmed or released;
+  booking started, confirmed (and whether the browser or the webhook reported it), failed, cancelled;
+  how many unpaid bookings each sweep expired;
+  payment created, captured, refund requested, refunded; each Razorpay webhook with its event and ids
+- warnings for what needs a look (forged signatures, a paid booking whose seats were lost, a failed refund request)
+
+Never logged: tokens, signatures, secrets, request or response bodies, customer names. Customers appear only
+as their opaque Keycloak id. A log level can be changed without a rebuild through the service's environment in
+compose, for example `LOGGING_LEVEL_COM_SEATLOCK=DEBUG`. Request ids across services come with tracing (step 10).
 
 ## Not built yet
 

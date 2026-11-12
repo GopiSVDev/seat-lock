@@ -6,9 +6,11 @@ import com.seatlock.backend.catalogue.internal.theatre.dto.TheatreResponse;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import com.seatlock.backend.shared.web.PageResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TheatreService {
@@ -20,7 +22,9 @@ public class TheatreService {
     @Transactional
     public TheatreResponse create(CreateTheatreRequest request) {
         Theatre theatre = new Theatre(request.name(), cityService.findCity(request.cityId()), request.address());
-        return TheatreResponse.from(theatreRepository.save(theatre));
+        Theatre saved = theatreRepository.save(theatre);
+        log.info("Theatre {} created: {} (city {})", saved.getId(), saved.getName(), request.cityId());
+        return TheatreResponse.from(saved);
     }
 
     public PageResponse<TheatreResponse> find(Long cityId, String query, int page, int size) {

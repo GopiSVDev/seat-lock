@@ -34,7 +34,8 @@ public class PaymentWriteRepository {
                     (payment_id, razorpay_payment_id, status, method, error_description, created_at)
                 values (:paymentId, :razorpayPaymentId, :status, :method, :errorDescription, :now)
                 on conflict (razorpay_payment_id)
-                do update set status = excluded.status, error_description = excluded.error_description
+                do update set status = excluded.status, error_description = excluded.error_description,
+                    method = coalesce(excluded.method, payment_attempt.method)
                 """).param("paymentId", paymentId).param("razorpayPaymentId", razorpayPaymentId)
                 .param("status", status.name()).param("method", method).param("errorDescription", errorDescription)
                 .param("now", Timestamp.from(now)).update();

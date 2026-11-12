@@ -86,6 +86,7 @@ public class BookingService {
         // Idempotent per booking: the same Razorpay order every time
         PaymentClient.Payment payment = paymentClient.create(booking.getId(), customer.id(), booking.getTotalAmount());
         bookingWriteRepository.setPayment(booking.getId(), payment.id());
+        log.info("Booking {} awaits payment {} (order {})", booking.getId(), payment.id(), payment.razorpayOrderId());
         return new Checkout(response.withCheckout(new BookingResponse.Checkout(payment.razorpayOrderId(),
                 payment.keyId(), payment.amount(), payment.currency())), existing.isEmpty());
     }
@@ -96,22 +97,26 @@ public class BookingService {
         if (booking.getPaymentId() == null) {
             throw new ConflictException("Payment has not been started");
         }
+        log.info("Booking {}: browser reports Razorpay payment {}", id, request.razorpayPaymentId());
         paymentClient.verify(booking.getPaymentId(), request.razorpayOrderId(), request.razorpayPaymentId(),
                 request.razorpaySignature());
-        return response(settlePaid(booking));
+        return response(settlePaid(booking, "browser"));
     }
 
     // The payment service, after Razorpay's webhook; also covers a buyer who closed
     // the browser after paying
     public void paid(Long id, Long paymentId) {
+        log.info("Booking {}: payment service reports payment {} paid", id, paymentId);
         Booking booking = bookingRepository.findById(id).orElseThrow(() -> new NotFoundException("Booking", id));
         if (booking.getPaymentId() == null) {
             // We crashed between creating the payment and saving its id
             bookingWriteRepository.setPayment(id, paymentId);
         } else if (!booking.getPaymentId().equals(paymentId)) {
+            log.warn("Booking {} has payment {}, but payment {} was reported paid", id, booking.getPaymentId(),
+                    paymentId);
             throw new ConflictException("Booking has another payment");
         }
-        settlePaid(bookingRepository.findById(id).orElseThrow());
+        settlePaid(bookingRepository.findById(id).orElseThrow(), "webhook");
     }
 
     // Idempotent: cancelling a cancelled booking returns it unchanged
@@ -128,6 +133,7 @@ public class BookingService {
         if (cancelledNow) {
             inventoryApi.releaseSeats(booking.getShowId(), seats.stream().map(BookingSeat::getShowSeatId).toList());
             bookingWriteRepository.cancelSeats(id);
+            log.info("Booking {} cancelled; {} seats released", id, seats.size());
             // Older bookings were made before payments existed
             if (booking.getPaymentId() != null) {
                 afterCommit(() -> refund(booking, "BOOKING_CANCELLED"));
@@ -178,6 +184,8 @@ public class BookingService {
         try {
             Long id = bookingWriteRepository.insertPending(hold.showId(), show, customer.id(), customer.name(), holdId,
                     Instant.now().truncatedTo(ChronoUnit.MICROS), hold.expiresAt(), totalAmount, hold.seats());
+            log.info("Booking {} started from hold {}: show {}, {} seats, {} paise, pay by {}", id, holdId,
+                    hold.showId(), hold.seats().size(), totalAmount, hold.expiresAt());
             return bookingRepository.findById(id).orElseThrow();
         } catch (DataIntegrityViolationException e) {
             // A double-tapped checkout inserted it first (uk_booking_hold)
@@ -185,28 +193,44 @@ public class BookingService {
         }
     }
 
-    // Browser and webhook both end here; whichever comes second finds the booking already settled
-    private Booking settlePaid(Booking booking) {
+    // Browser and webhook both end here; whichever comes second finds the booking already settled.
+    // reportedBy: "browser" or "webhook", for the logs
+    private Booking settlePaid(Booking booking, String reportedBy) {
+        boolean settledNow = false;
         try {
-            transactionTemplate.executeWithoutResult(status -> {
-                if (bookingWriteRepository.settle(booking.getId(), BookingStatus.CONFIRMED)) {
+            settledNow = Boolean.TRUE.equals(transactionTemplate.execute(status -> {
+                boolean settled = bookingWriteRepository.settle(booking.getId(), BookingStatus.CONFIRMED);
+                if (settled) {
                     inventoryApi.confirmHold(booking.getHoldId(), booking.getCustomerId());
                 }
-            });
+                return settled;
+            }));
+            if (settledNow) {
+                log.info("Booking {} confirmed (reported by {})", booking.getId(), reportedBy);
+            }
         } catch (NotFoundException | ConflictException seatsLost) {
             // Paid, but the hold expired or was replaced before we could book the seats
-            Boolean failedNow = transactionTemplate
-                    .execute(status -> bookingWriteRepository.settle(booking.getId(), BookingStatus.FAILED));
-            if (Boolean.TRUE.equals(failedNow)) {
+            settledNow = Boolean.TRUE.equals(transactionTemplate
+                    .execute(status -> bookingWriteRepository.settle(booking.getId(), BookingStatus.FAILED)));
+            if (settledNow) {
+                log.warn("Booking {} paid but its seats were lost ({}); FAILED, refunding", booking.getId(),
+                        seatsLost.getMessage());
                 refund(booking, "BOOKING_FAILED");
             }
         }
-        return bookingRepository.findById(booking.getId()).orElseThrow();
+        Booking settled = bookingRepository.findById(booking.getId()).orElseThrow();
+        if (!settledNow) {
+            log.info("Booking {} is already {}; {} report changes nothing", booking.getId(), settled.getStatus(),
+                    reportedBy);
+        }
+        return settled;
     }
 
     private void refund(Booking booking, String reason) {
         try {
             paymentClient.refund(booking.getPaymentId(), reason);
+            log.info("Booking {}: refund of payment {} requested ({})", booking.getId(), booking.getPaymentId(),
+                    reason);
         } catch (DownstreamException e) {
             // The buyer's money is held with nothing to show for it; reconciliation (steps
             // 5/6) must retry this

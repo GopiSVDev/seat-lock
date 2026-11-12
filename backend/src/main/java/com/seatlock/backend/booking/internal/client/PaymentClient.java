@@ -2,6 +2,7 @@ package com.seatlock.backend.booking.internal.client;
 
 import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.DownstreamException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -22,6 +23,7 @@ import static org.springframework.security.oauth2.client.web.client.RequestAttri
 
 // The payment service, called synchronously with our own client credentials token.
 // Plain timeouts only; retries and circuit breaking are step 5 (Resilience4j).
+@Slf4j
 @Component
 public class PaymentClient {
 
@@ -60,6 +62,7 @@ public class PaymentClient {
         } catch (DownstreamException e) {
             if (e.getCause() instanceof HttpClientErrorException clientError
                     && clientError.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                log.warn("Payment service rejected the browser's signature for payment {}", paymentId);
                 throw new BadRequestException("Invalid payment signature");
             }
             throw e;

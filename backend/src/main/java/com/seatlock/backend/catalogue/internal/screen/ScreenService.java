@@ -6,6 +6,7 @@ import com.seatlock.backend.catalogue.internal.theatre.Theatre;
 import com.seatlock.backend.catalogue.internal.theatre.TheatreRepository;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScreenService {
@@ -39,6 +41,7 @@ public class ScreenService {
             }
         }
 
+        log.info("Screen {} created in theatre {}: {} seats", screen.getId(), theatreId, seats.size());
         return ScreenResponse.from(screen, seatRepository.saveAll(seats));
     }
 

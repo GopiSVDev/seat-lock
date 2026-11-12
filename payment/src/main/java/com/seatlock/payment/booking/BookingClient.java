@@ -1,6 +1,7 @@
 package com.seatlock.payment.booking;
 
 import com.seatlock.payment.shared.exception.DownstreamException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
@@ -18,6 +19,7 @@ import static org.springframework.security.oauth2.client.web.client.RequestAttri
 
 // Tells the backend a booking is paid. Each call carries our own client credentials token
 // (fetched from Keycloak and cached until it expires by the interceptor).
+@Slf4j
 @Component
 public class BookingClient {
 
@@ -37,6 +39,7 @@ public class BookingClient {
         try {
             rest.post().uri("/internal/bookings/{id}/paid", bookingId).attributes(clientRegistrationId("seatlock"))
                     .body(Map.of("paymentId", paymentId)).retrieve().toBodilessEntity();
+            log.info("Backend accepted payment {} of booking {}", paymentId, bookingId);
         } catch (RestClientException | OAuth2AuthorizationException e) {
             // Also when Keycloak is down: no token, no call
             throw new DownstreamException("Backend did not accept payment of booking " + bookingId, e);

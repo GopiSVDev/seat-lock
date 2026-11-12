@@ -135,6 +135,18 @@ services:
       retries: 5
       start_period: 20s
 
+  # Public HTTPS URL for Razorpay's webhook (dev only): docker compose --profile tunnel up -d tunnel
+  # Quick tunnel: no Cloudflare account, a new random *.trycloudflare.com URL on every start (see the logs).
+  # Exposes the whole payment port; everything but the signed webhook needs a service token.
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.7
+    container_name: seat-lock-tunnel
+    profiles: [tunnel]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://payment:${PAYMENT_PORT:?PAYMENT_PORT is not set}"]
+    depends_on:
+      payment:
+        condition: service_healthy
+
   # Dev mode; production would run `start` with HTTPS and its own database
   keycloak:
     image: quay.io/keycloak/keycloak:26.3.3

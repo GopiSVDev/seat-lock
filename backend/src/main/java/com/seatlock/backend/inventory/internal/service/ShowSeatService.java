@@ -81,6 +81,7 @@ public class ShowSeatService implements InventoryApi {
     public HeldSeats startPayment(String holdId, String customerId, Duration window) {
         HoldRecord hold = holdStore.extend(holdId, customerId, window)
                 .orElseThrow(() -> new NotFoundException("Hold", holdId));
+        log.info("Hold {} kept until {} for payment", holdId, hold.expiresAt());
 
         List<BookedSeat> seats = showSeatRepository.findStates(hold.seatIds()).stream()
                 .map(seat -> new BookedSeat(seat.showSeatId(), seat.label(), seat.price())).toList();
@@ -96,8 +97,11 @@ public class ShowSeatService implements InventoryApi {
         // The guard still decides: fewer rows only if Redis lost the hold or a double-tapped confirm came second
         List<BookedSeat> booked = showSeatRepository.bookIfAvailable(hold.showId(), hold.seatIds());
         if (booked.size() != hold.seatIds().size()) {
+            log.warn("Hold {}: only {} of seats {} could be booked; rolling back", holdId, booked.size(),
+                    hold.seatIds());
             throw new ConflictException("One or more seats are already booked");
         }
+        log.info("Hold {} confirmed: seats {} of show {} booked", holdId, hold.seatIds(), hold.showId());
 
         // After commit, never before: SeatHoldService relies on BOOKED being visible
         // once the keys are gone
@@ -126,5 +130,6 @@ public class ShowSeatService implements InventoryApi {
             throw new IllegalStateException(
                     "Expected to release %d seats of show %d, released %d".formatted(seats.size(), showId, released));
         }
+        log.info("Released seats {} of show {}", seats, showId);
     }
 }

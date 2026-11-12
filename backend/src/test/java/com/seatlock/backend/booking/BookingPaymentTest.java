@@ -8,7 +8,10 @@ import com.seatlock.backend.support.IntegrationTest;
 import com.seatlock.backend.support.TestShow;
 import com.seatlock.backend.support.TestUser;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import tools.jackson.databind.JsonNode;
 
 import java.time.Instant;
@@ -150,6 +153,20 @@ class BookingPaymentTest extends IntegrationTest {
         assertThat(status(bookingId)).isEqualTo("CONFIRMED");
         assertThat(seatStatuses(seats)).containsOnly("BOOKED");
         assertThat(paidCallback(paymentServiceAccount, bookingId, 999).status()).isEqualTo(409);
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void logsSayWhoConfirmedThePayment(CapturedOutput output) {
+        TestShow show = newShow();
+        long bookingId = checkout(asha, hold(asha, show, show.seats("B", 1)).text("id")).id();
+
+        assertThat(pay(asha, bookingId).status()).isEqualTo(200);
+        assertThat(paidCallback(paymentServiceAccount, bookingId, PAYMENT_ID).status()).isEqualTo(204);
+
+        assertThat(output.getAll()).contains("Booking " + bookingId + " started from hold",
+                "Booking " + bookingId + " confirmed (reported by browser)",
+                "Booking " + bookingId + " is already CONFIRMED; webhook report changes nothing");
     }
 
     @Test

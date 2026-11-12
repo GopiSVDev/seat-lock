@@ -4,7 +4,11 @@ import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.seatlock.payment.support.Api.Response;
 import com.seatlock.payment.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -113,6 +117,43 @@ class WebhookTest extends IntegrationTest {
         assertThat(status(payment.id())).isEqualTo("REFUNDED");
         assertThat(jdbc.sql("select processed_at is not null from payment.refund where payment_id = :id")
                 .param("id", payment.id()).query(Boolean.class).single()).isTrue();
+    }
+
+    @Test
+    void browserFirstStillKeepsTheMethodTheWebhookBrings() {
+        Response payment = createPayment(30000);
+        String razorpayPaymentId = razorpayPaymentId();
+        capture(payment, razorpayPaymentId);
+
+        assertThat(webhook(paymentEvent("payment.captured", payment.text("razorpayOrderId"), razorpayPaymentId, null))
+                .status()).isEqualTo(200);
+
+        assertThat(jdbc.sql("select method from payment.payment_attempt where payment_id = :id")
+                .param("id", payment.id()).query(String.class).single()).isEqualTo("card");
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void webhooksAreLoggedWithTheirEventAndIds(CapturedOutput output) throws InterruptedException {
+        Response payment = createPayment(30000);
+        String orderId = payment.text("razorpayOrderId");
+        String razorpayPaymentId = razorpayPaymentId();
+        String forged = jsonMapper
+                .writeValueAsString(paymentEvent("payment.captured", orderId, razorpayPaymentId, null));
+
+        assertThat(api.postRaw("/webhooks/razorpay", forged, Map.of("X-Razorpay-Signature", "0".repeat(64))).status())
+                .isEqualTo(400);
+        assertThat(webhook(paymentEvent("payment.captured", orderId, razorpayPaymentId, null)).status()).isEqualTo(200);
+
+        String[] lines = {"Rejected Razorpay webhook: invalid signature", "POST /webhooks/razorpay -> 400",
+                "Razorpay event payment.captured: order " + orderId + ", payment " + razorpayPaymentId,
+                "Payment " + payment.id() + " captured (" + razorpayPaymentId + ", reported by webhook)",
+                "POST /webhooks/razorpay -> 200"};
+        // Request lines are written once the response is done, which can be just after the client has it
+        for (int i = 0; i < 40 && !Arrays.stream(lines).allMatch(output.getAll()::contains); i++) {
+            Thread.sleep(50);
+        }
+        assertThat(output.getAll()).contains(lines);
     }
 
     @Test

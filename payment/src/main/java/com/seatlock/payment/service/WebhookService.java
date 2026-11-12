@@ -32,11 +32,18 @@ public class WebhookService {
 
     public void handle(byte[] body, String signatureHeader) {
         if (!signature.validWebhook(body, signatureHeader)) {
+            // Usually the dashboard's webhook secret differs from RAZORPAY_WEBHOOK_SECRET
+            log.warn("Rejected Razorpay webhook: invalid signature");
             throw new BadRequestException("Invalid webhook signature");
         }
         JsonNode event = jsonMapper.readTree(body);
         JsonNode payload = event.path("payload");
-        switch (text(event.path("event"))) {
+        String name = text(event.path("event"));
+        JsonNode payment = payload.path("payment").path("entity");
+        JsonNode refund = payload.path("refund").path("entity");
+        log.info("Razorpay event {}: order {}, payment {}, refund {}", name, text(payment.path("order_id")),
+                text(payment.path("id")), text(refund.path("id")));
+        switch (name) {
             case "payment.captured" -> paymentCaptured(payload.path("payment").path("entity"));
             case "payment.failed" -> paymentFailed(payload.path("payment").path("entity"));
             case "refund.processed" -> refundProcessed(payload.path("refund").path("entity"));
@@ -50,7 +57,7 @@ public class WebhookService {
         if (payment == null) {
             return;
         }
-        paymentService.markCaptured(payment, text(entity.path("id")), text(entity.path("method")));
+        paymentService.markCaptured(payment, text(entity.path("id")), text(entity.path("method")), "webhook");
         // Every time, even if already captured: an earlier delivery may have failed to
         // reach the backend.
         // If the backend fails now, the 5xx makes Razorpay deliver this event again.
@@ -61,6 +68,8 @@ public class WebhookService {
     private void paymentFailed(JsonNode entity) {
         Payment payment = byOrder(text(entity.path("order_id")));
         if (payment != null) {
+            log.info("Payment {} attempt {} failed: {}", payment.getId(), text(entity.path("id")),
+                    text(entity.path("error_description")));
             paymentWriteRepository.recordAttempt(payment.getId(), text(entity.path("id")), AttemptStatus.FAILED,
                     text(entity.path("method")), text(entity.path("error_description")), now());
         }
@@ -68,9 +77,13 @@ public class WebhookService {
 
     private void refundProcessed(JsonNode entity) {
         String razorpayPaymentId = text(entity.path("payment_id"));
-        paymentRepository.findByRazorpayPaymentId(razorpayPaymentId).ifPresentOrElse(
-                payment -> paymentWriteRepository.completeRefund(payment.getId(), now()),
-                () -> log.warn("Refund for unknown Razorpay payment {}", razorpayPaymentId));
+        paymentRepository.findByRazorpayPaymentId(razorpayPaymentId).ifPresentOrElse(payment -> {
+            if (paymentWriteRepository.completeRefund(payment.getId(), now())) {
+                log.info("Payment {} refunded", payment.getId());
+            } else {
+                log.info("Payment {} refund event changes nothing; status is {}", payment.getId(), payment.getStatus());
+            }
+        }, () -> log.warn("Refund for unknown Razorpay payment {}", razorpayPaymentId));
     }
 
     // Orders made elsewhere on the same Razorpay account are not ours: acknowledge

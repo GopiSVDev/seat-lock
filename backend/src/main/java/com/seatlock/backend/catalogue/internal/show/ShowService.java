@@ -25,6 +25,7 @@ import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import com.seatlock.backend.shared.time.IndiaTime;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ShowService implements CatalogueApi {
@@ -81,6 +83,8 @@ public class ShowService implements CatalogueApi {
                 .toList();
 
         eventPublisher.publishEvent(new ShowScheduled(show.getId(), seats));
+        log.info("Show {} scheduled: movie {}, screen {}, starts {}, {} seats", show.getId(), movie.getId(),
+                screen.getId(), show.getStartTime(), seats.size());
 
         return ShowResponse.from(show, showPrices);
     }

@@ -8,12 +8,14 @@ import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import com.seatlock.backend.shared.web.PageResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MovieService {
@@ -47,7 +49,9 @@ public class MovieService {
         Movie movie = new Movie(request.title(), request.description(), request.durationMinutes(),
                 request.certification(), request.releaseDate(), request.posterUrl(),
                 request.genres().stream().distinct().toList());
-        return MovieResponse.from(movieRepository.save(movie));
+        Movie saved = movieRepository.save(movie);
+        log.info("Movie {} created: {}", saved.getId(), saved.getTitle());
+        return MovieResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
