@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.List;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/cities")
 @RequiredArgsConstructor
@@ -23,8 +25,8 @@ public class CityController {
 
     @GetMapping
     public List<CityResponse> find(@RequestParam(required = false) @Size(max = 50) String query,
-                                   @RequestParam(defaultValue = "false") boolean popular,
-                                   @RequestParam(defaultValue = "false") boolean withTheatres) {
+            @RequestParam(defaultValue = "false") boolean popular,
+            @RequestParam(defaultValue = "false") boolean withTheatres) {
         return cityService.find(query, popular, withTheatres);
     }
 
@@ -36,12 +38,12 @@ public class CityController {
     @PostMapping
     public ResponseEntity<CityResponse> create(@Valid @RequestBody CreateCityRequest request) {
         CityResponse response = cityService.create(request);
-        return ResponseEntity.created(URI.create("/cities/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create(API_V1 + "/cities/" + response.id())).body(response);
     }
 
     @PostMapping("/{id}/aliases")
     public ResponseEntity<CityAliasResponse> addAlias(@PathVariable Long id,
-                                                      @Valid @RequestBody CreateCityAliasRequest request) {
+            @Valid @RequestBody CreateCityAliasRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(cityService.addAlias(id, request));
     }
 }

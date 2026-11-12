@@ -17,8 +17,7 @@ import static org.mockito.Mockito.when;
 class RateLimiterTest {
 
     private static final BucketConfiguration ONE_PER_MINUTE = BucketConfiguration.builder()
-            .addLimit(limit -> limit.capacity(1).refillGreedy(1, Duration.ofMinutes(1)))
-            .build();
+            .addLimit(limit -> limit.capacity(1).refillGreedy(1, Duration.ofMinutes(1))).build();
 
     @Test
     @SuppressWarnings("unchecked")

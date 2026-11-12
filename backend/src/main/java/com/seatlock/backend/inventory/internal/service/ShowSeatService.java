@@ -3,10 +3,12 @@ package com.seatlock.backend.inventory.internal.service;
 import com.seatlock.backend.catalogue.ShowScheduled;
 import com.seatlock.backend.inventory.BookedSeat;
 import com.seatlock.backend.inventory.ConfirmedHold;
+import com.seatlock.backend.inventory.HeldSeats;
 import com.seatlock.backend.inventory.InventoryApi;
 import com.seatlock.backend.inventory.internal.domain.SeatType;
 import com.seatlock.backend.inventory.internal.domain.ShowSeat;
 import com.seatlock.backend.inventory.internal.repository.ClaimedHold;
+import com.seatlock.backend.inventory.internal.repository.HoldRecord;
 import com.seatlock.backend.inventory.internal.repository.HoldStore;
 import com.seatlock.backend.inventory.internal.repository.LayoutSeat;
 import com.seatlock.backend.inventory.internal.repository.SeatAvailability;
@@ -44,9 +46,8 @@ public class ShowSeatService implements InventoryApi {
 
     @EventListener
     public void on(ShowScheduled event) {
-        List<ShowSeat> showSeats = event.seats().stream()
-                .map(seat -> new ShowSeat(event.showId(), seat.seatId(), seat.rowLabel(), seat.seatNumber(),
-                        SeatType.valueOf(seat.seatType()), seat.seatRank()))
+        List<ShowSeat> showSeats = event.seats().stream().map(seat -> new ShowSeat(event.showId(), seat.seatId(),
+                seat.rowLabel(), seat.seatNumber(), SeatType.valueOf(seat.seatType()), seat.seatRank(), seat.price()))
                 .toList();
 
         showSeatRepository.saveAll(showSeats);
@@ -77,6 +78,17 @@ public class ShowSeatService implements InventoryApi {
     }
 
     @Override
+    public HeldSeats startPayment(String holdId, String customerId, Duration window) {
+        HoldRecord hold = holdStore.extend(holdId, customerId, window)
+                .orElseThrow(() -> new NotFoundException("Hold", holdId));
+        log.info("Hold {} kept until {} for payment", holdId, hold.expiresAt());
+
+        List<BookedSeat> seats = showSeatRepository.findStates(hold.seatIds()).stream()
+                .map(seat -> new BookedSeat(seat.showSeatId(), seat.label(), seat.price())).toList();
+        return new HeldSeats(hold.showId(), seats, hold.expiresAt());
+    }
+
+    @Override
     @Transactional
     public ConfirmedHold confirmHold(String holdId, String customerId) {
         ClaimedHold hold = holdStore.claim(holdId, customerId, CONFIRM_GRACE)
@@ -85,10 +97,14 @@ public class ShowSeatService implements InventoryApi {
         // The guard still decides: fewer rows only if Redis lost the hold or a double-tapped confirm came second
         List<BookedSeat> booked = showSeatRepository.bookIfAvailable(hold.showId(), hold.seatIds());
         if (booked.size() != hold.seatIds().size()) {
+            log.warn("Hold {}: only {} of seats {} could be booked; rolling back", holdId, booked.size(),
+                    hold.seatIds());
             throw new ConflictException("One or more seats are already booked");
         }
+        log.info("Hold {} confirmed: seats {} of show {} booked", holdId, hold.seatIds(), hold.showId());
 
-        // After commit, never before: SeatHoldService relies on BOOKED being visible once the keys are gone
+        // After commit, never before: SeatHoldService relies on BOOKED being visible
+        // once the keys are gone
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -111,8 +127,9 @@ public class ShowSeatService implements InventoryApi {
 
         // Fewer means booking and inventory disagree: roll back rather than half-cancel
         if (released != seats.size()) {
-            throw new IllegalStateException("Expected to release %d seats of show %d, released %d"
-                    .formatted(seats.size(), showId, released));
+            throw new IllegalStateException(
+                    "Expected to release %d seats of show %d, released %d".formatted(seats.size(), showId, released));
         }
+        log.info("Released seats {} of show {}", seats, showId);
     }
 }

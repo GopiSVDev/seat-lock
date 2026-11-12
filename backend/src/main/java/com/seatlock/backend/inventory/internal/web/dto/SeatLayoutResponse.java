@@ -7,13 +7,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public record SeatLayoutResponse(
-        Long showId,
-        int totalSeats,
-        List<Row> rows
-) {
+public record SeatLayoutResponse(Long showId, int totalSeats, List<Row> rows) {
 
-    public record Row(String label, SeatType seatType, List<SeatInfo> seats) {
+    // price in paise; a row has one seat type, so one price
+    public record Row(String label, SeatType seatType, long price, List<SeatInfo> seats) {
     }
 
     public record SeatInfo(Long id, int number) {
@@ -24,9 +21,8 @@ public record SeatLayoutResponse(
                 .collect(Collectors.groupingBy(LayoutSeat::rowLabel, LinkedHashMap::new, Collectors.toList()))
                 .entrySet().stream()
                 .map(entry -> new Row(entry.getKey(), entry.getValue().getFirst().seatType(),
-                        entry.getValue().stream()
-                                .map(seat -> new SeatInfo(seat.id(), seat.seatNumber()))
-                                .toList()))
+                        entry.getValue().getFirst().price(),
+                        entry.getValue().stream().map(seat -> new SeatInfo(seat.id(), seat.seatNumber())).toList()))
                 .toList();
 
         return new SeatLayoutResponse(showId, seats.size(), rows);

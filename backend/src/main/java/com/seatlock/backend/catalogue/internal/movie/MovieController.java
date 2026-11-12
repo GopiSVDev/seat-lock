@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.List;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/movies")
 @RequiredArgsConstructor
@@ -25,18 +27,18 @@ public class MovieController {
 
     @GetMapping
     public PageResponse<MovieCardResponse> find(@RequestParam(required = false) Long cityId,
-                                                @RequestParam(defaultValue = "") List<Language> language,
-                                                @RequestParam(defaultValue = "") List<Genre> genre,
-                                                @RequestParam(defaultValue = "") List<ShowFormat> format,
-                                                @RequestParam(defaultValue = "0") @Min(0) int page,
-                                                @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
+            @RequestParam(defaultValue = "") List<Language> language,
+            @RequestParam(defaultValue = "") List<Genre> genre,
+            @RequestParam(defaultValue = "") List<ShowFormat> format,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
         return movieService.find(new MovieFilter(cityId, language, genre, format), page, size);
     }
 
     @PostMapping
     public ResponseEntity<MovieResponse> create(@Valid @RequestBody CreateMovieRequest request) {
         MovieResponse response = movieService.create(request);
-        return ResponseEntity.created(URI.create("/movies/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create(API_V1 + "/movies/" + response.id())).body(response);
     }
 
     @GetMapping("/{id}")

@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequiredArgsConstructor
 public class ScreenController {
@@ -16,9 +18,10 @@ public class ScreenController {
     private final ScreenService screenService;
 
     @PostMapping("/theatres/{theatreId}/screens")
-    public ResponseEntity<ScreenResponse> create(@PathVariable Long theatreId, @Valid @RequestBody CreateScreenRequest request) {
+    public ResponseEntity<ScreenResponse> create(@PathVariable Long theatreId,
+            @Valid @RequestBody CreateScreenRequest request) {
         ScreenResponse response = screenService.create(theatreId, request);
-        return ResponseEntity.created(URI.create("/screens/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create(API_V1 + "/screens/" + response.id())).body(response);
     }
 
     @GetMapping("/screens/{id}")

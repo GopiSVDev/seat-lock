@@ -33,59 +33,44 @@ public class ShowtimeRepository {
     private final JdbcClient jdbcClient;
 
     public List<ShowtimeRow> findShowtimes(ShowScope scope, List<Language> languages, List<ShowFormat> formats,
-                                           Instant now, Instant from, Instant to) {
+            Instant now, Instant from, Instant to) {
         // lower(): byte collation would sort "AGS" before "Abirami"
         String order = scope.groupsByTheatre()
                 ? "lower(t.name), t.id, s.start_time, s.id"
                 : "lower(m.title), m.id, s.start_time, s.id";
         return upcoming("""
-                        select t.id as theatre_id, t.name as theatre_name, t.address as theatre_address,
-                               m.id as movie_id, m.title, m.poster_url, m.certification, m.duration_minutes,
-                               s.id as show_id, s.start_time, s.language, s.format, sc.name as screen_name
-                        """ + UPCOMING + """
-                          and s.start_time >= :from
-                          and s.start_time < :to
-                        order by\s""" + order, scope, languages, formats, now)
-                .param("from", utc(from))
-                .param("to", utc(to))
-                .query((rs, rowNum) -> new ShowtimeRow(
-                        rs.getLong("theatre_id"),
-                        rs.getString("theatre_name"),
-                        rs.getString("theatre_address"),
-                        rs.getLong("movie_id"),
-                        rs.getString("title"),
-                        rs.getString("poster_url"),
-                        Certification.valueOf(rs.getString("certification")),
-                        rs.getInt("duration_minutes"),
-                        rs.getLong("show_id"),
+                select t.id as theatre_id, t.name as theatre_name, t.address as theatre_address,
+                       m.id as movie_id, m.title, m.poster_url, m.certification, m.duration_minutes,
+                       s.id as show_id, s.start_time, s.language, s.format, sc.name as screen_name
+                """ + UPCOMING + """
+                  and s.start_time >= :from
+                  and s.start_time < :to
+                order by\s""" + order, scope, languages, formats, now).param("from", utc(from)).param("to", utc(to))
+                .query((rs, rowNum) -> new ShowtimeRow(rs.getLong("theatre_id"), rs.getString("theatre_name"),
+                        rs.getString("theatre_address"), rs.getLong("movie_id"), rs.getString("title"),
+                        rs.getString("poster_url"), Certification.valueOf(rs.getString("certification")),
+                        rs.getInt("duration_minutes"), rs.getLong("show_id"),
                         rs.getObject("start_time", OffsetDateTime.class).toInstant(),
-                        Language.valueOf(rs.getString("language")),
-                        ShowFormat.valueOf(rs.getString("format")),
+                        Language.valueOf(rs.getString("language")), ShowFormat.valueOf(rs.getString("format")),
                         rs.getString("screen_name")))
                 .list();
     }
 
-    public List<LocalDate> findDates(ShowScope scope, List<Language> languages, List<ShowFormat> formats,
-                                     Instant now, int limit) {
+    public List<LocalDate> findDates(ShowScope scope, List<Language> languages, List<ShowFormat> formats, Instant now,
+            int limit) {
         return upcoming("""
-                        select distinct (s.start_time at time zone :zone)::date as show_date
-                        """ + UPCOMING + """
-                        order by show_date
-                        limit :limit
-                        """, scope, languages, formats, now)
-                .param("zone", IndiaTime.ZONE.getId())
-                .param("limit", limit)
-                .query((rs, rowNum) -> rs.getObject("show_date", LocalDate.class))
-                .list();
+                select distinct (s.start_time at time zone :zone)::date as show_date
+                """ + UPCOMING + """
+                order by show_date
+                limit :limit
+                """, scope, languages, formats, now).param("zone", IndiaTime.ZONE.getId()).param("limit", limit)
+                .query((rs, rowNum) -> rs.getObject("show_date", LocalDate.class)).list();
     }
 
     private JdbcClient.StatementSpec upcoming(String sql, ShowScope scope, List<Language> languages,
-                                              List<ShowFormat> formats, Instant now) {
-        return jdbcClient.sql(sql)
-                .param("movieId", scope.movieId())
-                .param("cityId", scope.cityId())
-                .param("theatreId", scope.theatreId())
-                .param("now", utc(now))
+            List<ShowFormat> formats, Instant now) {
+        return jdbcClient.sql(sql).param("movieId", scope.movieId()).param("cityId", scope.cityId())
+                .param("theatreId", scope.theatreId()).param("now", utc(now))
                 .param("languages", languages.stream().map(Enum::name).toArray(String[]::new))
                 .param("formats", formats.stream().map(Enum::name).toArray(String[]::new));
     }

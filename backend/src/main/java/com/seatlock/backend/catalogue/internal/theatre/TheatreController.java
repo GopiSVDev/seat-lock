@@ -20,6 +20,8 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/theatres")
 @RequiredArgsConstructor
@@ -30,24 +32,24 @@ public class TheatreController {
 
     @GetMapping
     public PageResponse<TheatreResponse> find(@RequestParam(required = false) Long cityId,
-                                              @RequestParam(required = false) @Size(max = 50) String query,
-                                              @RequestParam(defaultValue = "0") @Min(0) int page,
-                                              @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
+            @RequestParam(required = false) @Size(max = 50) String query,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
         return theatreService.find(cityId, query, page, size);
     }
 
     @GetMapping("/{id}/shows")
     public TheatreShowtimesResponse findShows(@PathVariable Long id,
-                                              @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-                                              @RequestParam(defaultValue = "") List<Language> language,
-                                              @RequestParam(defaultValue = "") List<ShowFormat> format) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "") List<Language> language,
+            @RequestParam(defaultValue = "") List<ShowFormat> format) {
         return showService.findTheatreShowtimes(id, date, language, format);
     }
 
     @PostMapping
     public ResponseEntity<TheatreResponse> create(@Valid @RequestBody CreateTheatreRequest request) {
         TheatreResponse response = theatreService.create(request);
-        return ResponseEntity.created(URI.create("/theatres/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create(API_V1 + "/theatres/" + response.id())).body(response);
     }
 
     @GetMapping("/{id}")

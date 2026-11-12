@@ -55,15 +55,10 @@ public class MovieBrowseRepository {
             where cardinality(:genres) = 0 or m.genres && cast(:genres as varchar[])
             """;
 
-    private static final RowMapper<MovieCard> MOVIE_CARD = (rs, rowNum) -> new MovieCard(
-            rs.getLong("id"),
-            rs.getString("title"),
-            rs.getString("poster_url"),
-            toList(rs.getArray("genres"), Genre::valueOf),
-            Certification.valueOf(rs.getString("certification")),
-            rs.getInt("duration_minutes"),
-            rs.getObject("release_date", LocalDate.class),
-            toList(rs.getArray("languages"), Language::valueOf),
+    private static final RowMapper<MovieCard> MOVIE_CARD = (rs, rowNum) -> new MovieCard(rs.getLong("id"),
+            rs.getString("title"), rs.getString("poster_url"), toList(rs.getArray("genres"), Genre::valueOf),
+            Certification.valueOf(rs.getString("certification")), rs.getInt("duration_minutes"),
+            rs.getObject("release_date", LocalDate.class), toList(rs.getArray("languages"), Language::valueOf),
             toList(rs.getArray("formats"), ShowFormat::valueOf));
 
     private final JdbcClient jdbcClient;
@@ -72,11 +67,7 @@ public class MovieBrowseRepository {
     public List<MovieCard> findNowShowing(MovieFilter filter, Instant now, int limit, long offset) {
         String sql = NOW_SHOWING.formatted(CARD_COLUMNS + ", cs.languages, cs.formats")
                 + " order by cs.show_count desc, m.id limit :limit offset :offset";
-        return nowShowingQuery(sql, filter, now)
-                .param("limit", limit)
-                .param("offset", offset)
-                .query(MOVIE_CARD)
-                .list();
+        return nowShowingQuery(sql, filter, now).param("limit", limit).param("offset", offset).query(MOVIE_CARD).list();
     }
 
     public long countNowShowing(MovieFilter filter, Instant now) {
@@ -86,27 +77,19 @@ public class MovieBrowseRepository {
     public List<MovieCard> findAll(MovieFilter filter, int limit, long offset) {
         String sql = CATALOGUE.formatted(CARD_COLUMNS + ", null::varchar[] as languages, null::varchar[] as formats")
                 + " order by m.release_date desc, m.id limit :limit offset :offset";
-        return jdbcClient.sql(sql)
-                .param("genres", names(filter.genres()))
-                .param("limit", limit)
-                .param("offset", offset)
-                .query(MOVIE_CARD)
-                .list();
+        return jdbcClient.sql(sql).param("genres", names(filter.genres())).param("limit", limit).param("offset", offset)
+                .query(MOVIE_CARD).list();
     }
 
     public long countAll(MovieFilter filter) {
-        return jdbcClient.sql(CATALOGUE.formatted("count(*)"))
-                .param("genres", names(filter.genres()))
-                .query(Long.class)
+        return jdbcClient.sql(CATALOGUE.formatted("count(*)")).param("genres", names(filter.genres())).query(Long.class)
                 .single();
     }
 
     private JdbcClient.StatementSpec nowShowingQuery(String sql, MovieFilter filter, Instant now) {
-        return jdbcClient.sql(sql)
-                .param("cityId", filter.cityId())
+        return jdbcClient.sql(sql).param("cityId", filter.cityId())
                 .param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
-                .param("languages", names(filter.languages()))
-                .param("formats", names(filter.formats()))
+                .param("languages", names(filter.languages())).param("formats", names(filter.formats()))
                 .param("genres", names(filter.genres()));
     }
 

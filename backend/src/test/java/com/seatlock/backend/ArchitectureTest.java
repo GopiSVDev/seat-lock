@@ -23,25 +23,19 @@ class ArchitectureTest {
     static final ArchRule bookingInternalsStayInside = internalsOf("booking");
 
     @ArchTest
-    static final ArchRule catalogueDependsOnNoOtherModule = noClasses()
-            .that().resideInAPackage(BASE + "catalogue..")
+    static final ArchRule catalogueDependsOnNoOtherModule = noClasses().that().resideInAPackage(BASE + "catalogue..")
             .should().dependOnClassesThat().resideInAnyPackage(BASE + "inventory..", BASE + "booking..");
 
     @ArchTest
-    static final ArchRule nothingDependsOnBooking = noClasses()
-            .that().resideOutsideOfPackage(BASE + "booking..")
+    static final ArchRule nothingDependsOnBooking = noClasses().that().resideOutsideOfPackage(BASE + "booking..")
             .should().dependOnClassesThat().resideInAPackage(BASE + "booking..");
 
     @ArchTest
-    static final ArchRule sharedDependsOnNoModule = noClasses()
-            .that().resideInAPackage(BASE + "shared..")
-            .should().dependOnClassesThat()
-            .resideInAnyPackage(BASE + "catalogue..", BASE + "inventory..", BASE + "booking..");
+    static final ArchRule sharedDependsOnNoModule = noClasses().that().resideInAPackage(BASE + "shared..").should()
+            .dependOnClassesThat().resideInAnyPackage(BASE + "catalogue..", BASE + "inventory..", BASE + "booking..");
 
     private static ArchRule internalsOf(String module) {
-        return noClasses()
-                .that().resideOutsideOfPackage(BASE + module + "..")
-                .should().dependOnClassesThat().resideInAPackage(BASE + module + ".internal..")
-                .as(module + ".internal is used only inside " + module);
+        return noClasses().that().resideOutsideOfPackage(BASE + module + "..").should().dependOnClassesThat()
+                .resideInAPackage(BASE + module + ".internal..").as(module + ".internal is used only inside " + module);
     }
 }

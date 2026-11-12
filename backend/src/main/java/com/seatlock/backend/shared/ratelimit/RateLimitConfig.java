@@ -31,9 +31,9 @@ public class RateLimitConfig {
     ProxyManager<String> rateLimitBuckets(StatefulRedisConnection<String, byte[]> rateLimitRedisConnection) {
         return Bucket4jLettuce.casBasedBuilder(rateLimitRedisConnection)
                 // A bucket key lives until the bucket is full again, then Redis drops it
-                .expirationAfterWrite(ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax(Duration.ofSeconds(10)))
+                .expirationAfterWrite(
+                        ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax(Duration.ofSeconds(10)))
                 // Lettuce queues commands while Redis is down; don't let a request wait on that
-                .requestTimeout(Duration.ofSeconds(1))
-                .build();
+                .requestTimeout(Duration.ofSeconds(1)).build();
     }
 }

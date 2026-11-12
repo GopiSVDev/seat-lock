@@ -9,7 +9,8 @@ class CurrentUserTest {
 
     @Test
     void usesSubjectAndName() {
-        CurrentUser user = CurrentUser.from(jwt().claim("name", "Asha Kumar").claim("preferred_username", "asha").build());
+        CurrentUser user = CurrentUser
+                .from(jwt().claim("name", "Asha Kumar").claim("preferred_username", "asha").build());
 
         assertThat(user).isEqualTo(new CurrentUser("sub-1", "Asha Kumar"));
     }

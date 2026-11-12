@@ -24,6 +24,11 @@ public record TestUser(String id, String name, List<String> roles) {
         return new TestUser(UUID.randomUUID().toString(), "Test Admin", List.of("CUSTOMER", "ADMIN"));
     }
 
+    // A service account's token, like Keycloak's client credentials tokens
+    public static TestUser service(String clientId, String role) {
+        return new TestUser("service-account-" + clientId, clientId, List.of(role));
+    }
+
     public String token() {
         return PREFIX + encode(id) + "." + encode(name) + "." + encode(String.join(",", roles));
     }
@@ -34,14 +39,10 @@ public record TestUser(String id, String name, List<String> roles) {
         }
         String[] parts = token.substring(PREFIX.length()).split("\\.");
         Instant now = Instant.now();
-        return Jwt.withTokenValue(token)
-                .header("alg", "none")
-                .subject(decodePart(parts[0]))
+        return Jwt.withTokenValue(token).header("alg", "none").subject(decodePart(parts[0]))
                 .claim("name", decodePart(parts[1]))
-                .claim("realm_access", Map.of("roles", List.of(decodePart(parts[2]).split(","))))
-                .issuedAt(now)
-                .expiresAt(now.plusSeconds(300))
-                .build();
+                .claim("realm_access", Map.of("roles", List.of(decodePart(parts[2]).split(",")))).issuedAt(now)
+                .expiresAt(now.plusSeconds(300)).build();
     }
 
     private static String encode(String value) {

@@ -35,8 +35,21 @@ public class Booking {
     @Column(nullable = false)
     private BookingStatus status;
 
+    // Paise: sum of the seats' prices at booking time
+    @Column(nullable = false)
+    private long totalAmount;
+
     @Column(nullable = false)
     private Instant createdAt;
 
     private Instant cancelledAt;
+
+    // One booking per hold
+    private String holdId;
+
+    // The payment service's id (another database, so no foreign key)
+    private Long paymentId;
+
+    // Deadline to pay; the hold lives until then
+    private Instant paymentExpiresAt;
 }

@@ -20,6 +20,12 @@
         "name": "ADMIN"
       },
       {
+        "name": "PAYMENTS_CLIENT"
+      },
+      {
+        "name": "BOOKING_CALLBACK"
+      },
+      {
         "name": "offline_access"
       },
       {
@@ -96,9 +102,71 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "seatlock-backend",
+      "name": "Backend service: calls the payment service",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${BACKEND_CLIENT_SECRET}",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "seatlock-payment-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "seatlock-payment-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "seatlock-payment",
+      "name": "Payment service: tells the backend about payments",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${PAYMENT_CLIENT_SECRET}",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "seatlock-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "seatlock-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [
+    {
+      "username": "service-account-seatlock-backend",
+      "enabled": true,
+      "serviceAccountClientId": "seatlock-backend",
+      "realmRoles": ["PAYMENTS_CLIENT"]
+    },
+    {
+      "username": "service-account-seatlock-payment",
+      "enabled": true,
+      "serviceAccountClientId": "seatlock-payment",
+      "realmRoles": ["BOOKING_CALLBACK"]
+    },
     {
       "username": "admin",
       "email": "admin@seatlock.local",

@@ -10,6 +10,7 @@ import com.seatlock.backend.inventory.internal.web.dto.HoldResponse;
 import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -22,6 +23,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SeatHoldService {
@@ -38,8 +40,10 @@ public class SeatHoldService {
         List<Long> seats = showSeatIds.stream().distinct().sorted().toList();
         String holdId = UUID.randomUUID().toString();
 
-        Instant expiresAt = holdStore.place(holdId, showId, customerId, seats, HOLD_TTL)
-                .orElseThrow(() -> new ConflictException("One or more seats are already held or booked"));
+        Instant expiresAt = holdStore.place(holdId, showId, customerId, seats, HOLD_TTL).orElseThrow(() -> {
+            log.info("Hold refused: show {}, seats {} already held or booked", showId, seats);
+            return new ConflictException("One or more seats are already held or booked");
+        });
 
         // Checked after the hold, not before: confirm deletes a hold's keys only after BOOKED commits,
         // so if our hold got the keys, any booking of these seats is already visible here
@@ -48,15 +52,18 @@ public class SeatHoldService {
                 && states.stream().allMatch(seat -> seat.showId().equals(showId));
 
         if (!allOfShow) {
+            log.info("Hold {} undone: seats {} are not all of show {}", holdId, seats, showId);
             holdStore.release(holdId, customerId);
             throw new NotFoundException("Seats for show", showId);
         }
 
         if (states.stream().anyMatch(seat -> !"AVAILABLE".equals(seat.status()))) {
+            log.info("Hold {} undone: seats {} of show {} are already booked", holdId, seats, showId);
             holdStore.release(holdId, customerId);
             throw new ConflictException("One or more seats are already held or booked");
         }
-        
+
+        log.info("Hold {} placed by {}: show {}, seats {}, expires {}", holdId, customerId, showId, seats, expiresAt);
         return HoldResponse.of(holdId, showId, expiresAt, states);
     }
 
@@ -66,36 +73,39 @@ public class SeatHoldService {
         for (int attempt = 0; attempt < BEST_AVAILABLE_ATTEMPTS; attempt++) {
             Set<Long> held = holdStore.heldSeats(showId);
             List<CandidateSeat> candidates = showSeatRepository.findAvailable(showId, type).stream()
-                    .filter(seat -> !held.contains(seat.id()))
-                    .toList();
+                    .filter(seat -> !held.contains(seat.id())).toList();
 
             List<Long> block = bestBlock(candidates, quantity);
-            if (block == null) break;
+            if (block == null)
+                break;
 
             try {
                 return hold(showId, block, customerId);
             } catch (ConflictException lostRace) {
-                // someone else got a seat of the block first
+                log.info("Best available on show {}: lost block {} to another buyer (attempt {})", showId, block,
+                        attempt + 1);
             }
         }
 
-        if (!showSeatRepository.existsByShowId(showId)) throw new NotFoundException("Show", showId);
+        if (!showSeatRepository.existsByShowId(showId))
+            throw new NotFoundException("Show", showId);
 
         throw new ConflictException("No " + quantity + " adjacent " + type + " seats available");
     }
 
     // Someone else's hold is not found either, so ids can't be probed (BOLA)
     public HoldResponse get(String holdId, String customerId) {
-        HoldRecord hold = holdStore.find(holdId)
-                .filter(found -> found.customerId().equals(customerId))
+        HoldRecord hold = holdStore.find(holdId).filter(found -> found.customerId().equals(customerId))
                 .orElseThrow(() -> new NotFoundException("Hold", holdId));
-        return HoldResponse.of(hold.id(), hold.showId(), hold.expiresAt(), showSeatRepository.findStates(hold.seatIds()));
+        return HoldResponse.of(hold.id(), hold.showId(), hold.expiresAt(),
+                showSeatRepository.findStates(hold.seatIds()));
     }
 
     public void release(String holdId, String customerId) {
         if (!holdStore.release(holdId, customerId)) {
             throw new NotFoundException("Hold", holdId);
         }
+        log.info("Hold {} released by its buyer", holdId);
     }
 
     // Lowest rank sum of `quantity` consecutive seats in one row; null if none
@@ -111,8 +121,10 @@ public class SeatHoldService {
             int runStart = 0;
 
             for (int i = 0; i < row.size(); i++) {
-                if (i > 0 && row.get(i).seatNumber() != row.get(i - 1).seatNumber() + 1) runStart = i;
-                if (i - runStart + 1 < quantity) continue;
+                if (i > 0 && row.get(i).seatNumber() != row.get(i - 1).seatNumber() + 1)
+                    runStart = i;
+                if (i - runStart + 1 < quantity)
+                    continue;
 
                 List<CandidateSeat> block = row.subList(i - quantity + 1, i + 1);
                 long score = block.stream().mapToLong(CandidateSeat::seatRank).sum();

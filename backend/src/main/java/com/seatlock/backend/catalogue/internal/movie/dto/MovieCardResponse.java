@@ -8,17 +8,9 @@ import com.seatlock.backend.catalogue.internal.show.ShowFormat;
 import java.time.LocalDate;
 import java.util.List;
 
-public record MovieCardResponse(
-        Long id,
-        String title,
-        String posterUrl,
-        List<Genre> genres,
-        Certification certification,
-        int durationMinutes,
-        LocalDate releaseDate,
-        List<Language> languages,
-        List<ShowFormat> formats
-) {
+public record MovieCardResponse(Long id, String title, String posterUrl, List<Genre> genres,
+        Certification certification, int durationMinutes, LocalDate releaseDate, List<Language> languages,
+        List<ShowFormat> formats) {
 
     public static MovieCardResponse from(MovieCard card) {
         return new MovieCardResponse(card.id(), card.title(), card.posterUrl(), card.genres(), card.certification(),

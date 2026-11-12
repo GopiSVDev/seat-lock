@@ -14,7 +14,8 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class SeatMapController {
 
-    private static final CacheControl LAYOUT_CACHE_CONTROL = CacheControl.maxAge(Duration.ofDays(1)).cachePublic().immutable();
+    private static final CacheControl LAYOUT_CACHE_CONTROL = CacheControl.maxAge(Duration.ofDays(1)).cachePublic()
+            .immutable();
 
     private final SeatMapJsonCache seatMapJsonCache;
 

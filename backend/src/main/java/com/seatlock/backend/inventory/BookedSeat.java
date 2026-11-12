@@ -1,4 +1,5 @@
 package com.seatlock.backend.inventory;
 
-public record BookedSeat(Long showSeatId, String label) {
+// price in paise
+public record BookedSeat(Long showSeatId, String label, long price) {
 }

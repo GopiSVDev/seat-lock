@@ -8,12 +8,14 @@ import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.NotFoundException;
 import com.seatlock.backend.shared.web.PageResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MovieService {
@@ -34,7 +36,7 @@ public class MovieService {
             cards = movieBrowseRepository.findAll(filter, size, offset);
             total = movieBrowseRepository.countAll(filter);
         } else {
-            cityService.findCity(filter.cityId());   // unknown city → 404, not an empty list
+            cityService.findCity(filter.cityId()); // unknown city → 404, not an empty list
             Instant now = Instant.now();
             cards = movieBrowseRepository.findNowShowing(filter, now, size, offset);
             total = movieBrowseRepository.countNowShowing(filter, now);
@@ -44,22 +46,17 @@ public class MovieService {
 
     @Transactional
     public MovieResponse create(CreateMovieRequest request) {
-        Movie movie = new Movie(
-                request.title(),
-                request.description(),
-                request.durationMinutes(),
-                request.certification(),
-                request.releaseDate(),
-                request.posterUrl(),
-                request.genres().stream().distinct().toList()
-        );
-        return MovieResponse.from(movieRepository.save(movie));
+        Movie movie = new Movie(request.title(), request.description(), request.durationMinutes(),
+                request.certification(), request.releaseDate(), request.posterUrl(),
+                request.genres().stream().distinct().toList());
+        Movie saved = movieRepository.save(movie);
+        log.info("Movie {} created: {}", saved.getId(), saved.getTitle());
+        return MovieResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
     public MovieResponse getById(Long id) {
-        return movieRepository.findById(id)
-                .map(MovieResponse::from)
+        return movieRepository.findById(id).map(MovieResponse::from)
                 .orElseThrow(() -> new NotFoundException("Movie", id));
     }
 }

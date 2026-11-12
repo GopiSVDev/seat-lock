@@ -45,7 +45,7 @@ public class Movie {
     private List<Genre> genres;
 
     public Movie(String title, String description, int durationMinutes, Certification certification,
-                 LocalDate releaseDate, String posterUrl, List<Genre> genres) {
+            LocalDate releaseDate, String posterUrl, List<Genre> genres) {
         this.title = title;
         this.description = description;
         this.durationMinutes = durationMinutes;

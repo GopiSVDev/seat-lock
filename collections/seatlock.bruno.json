@@ -304,11 +304,11 @@
     },
     {
       "type": "folder",
-      "name": "02 Health and API docs (public)",
+      "name": "02 API docs (public); operations stay inside",
       "items": [
         {
           "type": "http",
-          "name": "Health",
+          "name": "Health is not exposed",
           "request": {
             "url": "{{baseUrl}}/actuator/health",
             "method": "GET",
@@ -335,8 +335,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"UP\", function () {\n  expect(res.getBody().status).to.equal(\"UP\");\n});\n",
-            "docs": ""
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Actuator never leaves Docker: the gateway does not route it. Check health with `docker compose ps`."
           },
           "seq": 1
         },
@@ -376,7 +376,7 @@
         },
         {
           "type": "http",
-          "name": "Prometheus metrics",
+          "name": "Metrics are not exposed",
           "request": {
             "url": "{{baseUrl}}/actuator/prometheus",
             "method": "GET",
@@ -403,8 +403,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
-            "docs": "Public on purpose (scraped without a token); production would serve actuator on an internal port."
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Prometheus scrapes inside Docker; the gateway does not route `/actuator/**`."
           },
           "seq": 3
         }
@@ -437,7 +437,7 @@
           "type": "http",
           "name": "Search with a typo: chenai",
           "request": {
-            "url": "{{baseUrl}}/cities?query=chenai",
+            "url": "{{baseUrl}}/api/v1/cities?query=chenai",
             "method": "GET",
             "headers": [],
             "params": [
@@ -478,7 +478,7 @@
           "type": "http",
           "name": "Search by old name: madras",
           "request": {
-            "url": "{{baseUrl}}/cities?query=madras",
+            "url": "{{baseUrl}}/api/v1/cities?query=madras",
             "method": "GET",
             "headers": [],
             "params": [
@@ -519,7 +519,7 @@
           "type": "http",
           "name": "Popular cities",
           "request": {
-            "url": "{{baseUrl}}/cities?popular=true",
+            "url": "{{baseUrl}}/api/v1/cities?popular=true",
             "method": "GET",
             "headers": [],
             "params": [
@@ -560,7 +560,7 @@
           "type": "http",
           "name": "Cities with theatres",
           "request": {
-            "url": "{{baseUrl}}/cities?withTheatres=true",
+            "url": "{{baseUrl}}/api/v1/cities?withTheatres=true",
             "method": "GET",
             "headers": [],
             "params": [
@@ -601,7 +601,7 @@
           "type": "http",
           "name": "All cities",
           "request": {
-            "url": "{{baseUrl}}/cities",
+            "url": "{{baseUrl}}/api/v1/cities",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -635,7 +635,7 @@
           "type": "http",
           "name": "Get Chennai",
           "request": {
-            "url": "{{baseUrl}}/cities/{{chennaiId}}",
+            "url": "{{baseUrl}}/api/v1/cities/{{chennaiId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -669,7 +669,7 @@
           "type": "http",
           "name": "Create a city (ADMIN)",
           "request": {
-            "url": "{{baseUrl}}/cities",
+            "url": "{{baseUrl}}/api/v1/cities",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -706,7 +706,7 @@
           "type": "http",
           "name": "Same city again is a conflict (ADMIN)",
           "request": {
-            "url": "{{baseUrl}}/cities",
+            "url": "{{baseUrl}}/api/v1/cities",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -743,7 +743,7 @@
           "type": "http",
           "name": "Add an alias (ADMIN)",
           "request": {
-            "url": "{{baseUrl}}/cities/{{cityId}}/aliases",
+            "url": "{{baseUrl}}/api/v1/cities/{{cityId}}/aliases",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -805,7 +805,7 @@
           "type": "http",
           "name": "Create a movie",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -842,7 +842,7 @@
           "type": "http",
           "name": "Invalid movie is rejected with field errors",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -879,7 +879,7 @@
           "type": "http",
           "name": "Create a theatre in Chennai",
           "request": {
-            "url": "{{baseUrl}}/theatres",
+            "url": "{{baseUrl}}/api/v1/theatres",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -916,7 +916,7 @@
           "type": "http",
           "name": "Create a screen",
           "request": {
-            "url": "{{baseUrl}}/theatres/{{theatreId}}/screens",
+            "url": "{{baseUrl}}/api/v1/theatres/{{theatreId}}/screens",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -953,13 +953,13 @@
           "type": "http",
           "name": "Schedule a show",
           "request": {
-            "url": "{{baseUrl}}/shows",
+            "url": "{{baseUrl}}/api/v1/shows",
             "method": "POST",
             "headers": [],
             "params": [],
             "body": {
               "mode": "json",
-              "json": "{\n  \"movieId\": {{movieId}},\n  \"screenId\": {{screenId}},\n  \"startTime\": \"{{showStart}}\",\n  \"language\": \"ENGLISH\",\n  \"format\": \"IMAX_2D\"\n}",
+              "json": "{\n  \"movieId\": {{movieId}},\n  \"screenId\": {{screenId}},\n  \"startTime\": \"{{showStart}}\",\n  \"language\": \"ENGLISH\",\n  \"format\": \"IMAX_2D\",\n  \"prices\": { \"REGULAR\": 15000, \"RECLINER\": 40000 }\n}",
               "text": null,
               "xml": null,
               "sparql": null,
@@ -981,8 +981,8 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
-            "docs": "7:00 PM India time on 1 Jan 2030. Inventory creates one show seat per seat in the same transaction. Saves `showId`."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"prices in paise\", function () {\n  expect(res.getBody().prices).to.eql({ REGULAR: 15000, RECLINER: 40000 });\n});\n",
+            "docs": "7:00 PM India time on 1 Jan 2030. Inventory creates one show seat per seat in the same transaction. Saves `showId`. Prices are paise per seat type (15000 = ₹150) and must cover exactly the screen's seat types."
           },
           "seq": 5
         }
@@ -1015,7 +1015,7 @@
           "type": "http",
           "name": "Now showing in Chennai",
           "request": {
-            "url": "{{baseUrl}}/movies?cityId={{chennaiId}}",
+            "url": "{{baseUrl}}/api/v1/movies?cityId={{chennaiId}}",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1056,7 +1056,7 @@
           "type": "http",
           "name": "Now showing, filtered",
           "request": {
-            "url": "{{baseUrl}}/movies?cityId={{chennaiId}}&language=ENGLISH&format=IMAX_2D&genre=SCI_FI",
+            "url": "{{baseUrl}}/api/v1/movies?cityId={{chennaiId}}&language=ENGLISH&format=IMAX_2D&genre=SCI_FI",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1115,7 +1115,7 @@
           "type": "http",
           "name": "Language filter without a city is rejected",
           "request": {
-            "url": "{{baseUrl}}/movies?language=ENGLISH",
+            "url": "{{baseUrl}}/api/v1/movies?language=ENGLISH",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1156,7 +1156,7 @@
           "type": "http",
           "name": "Whole catalogue",
           "request": {
-            "url": "{{baseUrl}}/movies?page=0&size=20",
+            "url": "{{baseUrl}}/api/v1/movies?page=0&size=20",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1203,7 +1203,7 @@
           "type": "http",
           "name": "Movie details",
           "request": {
-            "url": "{{baseUrl}}/movies/{{movieId}}",
+            "url": "{{baseUrl}}/api/v1/movies/{{movieId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1237,7 +1237,7 @@
           "type": "http",
           "name": "Showtimes: movie in a city on a day",
           "request": {
-            "url": "{{baseUrl}}/shows?movieId={{movieId}}&cityId={{chennaiId}}&date={{showDate}}",
+            "url": "{{baseUrl}}/api/v1/shows?movieId={{movieId}}&cityId={{chennaiId}}&date={{showDate}}",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1290,7 +1290,7 @@
           "type": "http",
           "name": "Theatres in Chennai",
           "request": {
-            "url": "{{baseUrl}}/theatres?cityId={{chennaiId}}&query=pvr",
+            "url": "{{baseUrl}}/api/v1/theatres?cityId={{chennaiId}}&query=pvr",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1337,7 +1337,7 @@
           "type": "http",
           "name": "Theatre details",
           "request": {
-            "url": "{{baseUrl}}/theatres/{{theatreId}}",
+            "url": "{{baseUrl}}/api/v1/theatres/{{theatreId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1371,7 +1371,7 @@
           "type": "http",
           "name": "Theatre page: what's on that day",
           "request": {
-            "url": "{{baseUrl}}/theatres/{{theatreId}}/shows?date={{showDate}}",
+            "url": "{{baseUrl}}/api/v1/theatres/{{theatreId}}/shows?date={{showDate}}",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1412,7 +1412,7 @@
           "type": "http",
           "name": "Screen",
           "request": {
-            "url": "{{baseUrl}}/screens/{{screenId}}",
+            "url": "{{baseUrl}}/api/v1/screens/{{screenId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1446,7 +1446,7 @@
           "type": "http",
           "name": "Show",
           "request": {
-            "url": "{{baseUrl}}/shows/{{showId}}",
+            "url": "{{baseUrl}}/api/v1/shows/{{showId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1505,7 +1505,7 @@
           "type": "http",
           "name": "Layout",
           "request": {
-            "url": "{{baseUrl}}/shows/{{showId}}/layout",
+            "url": "{{baseUrl}}/api/v1/shows/{{showId}}/layout",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1539,7 +1539,7 @@
           "type": "http",
           "name": "Availability",
           "request": {
-            "url": "{{baseUrl}}/shows/{{showId}}/availability",
+            "url": "{{baseUrl}}/api/v1/shows/{{showId}}/availability",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1592,13 +1592,13 @@
     },
     {
       "type": "folder",
-      "name": "07 Holds and bookings (asha, then ravi)",
+      "name": "07 Holds, checkout and payment (asha, then ravi)",
       "items": [
         {
           "type": "http",
           "name": "Asha holds A1, A2",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1626,7 +1626,7 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"held for 5 minutes\", function () {\n  expect(res.getBody().expiresAt).to.be.a(\"string\");\n  expect(res.getBody().seats.map(s => s.label)).to.eql([\"A1\", \"A2\"]);\n});\n",
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"held for 5 minutes\", function () {\n  expect(res.getBody().expiresAt).to.be.a(\"string\");\n  expect(res.getBody().seats.map(s => s.label)).to.eql([\"A1\", \"A2\"]);\n});\ntest(\"2 regular seats = ₹300\", function () {\n  expect(res.getBody().totalAmount).to.equal(30000);\n});\n",
             "docs": "Seats are held in Redis for 5 minutes; Postgres still says AVAILABLE. Saves `holdId`."
           },
           "seq": 1
@@ -1635,7 +1635,7 @@
           "type": "http",
           "name": "Ravi tries the same seats",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1672,7 +1672,7 @@
           "type": "http",
           "name": "Get my hold (countdown)",
           "request": {
-            "url": "{{baseUrl}}/holds/{{holdId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{holdId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1707,9 +1707,9 @@
         },
         {
           "type": "http",
-          "name": "Book the hold",
+          "name": "Check out the hold",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1730,23 +1730,23 @@
             },
             "script": {
               "req": "",
-              "res": "bru.setVar(\"bookingId\", res.getBody().id);\n"
+              "res": "bru.setVar(\"bookingId\", res.getBody().id);\nbru.setVar(\"orderId\", res.getBody().checkout.razorpayOrderId);\n"
             },
             "vars": {
               "req": [],
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by asha, with show details\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().show.movie.title).to.equal(\"Interstellar\");\n});\n",
-            "docs": "Seats become BOOKED (guarded UPDATE), then the hold is deleted. Owner comes from the token. Saves `bookingId`."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"unpaid, with a Razorpay order\", function () {\n  expect(res.getBody().status).to.equal(\"PENDING_PAYMENT\");\n  expect(res.getBody().checkout.razorpayOrderId).to.match(/^order_/);\n  expect(res.getBody().paymentExpiresAt).to.be.a(\"string\");\n});\ntest(\"owned by asha, amount kept\", function () {\n  expect(res.getBody().customerName).to.equal(\"Asha Kumar\");\n  expect(res.getBody().totalAmount).to.equal(30000);\n  expect(res.getBody().checkout.amount).to.equal(30000);\n});\n",
+            "docs": "Unpaid booking + Razorpay order; the hold now lasts 10 minutes. Seats are still AVAILABLE. Saves `bookingId` and `orderId`."
           },
           "seq": 4
         },
         {
           "type": "http",
-          "name": "Booking the same hold again",
+          "name": "Check out the same hold again",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1774,16 +1774,130 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
-            "docs": "The hold is gone once booked."
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"same booking, same order\", function () {\n  expect(res.getBody().id).to.equal(Number(bru.getVar(\"bookingId\")));\n  expect(res.getBody().checkout.razorpayOrderId).to.equal(bru.getVar(\"orderId\"));\n});\n",
+            "docs": "One booking per hold: a double tap or refresh finds the same booking (200), and the hold is not extended again."
           },
           "seq": 5
         },
         {
           "type": "http",
+          "name": "Forged browser receipt is refused",
+          "request": {
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/payment",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"razorpayOrderId\": \"{{orderId}}\",\n  \"razorpayPaymentId\": \"pay_forged\",\n  \"razorpaySignature\": \"0000000000000000000000000000000000000000000000000000000000000000\"\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\ntest(\"signature checked\", function () {\n  expect(res.getBody().detail).to.equal(\"Invalid payment signature\");\n});\n",
+            "docs": "The payment service checks Checkout's HMAC of `order_id|payment_id` with the key secret."
+          },
+          "seq": 6
+        },
+        {
+          "type": "http",
+          "name": "Razorpay webhook: Asha paid (simulated)",
+          "request": {
+            "url": "{{baseUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "{{webhookSignature}}",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{{webhookBody}}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "const CryptoJS = require(\"crypto-js\");\nconst body = JSON.stringify({\n  entity: \"event\", event: \"payment.captured\", contains: [\"payment\"],\n  payload: { payment: { entity: {\n    id: \"pay_sim\" + Date.now(), entity: \"payment\", status: \"captured\", method: \"card\",\n    order_id: bru.getVar(\"orderId\")\n  } } },\n  created_at: Math.floor(Date.now() / 1000)\n});\nbru.setVar(\"webhookBody\", body);\nbru.setVar(\"webhookSignature\", CryptoJS.HmacSHA256(body, bru.getEnvVar(\"webhookSecret\")).toString(CryptoJS.enc.Hex));\n",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Simulates Razorpay's `payment.captured` webhook: the pre-request script builds the event for the booking's order and signs it with the `webhookSecret` environment variable (must equal `RAZORPAY_WEBHOOK_SECRET` in `.env`). Real payments come from Razorpay itself (`/dev/checkout.html`)."
+          },
+          "seq": 7
+        },
+        {
+          "type": "http",
+          "name": "Booking is confirmed",
+          "request": {
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"confirmed\", function () {\n  expect(res.getBody().status).to.equal(\"CONFIRMED\");\n  expect(res.getBody().paymentExpiresAt).to.equal(null);\n});\n",
+            "docs": "The webhook went Razorpay → payment service → `POST /internal/bookings/{id}/paid` → seats BOOKED."
+          },
+          "seq": 8
+        },
+        {
+          "type": "http",
           "name": "Best available: hold 2 recliners",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1811,16 +1925,16 @@
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"2 recliners = ₹800\", function () {\n  expect(res.getBody().totalAmount).to.equal(80000);\n});\n",
             "docs": "The server picks the best adjacent block that is neither booked nor held."
           },
-          "seq": 6
+          "seq": 9
         },
         {
           "type": "http",
-          "name": "Book the best-available hold",
+          "name": "Check out the best-available hold",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1841,23 +1955,63 @@
             },
             "script": {
               "req": "",
-              "res": "bru.setVar(\"bestBookingId\", res.getBody().id);\n"
+              "res": "bru.setVar(\"bestBookingId\", res.getBody().id);\nbru.setVar(\"bestOrderId\", res.getBody().checkout.razorpayOrderId);\n"
             },
             "vars": {
               "req": [],
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
-            "docs": "Saves `bestBookingId`."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"unpaid, with a Razorpay order\", function () {\n  expect(res.getBody().status).to.equal(\"PENDING_PAYMENT\");\n  expect(res.getBody().checkout.razorpayOrderId).to.match(/^order_/);\n  expect(res.getBody().paymentExpiresAt).to.be.a(\"string\");\n});\n",
+            "docs": "Saves `bestBookingId` and `bestOrderId`."
           },
-          "seq": 7
+          "seq": 10
+        },
+        {
+          "type": "http",
+          "name": "Razorpay webhook: recliners paid (simulated)",
+          "request": {
+            "url": "{{baseUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "{{webhookSignature}}",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{{webhookBody}}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "const CryptoJS = require(\"crypto-js\");\nconst body = JSON.stringify({\n  entity: \"event\", event: \"payment.captured\", contains: [\"payment\"],\n  payload: { payment: { entity: {\n    id: \"pay_sim\" + Date.now(), entity: \"payment\", status: \"captured\", method: \"card\",\n    order_id: bru.getVar(\"bestOrderId\")\n  } } },\n  created_at: Math.floor(Date.now() / 1000)\n});\nbru.setVar(\"webhookBody\", body);\nbru.setVar(\"webhookSignature\", CryptoJS.HmacSHA256(body, bru.getEnvVar(\"webhookSecret\")).toString(CryptoJS.enc.Hex));\n",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Simulates Razorpay's `payment.captured` webhook: the pre-request script builds the event for the booking's order and signs it with the `webhookSecret` environment variable (must equal `RAZORPAY_WEBHOOK_SECRET` in `.env`). Real payments come from Razorpay itself (`/dev/checkout.html`)."
+          },
+          "seq": 11
         },
         {
           "type": "http",
           "name": "Best available: 10 recliners don't fit",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1888,13 +2042,13 @@
             "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\n",
             "docs": "Only 6 recliners are left, so no block of 10 exists."
           },
-          "seq": 8
+          "seq": 12
         },
         {
           "type": "http",
           "name": "Hold a seat to let it go",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1925,13 +2079,13 @@
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
             "docs": ""
           },
-          "seq": 9
+          "seq": 13
         },
         {
           "type": "http",
           "name": "Let the hold go (back button)",
           "request": {
-            "url": "{{baseUrl}}/holds/{{tempHoldId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{tempHoldId}}",
             "method": "DELETE",
             "headers": [],
             "params": [],
@@ -1962,13 +2116,13 @@
             "tests": "test(\"status 204\", function () {\n  expect(res.getStatus()).to.equal(204);\n});\n",
             "docs": "Frees the seat now instead of after 5 minutes."
           },
-          "seq": 10
+          "seq": 14
         },
         {
           "type": "http",
           "name": "Released hold is gone",
           "request": {
-            "url": "{{baseUrl}}/holds/{{tempHoldId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{tempHoldId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1999,13 +2153,13 @@
             "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
             "docs": ""
           },
-          "seq": 11
+          "seq": 15
         },
         {
           "type": "http",
           "name": "Get my booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2036,13 +2190,13 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
             "docs": ""
           },
-          "seq": 12
+          "seq": 16
         },
         {
           "type": "http",
           "name": "My bookings: upcoming",
           "request": {
-            "url": "{{baseUrl}}/bookings?period=UPCOMING",
+            "url": "{{baseUrl}}/api/v1/bookings?period=UPCOMING",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2080,13 +2234,13 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"contains the booking\", function () {\n  const ids = res.getBody().items.map(b => b.id);\n  expect(ids).to.include(bru.getVar(\"bookingId\"));\n});\n",
             "docs": "Shows that haven't started, soonest first (the default period)."
           },
-          "seq": 13
+          "seq": 17
         },
         {
           "type": "http",
           "name": "My bookings: past",
           "request": {
-            "url": "{{baseUrl}}/bookings?period=PAST",
+            "url": "{{baseUrl}}/api/v1/bookings?period=PAST",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2124,13 +2278,13 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
             "docs": "Shows that have started, latest first."
           },
-          "seq": 14
+          "seq": 18
         },
         {
           "type": "http",
           "name": "Cancel the booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/cancel",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2159,15 +2313,15 @@
             },
             "assertions": [],
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"cancelled\", function () {\n  expect(res.getBody().status).to.equal(\"CANCELLED\");\n  expect(res.getBody().cancelledAt).to.be.a(\"string\");\n});\n",
-            "docs": "Seats A1, A2 go back on sale in the same transaction. After the show starts this answers 409 `Show has already started` (needs a past show, so not part of this collection)."
+            "docs": "Seats go back on sale and a refund is requested. The payment was simulated, so Razorpay refuses the refund (unknown payment id): the backend logs it; the cancel still succeeds. Real payments refund."
           },
-          "seq": 15
+          "seq": 19
         },
         {
           "type": "http",
           "name": "Cancel again changes nothing",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/cancel",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2198,13 +2352,13 @@
             "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"same cancel time\", function () {\n  expect(res.getBody().cancelledAt).to.equal(bru.getVar(\"cancelledAt\"));\n});\n",
             "docs": "Idempotent: a retry gets the same answer, and the seats are not released twice."
           },
-          "seq": 16
+          "seq": 20
         },
         {
           "type": "http",
           "name": "Ravi holds the freed seats",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2235,13 +2389,13 @@
             "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\n",
             "docs": ""
           },
-          "seq": 17
+          "seq": 21
         },
         {
           "type": "http",
-          "name": "Ravi books them",
+          "name": "Ravi checks out",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2262,17 +2416,131 @@
             },
             "script": {
               "req": "",
-              "res": "bru.setVar(\"raviBookingId\", res.getBody().id);\n"
+              "res": "bru.setVar(\"raviBookingId\", res.getBody().id);\nbru.setVar(\"raviOrderId\", res.getBody().checkout.razorpayOrderId);\n"
             },
             "vars": {
               "req": [],
               "res": []
             },
             "assertions": [],
-            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"owned by ravi\", function () {\n  expect(res.getBody().customerName).to.equal(\"Ravi Shankar\");\n});\n",
-            "docs": "Re-sale works: Asha's cancelled seat rows no longer block the seats."
+            "tests": "test(\"status 201\", function () {\n  expect(res.getStatus()).to.equal(201);\n});\ntest(\"unpaid, with a Razorpay order\", function () {\n  expect(res.getBody().status).to.equal(\"PENDING_PAYMENT\");\n  expect(res.getBody().checkout.razorpayOrderId).to.match(/^order_/);\n  expect(res.getBody().paymentExpiresAt).to.be.a(\"string\");\n});\n",
+            "docs": "Saves `raviBookingId` and `raviOrderId`."
           },
-          "seq": 18
+          "seq": 22
+        },
+        {
+          "type": "http",
+          "name": "Cancel before paying is refused",
+          "request": {
+            "url": "{{baseUrl}}/api/v1/bookings/{{raviBookingId}}/cancel",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 409\", function () {\n  expect(res.getStatus()).to.equal(409);\n});\ntest(\"only confirmed bookings\", function () {\n  expect(res.getBody().detail).to.equal(\"Only confirmed bookings can be cancelled\");\n});\n",
+            "docs": ""
+          },
+          "seq": 23
+        },
+        {
+          "type": "http",
+          "name": "Razorpay webhook: Ravi paid (simulated)",
+          "request": {
+            "url": "{{baseUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "{{webhookSignature}}",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{{webhookBody}}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "const CryptoJS = require(\"crypto-js\");\nconst body = JSON.stringify({\n  entity: \"event\", event: \"payment.captured\", contains: [\"payment\"],\n  payload: { payment: { entity: {\n    id: \"pay_sim\" + Date.now(), entity: \"payment\", status: \"captured\", method: \"card\",\n    order_id: bru.getVar(\"raviOrderId\")\n  } } },\n  created_at: Math.floor(Date.now() / 1000)\n});\nbru.setVar(\"webhookBody\", body);\nbru.setVar(\"webhookSignature\", CryptoJS.HmacSHA256(body, bru.getEnvVar(\"webhookSecret\")).toString(CryptoJS.enc.Hex));\n",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\n",
+            "docs": "Simulates Razorpay's `payment.captured` webhook: the pre-request script builds the event for the booking's order and signs it with the `webhookSecret` environment variable (must equal `RAZORPAY_WEBHOOK_SECRET` in `.env`). Real payments come from Razorpay itself (`/dev/checkout.html`)."
+          },
+          "seq": 24
+        },
+        {
+          "type": "http",
+          "name": "Ravi's booking is confirmed",
+          "request": {
+            "url": "{{baseUrl}}/api/v1/bookings/{{raviBookingId}}",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{raviToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 200\", function () {\n  expect(res.getStatus()).to.equal(200);\n});\ntest(\"confirmed\", function () {\n  expect(res.getBody().status).to.equal(\"CONFIRMED\");\n  expect(res.getBody().paymentExpiresAt).to.equal(null);\n});\n",
+            "docs": "The webhook went Razorpay → payment service → `POST /internal/bookings/{id}/paid` → seats BOOKED."
+          },
+          "seq": 25
         }
       ],
       "root": {
@@ -2303,7 +2571,7 @@
           "type": "http",
           "name": "No token: create a movie",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2337,7 +2605,7 @@
           "type": "http",
           "name": "No token: my bookings",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2371,7 +2639,7 @@
           "type": "http",
           "name": "Fake token",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2408,7 +2676,7 @@
           "type": "http",
           "name": "Token from another realm",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2445,7 +2713,7 @@
           "type": "http",
           "name": "Customer creating a movie",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2482,7 +2750,7 @@
           "type": "http",
           "name": "Ravi reads Asha's booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2519,7 +2787,7 @@
           "type": "http",
           "name": "Ravi cancels Asha's booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bestBookingId}}/cancel",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bestBookingId}}/cancel",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2556,7 +2824,7 @@
           "type": "http",
           "name": "Unknown show",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2593,7 +2861,7 @@
           "type": "http",
           "name": "Page size too big",
           "request": {
-            "url": "{{baseUrl}}/bookings?size=51",
+            "url": "{{baseUrl}}/api/v1/bookings?size=51",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2637,7 +2905,7 @@
           "type": "http",
           "name": "Unknown period",
           "request": {
-            "url": "{{baseUrl}}/bookings?period=SOON",
+            "url": "{{baseUrl}}/api/v1/bookings?period=SOON",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2681,7 +2949,7 @@
           "type": "http",
           "name": "No token: hold seats",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2715,7 +2983,7 @@
           "type": "http",
           "name": "Ravi reads a hold that is not his",
           "request": {
-            "url": "{{baseUrl}}/holds/{{holdId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{holdId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2752,7 +3020,7 @@
           "type": "http",
           "name": "Too many seats in one hold",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2784,6 +3052,154 @@
             "docs": "At most 10 seats per hold."
           },
           "seq": 13
+        },
+        {
+          "type": "http",
+          "name": "Internal paid endpoint is not reachable from outside",
+          "request": {
+            "url": "{{baseUrl}}/internal/bookings/{{bookingId}}/paid",
+            "method": "POST",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"paymentId\": 1\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "The gateway does not route `/internal/**`; inside Docker it also needs the payment service's role BOOKING_CALLBACK (backend tests cover that)."
+          },
+          "seq": 14
+        },
+        {
+          "type": "http",
+          "name": "Webhook with a forged signature",
+          "request": {
+            "url": "{{baseUrl}}/webhooks/razorpay",
+            "method": "POST",
+            "headers": [
+              {
+                "name": "X-Razorpay-Signature",
+                "value": "0000000000000000000000000000000000000000000000000000000000000000",
+                "enabled": true
+              }
+            ],
+            "params": [],
+            "body": {
+              "mode": "json",
+              "json": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {}\n}",
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 400\", function () {\n  expect(res.getStatus()).to.equal(400);\n});\n",
+            "docs": "The signature is the webhook's only authentication."
+          },
+          "seq": 15
+        },
+        {
+          "type": "http",
+          "name": "Payment API is not reachable from outside",
+          "request": {
+            "url": "{{baseUrl}}/payments/1",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "none"
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Only the backend calls `/payments/**`, inside Docker; the gateway routes nothing but the webhook to the payment service."
+          },
+          "seq": 16
+        },
+        {
+          "type": "http",
+          "name": "Payment API is not reachable even with a token",
+          "request": {
+            "url": "{{baseUrl}}/payments/1",
+            "method": "GET",
+            "headers": [],
+            "params": [],
+            "body": {
+              "mode": "none",
+              "json": null,
+              "text": null,
+              "xml": null,
+              "sparql": null,
+              "formUrlEncoded": [],
+              "multipartForm": []
+            },
+            "auth": {
+              "mode": "bearer",
+              "bearer": {
+                "token": "{{ashaToken}}"
+              }
+            },
+            "script": {
+              "req": "",
+              "res": ""
+            },
+            "vars": {
+              "req": [],
+              "res": []
+            },
+            "assertions": [],
+            "tests": "test(\"status 404\", function () {\n  expect(res.getStatus()).to.equal(404);\n});\n",
+            "docs": "Inside Docker a user token would also fail there: the payment service only accepts tokens for `seatlock-payment-api` (payment tests cover that)."
+          },
+          "seq": 17
         }
       ],
       "root": {
@@ -2915,6 +3331,13 @@
           "enabled": true,
           "secret": false,
           "type": "text"
+        },
+        {
+          "name": "webhookSecret",
+          "value": "",
+          "enabled": true,
+          "secret": true,
+          "type": "text"
         }
       ]
     }
@@ -2935,7 +3358,7 @@
       },
       "tests": ""
     },
-    "docs": "SeatLock API tour. Select the `local` environment, run folder 01 to log in, then run the collection top to bottom (the Runner works too). Created ids are saved as variables and reused by later requests. Local development credentials only."
+    "docs": "SeatLock API tour. Select the `local` environment and set its secret `webhookSecret` to your `RAZORPAY_WEBHOOK_SECRET`. Run folder 01 to log in, then run the collection top to bottom (the Runner works too). Created ids are saved as variables and reused by later requests. Payments are completed with a simulated, signed Razorpay webhook. Local development credentials only."
   },
   "brunoConfig": {
     "version": "1",
