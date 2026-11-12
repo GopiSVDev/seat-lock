@@ -39,15 +39,15 @@ programming needed. API reference with request and response examples: **[docs/ap
    verified payment books the seats. If the money arrives but the seats were lost in the meantime, the
    payment is refunded automatically; unpaid bookings expire.
 
-28 public endpoints plus one internal one, all JSON over HTTP. Errors use the standard
+28 public endpoints under `/api/v1` plus one internal one, all JSON over HTTP. Errors use the standard
 [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457) format.
 
 | Area | Endpoints |
 |---|---|
-| Catalogue | `GET /cities`, `GET /cities/{id}`, `POST /cities`, `POST /cities/{id}/aliases`, `GET /movies`, `POST /movies`, `GET /movies/{id}`, `GET /theatres`, `POST /theatres`, `GET /theatres/{id}`, `GET /theatres/{id}/shows`, `POST /theatres/{id}/screens`, `GET /screens/{id}`, `GET /shows`, `POST /shows`, `GET /shows/{id}` |
-| Seat map | `GET /shows/{id}/layout`, `GET /shows/{id}/availability` |
-| Holds | `POST /holds`, `POST /holds/best-available`, `GET /holds/{id}`, `DELETE /holds/{id}` |
-| Booking | `POST /bookings` (checkout), `POST /bookings/{id}/payment`, `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel` |
+| Catalogue | `GET /api/v1/cities`, `GET /api/v1/cities/{id}`, `POST /api/v1/cities`, `POST /api/v1/cities/{id}/aliases`, `GET /api/v1/movies`, `POST /api/v1/movies`, `GET /api/v1/movies/{id}`, `GET /api/v1/theatres`, `POST /api/v1/theatres`, `GET /api/v1/theatres/{id}`, `GET /api/v1/theatres/{id}/shows`, `POST /api/v1/theatres/{id}/screens`, `GET /api/v1/screens/{id}`, `GET /api/v1/shows`, `POST /api/v1/shows`, `GET /api/v1/shows/{id}` |
+| Seat map | `GET /api/v1/shows/{id}/layout`, `GET /api/v1/shows/{id}/availability` |
+| Holds | `POST /api/v1/holds`, `POST /api/v1/holds/best-available`, `GET /api/v1/holds/{id}`, `DELETE /api/v1/holds/{id}` |
+| Booking | `POST /api/v1/bookings` (checkout), `POST /api/v1/bookings/{id}/payment`, `GET /api/v1/bookings`, `GET /api/v1/bookings/{id}`, `POST /api/v1/bookings/{id}/cancel` |
 | Internal (payment service only) | `POST /internal/bookings/{id}/paid` |
 
 Who may call what: `GET` on catalogue and seat maps is public, creating catalogue data needs the `ADMIN`
@@ -80,7 +80,7 @@ password login (`jq` extracts them) and last 1 hour (browser logins: 5 minutes):
 again when calls start returning 401.
 
 ```bash
-B=localhost:8080
+B=localhost:8080/api/v1
 token() { curl -s localhost:8180/realms/seatlock/protocol/openid-connect/token -d grant_type=password \
   -d client_id=seatlock-dev-cli -d username=$1 -d password=$1 | jq -r .access_token; }
 ADMIN="Authorization: Bearer $(token admin)"
@@ -118,12 +118,12 @@ curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one
 ```
 
 Paying needs a browser: Razorpay Checkout is a widget, so `/dev/checkout.html` (a dev-only page served by the
-backend) calls `POST /bookings`, opens Checkout in test mode and sends the result to `/bookings/{id}/payment`.
+backend) calls `POST /api/v1/bookings`, opens Checkout in test mode and sends the result to `/api/v1/bookings/{id}/payment`.
 `curl -XPOST $B/bookings -d '{"holdId":...}'` alone gives a `PENDING_PAYMENT` booking that expires unpaid.
 The payment service needs Razorpay test keys in `.env` (see [Payments](#paying-checkout-razorpay-and-the-webhook)).
 
 Holding seats someone else holds or booked returns `409 Conflict`; more than 10 holds in a burst (then 1 every 6 s)
-returns `429 Too Many Requests` with `Retry-After`. Without a token, `POST /movies` returns `401`; with
+returns `429 Too Many Requests` with `Retry-After`. Without a token, `POST /api/v1/movies` returns `401`; with
 Asha's token (CUSTOMER) it returns `403`.
 
 Logins are handled by **Keycloak** (admin console at [localhost:8180/admin](http://localhost:8180/admin),
@@ -226,18 +226,18 @@ data by plain id only: no JPA relations and no foreign keys across schemas. `Arc
 fails the build if a class breaks this rule.
 
 **How the modules connect:**
-- **Scheduling a show** (`POST /shows`): catalogue saves the show and publishes a `ShowScheduled` event with
+- **Scheduling a show** (`POST /api/v1/shows`): catalogue saves the show and publishes a `ShowScheduled` event with
   the screen's seats. Inventory listens and creates one `show_seat` row per seat, copying row, number,
   type and rank so it can serve the seat map without asking catalogue. The listener runs synchronously in
   the same transaction, so a show never exists without its seats.
-- **Checkout** (`POST /bookings`): booking calls `InventoryApi.startPayment` to keep the hold alive for the
+- **Checkout** (`POST /api/v1/bookings`): booking calls `InventoryApi.startPayment` to keep the hold alive for the
   payment window, asks `CatalogueApi` for the show's details (one query), then inserts an unpaid booking with
   a copy of the show details. The copy lets "my bookings" render and split into upcoming/past by show time
   without asking catalogue.
 - **Confirming a paid booking**: booking calls `InventoryApi.confirmHold` to mark the hold's seats BOOKED,
   in the same transaction that marks the booking CONFIRMED; the hold is deleted from Redis only after the
   commit.
-- **Cancelling** (`POST /bookings/{id}/cancel`): a guarded update
+- **Cancelling** (`POST /api/v1/bookings/{id}/cancel`): a guarded update
   `... set status = 'CANCELLED' where id = ? and customer_id = ? and status = 'CONFIRMED' and show_start_time > now`
   decides the winner. Only the request that changed the row releases the seats through `InventoryApi`, in
   the same transaction. This matters: if a double-tapped cancel released the seats twice, the second
@@ -272,7 +272,7 @@ kept for the 10-minute payment window), then **pay**; only a verified payment bo
 Expiry needs no cleanup job: every hold key has a TTL and Redis deletes it. The seat map shows a seat as
 taken if Postgres says BOOKED or Redis holds it.
 
-### Holding seats: `POST /holds`
+### Holding seats: `POST /api/v1/holds`
 
 ```mermaid
 sequenceDiagram
@@ -280,7 +280,7 @@ sequenceDiagram
     participant I as inventory
     participant R as Redis
     participant DB as PostgreSQL
-    C->>I: POST /holds {showId, showSeatIds}
+    C->>I: POST /api/v1/holds {showId, showSeatIds}
     I->>R: Lua script: if no seat is held,<br/>hold all of them (TTL 5 min)
     alt a seat is held by someone else
         R-->>I: 0
@@ -321,14 +321,14 @@ sequenceDiagram
     participant B as backend (booking)
     participant P as payment service
     participant RZ as Razorpay
-    C->>B: POST /bookings {holdId}
+    C->>B: POST /api/v1/bookings {holdId}
     B->>B: extend hold to 10 min, insert booking PENDING_PAYMENT
     B->>P: POST /payments {bookingId, amount}
     P->>RZ: POST /v1/orders
     B-->>C: 201 {checkout: {razorpayOrderId, keyId}, paymentExpiresAt}
     C->>RZ: Razorpay Checkout (card, UPI, ...)
     RZ-->>C: {paymentId, orderId, signature}
-    C->>B: POST /bookings/{id}/payment
+    C->>B: POST /api/v1/bookings/{id}/payment
     B->>P: verify signature (HMAC with the key secret)
     B->>B: confirm: seats BOOKED, booking CONFIRMED
     RZ->>P: webhook payment.captured (signed)
@@ -409,7 +409,7 @@ holding answers `503` (fails closed).
 CONFIRMED booking per show seat. If the application logic ever had a bug, the database would still refuse a
 double sale.
 
-### Best available: `POST /holds/best-available`
+### Best available: `POST /api/v1/holds/best-available`
 
 During a flash sale most buyers want "2 good seats together" and all aim at the same centre seats, so
 exact-seat requests collide and most get 409. Best available lets the server choose instead:
@@ -430,7 +430,7 @@ who gets a seat, so the hot path takes no row locks until the booking itself.)
 
 Viewing the map is far more frequent than booking, so it is split in two:
 
-| | `GET /shows/{id}/layout` | `GET /shows/{id}/availability` |
+| | `GET /api/v1/shows/{id}/layout` | `GET /api/v1/shows/{id}/availability` |
 |---|---|---|
 | Content | rows, seat ids, numbers, types, prices | count of free seats + ids of taken seats |
 | Changes | never (for a show) | on every hold and booking |
@@ -575,7 +575,7 @@ payment succeeds unless a test says otherwise); in payment tests it plays Razorp
 | `BookingConstraintsTest` | the database itself refuses bad states: a cancelled booking without a time, an unpaid booking without a deadline, unknown statuses, one seat in two confirmed bookings |
 | `PaymentApiTest` (payment) | one Razorpay order per booking, a different amount is 409, Razorpay down → 502 and nothing saved, only the `PAYMENTS_CLIENT` role gets in, a valid Checkout signature captures, forged signatures (or another order's) are 400, a refund is asked once, an unpaid payment can't be refunded, a refused refund can be asked again |
 | `WebhookTest` (payment) | unsigned or forged events are 400; `payment.captured` captures and calls the backend with a service token; repeats change nothing; backend down → 502 so Razorpay retries; a failed attempt keeps the order open; `refund.processed` completes the refund; unknown orders and other events are acknowledged; the payment method survives the browser reporting first; every event is logged with its ids, a forged one with a warning |
-| `SecurityRulesTest` | public reads (and the dev checkout page), 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default |
+| `SecurityRulesTest` | public reads (and the dev checkout page), 401 with problem details and `WWW-Authenticate`, invalid tokens, 403 for customers on admin endpoints, unknown paths closed by default, the API only under `/api/v1` and the internal endpoint outside it |
 | `RequestLogTest` | every request logs method, path, status and time, rejections log their reason; health checks are not logged |
 | `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
 | `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
@@ -603,7 +603,7 @@ app, so a missing value fails at startup instead of silently using a wrong one. 
 
 **Logs** (plain text on stdout, `docker compose logs <service>`), the same in both applications:
 
-- one line per request: `POST /bookings/7/payment -> 200 (85 ms)`; health checks and metric scrapes are skipped
+- one line per request: `POST /api/v1/bookings/7/payment -> 200 (85 ms)`; health checks and metric scrapes are skipped
 - every rejection with its reason: `Rejected with 409: Show has already started`, `Rejected with 401: Jwt expired at …`
 - every state change in the booking flow, with ids: hold placed, kept for payment, confirmed or released;
   booking started, confirmed (and whether the browser or the webhook reported it), failed, cancelled;

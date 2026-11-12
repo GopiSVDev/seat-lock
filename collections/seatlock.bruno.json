@@ -437,7 +437,7 @@
           "type": "http",
           "name": "Search with a typo: chenai",
           "request": {
-            "url": "{{baseUrl}}/cities?query=chenai",
+            "url": "{{baseUrl}}/api/v1/cities?query=chenai",
             "method": "GET",
             "headers": [],
             "params": [
@@ -478,7 +478,7 @@
           "type": "http",
           "name": "Search by old name: madras",
           "request": {
-            "url": "{{baseUrl}}/cities?query=madras",
+            "url": "{{baseUrl}}/api/v1/cities?query=madras",
             "method": "GET",
             "headers": [],
             "params": [
@@ -519,7 +519,7 @@
           "type": "http",
           "name": "Popular cities",
           "request": {
-            "url": "{{baseUrl}}/cities?popular=true",
+            "url": "{{baseUrl}}/api/v1/cities?popular=true",
             "method": "GET",
             "headers": [],
             "params": [
@@ -560,7 +560,7 @@
           "type": "http",
           "name": "Cities with theatres",
           "request": {
-            "url": "{{baseUrl}}/cities?withTheatres=true",
+            "url": "{{baseUrl}}/api/v1/cities?withTheatres=true",
             "method": "GET",
             "headers": [],
             "params": [
@@ -601,7 +601,7 @@
           "type": "http",
           "name": "All cities",
           "request": {
-            "url": "{{baseUrl}}/cities",
+            "url": "{{baseUrl}}/api/v1/cities",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -635,7 +635,7 @@
           "type": "http",
           "name": "Get Chennai",
           "request": {
-            "url": "{{baseUrl}}/cities/{{chennaiId}}",
+            "url": "{{baseUrl}}/api/v1/cities/{{chennaiId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -669,7 +669,7 @@
           "type": "http",
           "name": "Create a city (ADMIN)",
           "request": {
-            "url": "{{baseUrl}}/cities",
+            "url": "{{baseUrl}}/api/v1/cities",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -706,7 +706,7 @@
           "type": "http",
           "name": "Same city again is a conflict (ADMIN)",
           "request": {
-            "url": "{{baseUrl}}/cities",
+            "url": "{{baseUrl}}/api/v1/cities",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -743,7 +743,7 @@
           "type": "http",
           "name": "Add an alias (ADMIN)",
           "request": {
-            "url": "{{baseUrl}}/cities/{{cityId}}/aliases",
+            "url": "{{baseUrl}}/api/v1/cities/{{cityId}}/aliases",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -805,7 +805,7 @@
           "type": "http",
           "name": "Create a movie",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -842,7 +842,7 @@
           "type": "http",
           "name": "Invalid movie is rejected with field errors",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -879,7 +879,7 @@
           "type": "http",
           "name": "Create a theatre in Chennai",
           "request": {
-            "url": "{{baseUrl}}/theatres",
+            "url": "{{baseUrl}}/api/v1/theatres",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -916,7 +916,7 @@
           "type": "http",
           "name": "Create a screen",
           "request": {
-            "url": "{{baseUrl}}/theatres/{{theatreId}}/screens",
+            "url": "{{baseUrl}}/api/v1/theatres/{{theatreId}}/screens",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -953,7 +953,7 @@
           "type": "http",
           "name": "Schedule a show",
           "request": {
-            "url": "{{baseUrl}}/shows",
+            "url": "{{baseUrl}}/api/v1/shows",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1015,7 +1015,7 @@
           "type": "http",
           "name": "Now showing in Chennai",
           "request": {
-            "url": "{{baseUrl}}/movies?cityId={{chennaiId}}",
+            "url": "{{baseUrl}}/api/v1/movies?cityId={{chennaiId}}",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1056,7 +1056,7 @@
           "type": "http",
           "name": "Now showing, filtered",
           "request": {
-            "url": "{{baseUrl}}/movies?cityId={{chennaiId}}&language=ENGLISH&format=IMAX_2D&genre=SCI_FI",
+            "url": "{{baseUrl}}/api/v1/movies?cityId={{chennaiId}}&language=ENGLISH&format=IMAX_2D&genre=SCI_FI",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1115,7 +1115,7 @@
           "type": "http",
           "name": "Language filter without a city is rejected",
           "request": {
-            "url": "{{baseUrl}}/movies?language=ENGLISH",
+            "url": "{{baseUrl}}/api/v1/movies?language=ENGLISH",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1156,7 +1156,7 @@
           "type": "http",
           "name": "Whole catalogue",
           "request": {
-            "url": "{{baseUrl}}/movies?page=0&size=20",
+            "url": "{{baseUrl}}/api/v1/movies?page=0&size=20",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1203,7 +1203,7 @@
           "type": "http",
           "name": "Movie details",
           "request": {
-            "url": "{{baseUrl}}/movies/{{movieId}}",
+            "url": "{{baseUrl}}/api/v1/movies/{{movieId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1237,7 +1237,7 @@
           "type": "http",
           "name": "Showtimes: movie in a city on a day",
           "request": {
-            "url": "{{baseUrl}}/shows?movieId={{movieId}}&cityId={{chennaiId}}&date={{showDate}}",
+            "url": "{{baseUrl}}/api/v1/shows?movieId={{movieId}}&cityId={{chennaiId}}&date={{showDate}}",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1290,7 +1290,7 @@
           "type": "http",
           "name": "Theatres in Chennai",
           "request": {
-            "url": "{{baseUrl}}/theatres?cityId={{chennaiId}}&query=pvr",
+            "url": "{{baseUrl}}/api/v1/theatres?cityId={{chennaiId}}&query=pvr",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1337,7 +1337,7 @@
           "type": "http",
           "name": "Theatre details",
           "request": {
-            "url": "{{baseUrl}}/theatres/{{theatreId}}",
+            "url": "{{baseUrl}}/api/v1/theatres/{{theatreId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1371,7 +1371,7 @@
           "type": "http",
           "name": "Theatre page: what's on that day",
           "request": {
-            "url": "{{baseUrl}}/theatres/{{theatreId}}/shows?date={{showDate}}",
+            "url": "{{baseUrl}}/api/v1/theatres/{{theatreId}}/shows?date={{showDate}}",
             "method": "GET",
             "headers": [],
             "params": [
@@ -1412,7 +1412,7 @@
           "type": "http",
           "name": "Screen",
           "request": {
-            "url": "{{baseUrl}}/screens/{{screenId}}",
+            "url": "{{baseUrl}}/api/v1/screens/{{screenId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1446,7 +1446,7 @@
           "type": "http",
           "name": "Show",
           "request": {
-            "url": "{{baseUrl}}/shows/{{showId}}",
+            "url": "{{baseUrl}}/api/v1/shows/{{showId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1505,7 +1505,7 @@
           "type": "http",
           "name": "Layout",
           "request": {
-            "url": "{{baseUrl}}/shows/{{showId}}/layout",
+            "url": "{{baseUrl}}/api/v1/shows/{{showId}}/layout",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1539,7 +1539,7 @@
           "type": "http",
           "name": "Availability",
           "request": {
-            "url": "{{baseUrl}}/shows/{{showId}}/availability",
+            "url": "{{baseUrl}}/api/v1/shows/{{showId}}/availability",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1598,7 +1598,7 @@
           "type": "http",
           "name": "Asha holds A1, A2",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1635,7 +1635,7 @@
           "type": "http",
           "name": "Ravi tries the same seats",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1672,7 +1672,7 @@
           "type": "http",
           "name": "Get my hold (countdown)",
           "request": {
-            "url": "{{baseUrl}}/holds/{{holdId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{holdId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1709,7 +1709,7 @@
           "type": "http",
           "name": "Check out the hold",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1746,7 +1746,7 @@
           "type": "http",
           "name": "Check out the same hold again",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1783,7 +1783,7 @@
           "type": "http",
           "name": "Forged browser receipt is refused",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}/payment",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/payment",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1860,7 +1860,7 @@
           "type": "http",
           "name": "Booking is confirmed",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -1897,7 +1897,7 @@
           "type": "http",
           "name": "Best available: hold 2 recliners",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -1934,7 +1934,7 @@
           "type": "http",
           "name": "Check out the best-available hold",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2011,7 +2011,7 @@
           "type": "http",
           "name": "Best available: 10 recliners don't fit",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2048,7 +2048,7 @@
           "type": "http",
           "name": "Hold a seat to let it go",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2085,7 +2085,7 @@
           "type": "http",
           "name": "Let the hold go (back button)",
           "request": {
-            "url": "{{baseUrl}}/holds/{{tempHoldId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{tempHoldId}}",
             "method": "DELETE",
             "headers": [],
             "params": [],
@@ -2122,7 +2122,7 @@
           "type": "http",
           "name": "Released hold is gone",
           "request": {
-            "url": "{{baseUrl}}/holds/{{tempHoldId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{tempHoldId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2159,7 +2159,7 @@
           "type": "http",
           "name": "Get my booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2196,7 +2196,7 @@
           "type": "http",
           "name": "My bookings: upcoming",
           "request": {
-            "url": "{{baseUrl}}/bookings?period=UPCOMING",
+            "url": "{{baseUrl}}/api/v1/bookings?period=UPCOMING",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2240,7 +2240,7 @@
           "type": "http",
           "name": "My bookings: past",
           "request": {
-            "url": "{{baseUrl}}/bookings?period=PAST",
+            "url": "{{baseUrl}}/api/v1/bookings?period=PAST",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2284,7 +2284,7 @@
           "type": "http",
           "name": "Cancel the booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/cancel",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2321,7 +2321,7 @@
           "type": "http",
           "name": "Cancel again changes nothing",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/cancel",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2358,7 +2358,7 @@
           "type": "http",
           "name": "Ravi holds the freed seats",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2395,7 +2395,7 @@
           "type": "http",
           "name": "Ravi checks out",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2432,7 +2432,7 @@
           "type": "http",
           "name": "Cancel before paying is refused",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{raviBookingId}}/cancel",
+            "url": "{{baseUrl}}/api/v1/bookings/{{raviBookingId}}/cancel",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2509,7 +2509,7 @@
           "type": "http",
           "name": "Ravi's booking is confirmed",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{raviBookingId}}",
+            "url": "{{baseUrl}}/api/v1/bookings/{{raviBookingId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2571,7 +2571,7 @@
           "type": "http",
           "name": "No token: create a movie",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2605,7 +2605,7 @@
           "type": "http",
           "name": "No token: my bookings",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2639,7 +2639,7 @@
           "type": "http",
           "name": "Fake token",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2676,7 +2676,7 @@
           "type": "http",
           "name": "Token from another realm",
           "request": {
-            "url": "{{baseUrl}}/bookings",
+            "url": "{{baseUrl}}/api/v1/bookings",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2713,7 +2713,7 @@
           "type": "http",
           "name": "Customer creating a movie",
           "request": {
-            "url": "{{baseUrl}}/movies",
+            "url": "{{baseUrl}}/api/v1/movies",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2750,7 +2750,7 @@
           "type": "http",
           "name": "Ravi reads Asha's booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bookingId}}",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -2787,7 +2787,7 @@
           "type": "http",
           "name": "Ravi cancels Asha's booking",
           "request": {
-            "url": "{{baseUrl}}/bookings/{{bestBookingId}}/cancel",
+            "url": "{{baseUrl}}/api/v1/bookings/{{bestBookingId}}/cancel",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2824,7 +2824,7 @@
           "type": "http",
           "name": "Unknown show",
           "request": {
-            "url": "{{baseUrl}}/holds/best-available",
+            "url": "{{baseUrl}}/api/v1/holds/best-available",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2861,7 +2861,7 @@
           "type": "http",
           "name": "Page size too big",
           "request": {
-            "url": "{{baseUrl}}/bookings?size=51",
+            "url": "{{baseUrl}}/api/v1/bookings?size=51",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2905,7 +2905,7 @@
           "type": "http",
           "name": "Unknown period",
           "request": {
-            "url": "{{baseUrl}}/bookings?period=SOON",
+            "url": "{{baseUrl}}/api/v1/bookings?period=SOON",
             "method": "GET",
             "headers": [],
             "params": [
@@ -2949,7 +2949,7 @@
           "type": "http",
           "name": "No token: hold seats",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],
@@ -2983,7 +2983,7 @@
           "type": "http",
           "name": "Ravi reads a hold that is not his",
           "request": {
-            "url": "{{baseUrl}}/holds/{{holdId}}",
+            "url": "{{baseUrl}}/api/v1/holds/{{holdId}}",
             "method": "GET",
             "headers": [],
             "params": [],
@@ -3020,7 +3020,7 @@
           "type": "http",
           "name": "Too many seats in one hold",
           "request": {
-            "url": "{{baseUrl}}/holds",
+            "url": "{{baseUrl}}/api/v1/holds",
             "method": "POST",
             "headers": [],
             "params": [],

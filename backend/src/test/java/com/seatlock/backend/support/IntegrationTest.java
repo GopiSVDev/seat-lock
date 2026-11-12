@@ -101,19 +101,21 @@ public abstract class IntegrationTest {
     }
 
     protected TestShow newShow(Instant startTime) {
-        long cityId = created(api.post("/cities", admin, Map.of("name", unique("Testpur"), "state", "Tamil Nadu")));
-        long movieId = created(api.post("/movies", admin, Map.of("title", unique("Movie"), "durationMinutes", 150,
-                "certification", "UA", "releaseDate", "2026-01-01", "genres", List.of("DRAMA"))));
-        long theatreId = created(api.post("/theatres", admin,
+        long cityId = created(
+                api.post("/api/v1/cities", admin, Map.of("name", unique("Testpur"), "state", "Tamil Nadu")));
+        long movieId = created(api.post("/api/v1/movies", admin, Map.of("title", unique("Movie"), "durationMinutes",
+                150, "certification", "UA", "releaseDate", "2026-01-01", "genres", List.of("DRAMA"))));
+        long theatreId = created(api.post("/api/v1/theatres", admin,
                 Map.of("name", unique("Cinema"), "cityId", cityId, "address", "1 Main Road")));
-        long screenId = created(api.post("/theatres/" + theatreId + "/screens", admin, Map.of("name", "Screen 1",
-                "rows", List.of(row("A", 10, "REGULAR"), row("B", 10, "REGULAR"), row("C", 8, "RECLINER")))));
-        long showId = created(api.post("/shows", admin,
+        long screenId = created(
+                api.post("/api/v1/theatres/" + theatreId + "/api/v1/screens", admin, Map.of("name", "Screen 1", "rows",
+                        List.of(row("A", 10, "REGULAR"), row("B", 10, "REGULAR"), row("C", 8, "RECLINER")))));
+        long showId = created(api.post("/api/v1/shows", admin,
                 Map.of("movieId", movieId, "screenId", screenId, "startTime", startTime.toString(), "language",
                         "ENGLISH", "format", "IMAX_2D", "prices",
                         Map.of("REGULAR", REGULAR_PRICE, "RECLINER", RECLINER_PRICE))));
 
-        JsonNode rows = api.get("/shows/" + showId + "/layout", null).body().get("rows");
+        JsonNode rows = api.get("/api/v1/shows/" + showId + "/layout", null).body().get("rows");
         Map<String, List<Long>> seats = new LinkedHashMap<>();
         for (int i = 0; i < rows.size(); i++) {
             seats.put(rows.get(i).get("label").asString(), ids(rows.get(i).get("seats"), "id"));
@@ -122,17 +124,17 @@ public abstract class IntegrationTest {
     }
 
     protected Response hold(TestUser user, TestShow show, List<Long> seatIds) {
-        return api.post("/holds", user, Map.of("showId", show.showId(), "showSeatIds", seatIds));
+        return api.post("/api/v1/holds", user, Map.of("showId", show.showId(), "showSeatIds", seatIds));
     }
 
     // Starts payment: an unpaid booking (201, or 200 when the hold already has one)
     protected Response checkout(TestUser user, String holdId) {
-        return api.post("/bookings", user, Map.of("holdId", holdId));
+        return api.post("/api/v1/bookings", user, Map.of("holdId", holdId));
     }
 
     // What the browser sends after Razorpay Checkout; the stubbed payment service accepts any signature
     protected Response pay(TestUser user, long bookingId) {
-        return api.post("/bookings/" + bookingId + "/payment", user,
+        return api.post("/api/v1/bookings/" + bookingId + "/payment", user,
                 Map.of("razorpayOrderId", "order_test", "razorpayPaymentId", "pay_test", "razorpaySignature", "sig"));
     }
 

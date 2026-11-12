@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/bookings")
 @RequiredArgsConstructor
@@ -32,7 +34,7 @@ public class BookingController {
         BookingService.Checkout checkout = bookingService.checkout(request, CurrentUser.from(jwt));
         BookingResponse response = checkout.booking();
         return checkout.isNew()
-                ? ResponseEntity.created(URI.create("/bookings/" + response.id())).body(response)
+                ? ResponseEntity.created(URI.create(API_V1 + "/bookings/" + response.id())).body(response)
                 : ResponseEntity.ok(response);
     }
 

@@ -16,10 +16,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @Configuration
 public class SecurityConfig {
 
-    private static final String[] CATALOGUE = {"/cities/**", "/movies/**", "/theatres/**", "/screens/**", "/shows/**"};
+    private static final String[] CATALOGUE = {API_V1 + "/cities/**", API_V1 + "/movies/**", API_V1 + "/theatres/**",
+            API_V1 + "/screens/**", API_V1 + "/shows/**"};
 
     @Bean
     SecurityFilterChain apiSecurity(HttpSecurity http, ProblemDetailAuthHandler problemHandler) throws Exception {
@@ -36,7 +39,7 @@ public class SecurityConfig {
                         // Dev checkout page (static, no data; its API calls carry the pasted token)
                         .requestMatchers(HttpMethod.GET, "/dev/checkout.html").permitAll()
                         .requestMatchers(HttpMethod.POST, CATALOGUE).hasRole("ADMIN")
-                        .requestMatchers("/bookings/**", "/holds/**").authenticated()
+                        .requestMatchers(API_V1 + "/bookings/**", API_V1 + "/holds/**").authenticated()
                         // Service to service only: the payment service's client credentials token
                         .requestMatchers("/internal/**").hasRole("BOOKING_CALLBACK").anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakRoles()))

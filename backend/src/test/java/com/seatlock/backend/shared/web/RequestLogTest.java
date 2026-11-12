@@ -16,19 +16,19 @@ class RequestLogTest extends IntegrationTest {
     @Test
     void everyRequestIsLoggedWithItsStatusAndRejectionsWithTheirReason(CapturedOutput output)
             throws InterruptedException {
-        assertThat(api.get("/bookings", null).status()).isEqualTo(401);
-        assertThat(api.get("/shows/999999999", null).status()).isEqualTo(404);
+        assertThat(api.get("/api/v1/bookings", null).status()).isEqualTo(401);
+        assertThat(api.get("/api/v1/shows/999999999", null).status()).isEqualTo(404);
 
-        awaitLogged(output, "GET /bookings -> 401", "Rejected with 401", "GET /shows/999999999 -> 404",
+        awaitLogged(output, "GET /api/v1/bookings -> 401", "Rejected with 401", "GET /api/v1/shows/999999999 -> 404",
                 "Rejected with 404");
     }
 
     @Test
     void healthChecksAreNotLogged(CapturedOutput output) throws InterruptedException {
         assertThat(api.get("/actuator/health", null).status()).isEqualTo(200);
-        assertThat(api.get("/shows/999999999", null).status()).isEqualTo(404);
+        assertThat(api.get("/api/v1/shows/999999999", null).status()).isEqualTo(404);
 
-        awaitLogged(output, "GET /shows/999999999 -> 404");
+        awaitLogged(output, "GET /api/v1/shows/999999999 -> 404");
         assertThat(output.getAll()).doesNotContain("/actuator/health");
     }
 

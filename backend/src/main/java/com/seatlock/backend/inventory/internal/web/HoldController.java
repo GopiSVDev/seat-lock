@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/holds")
 @RequiredArgsConstructor
@@ -47,6 +49,6 @@ public class HoldController {
     }
 
     private static ResponseEntity<HoldResponse> created(HoldResponse hold) {
-        return ResponseEntity.created(URI.create("/holds/" + hold.id())).body(hold);
+        return ResponseEntity.created(URI.create(API_V1 + "/holds/" + hold.id())).body(hold);
     }
 }

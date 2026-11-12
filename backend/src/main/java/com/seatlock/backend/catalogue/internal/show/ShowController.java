@@ -13,6 +13,8 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/shows")
 @RequiredArgsConstructor
@@ -31,7 +33,7 @@ public class ShowController {
     @PostMapping
     public ResponseEntity<ShowResponse> create(@Valid @RequestBody CreateShowRequest request) {
         ShowResponse response = showService.create(request);
-        return ResponseEntity.created(URI.create("/shows/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create(API_V1 + "/shows/" + response.id())).body(response);
     }
 
     @GetMapping("/{id}")

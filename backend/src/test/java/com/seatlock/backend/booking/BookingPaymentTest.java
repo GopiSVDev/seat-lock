@@ -49,7 +49,7 @@ class BookingPaymentTest extends IntegrationTest {
         Response booking = checkout(asha, holdId);
 
         assertThat(booking.status()).as(booking.toString()).isEqualTo(201);
-        assertThat(booking.header("Location")).isEqualTo("/bookings/" + booking.id());
+        assertThat(booking.header("Location")).isEqualTo("/api/v1/bookings/" + booking.id());
         assertThat(booking.text("status")).isEqualTo("PENDING_PAYMENT");
         assertThat(booking.body().get("totalAmount").asLong()).isEqualTo(2 * REGULAR_PRICE);
         JsonNode checkout = booking.body().get("checkout");
@@ -205,7 +205,7 @@ class BookingPaymentTest extends IntegrationTest {
         String holdId = hold(asha, show, seats).text("id");
         long bookingId = checkout(asha, holdId).id();
         // The hold is gone (e.g. expired) and someone else has the seats now
-        api.send("DELETE", "/holds/" + holdId, asha.token(), null);
+        api.send("DELETE", "/api/v1/holds/" + holdId, asha.token(), null);
         assertThat(hold(ravi, show, seats).status()).isEqualTo(201);
 
         Response paid = pay(asha, bookingId);
@@ -219,7 +219,7 @@ class BookingPaymentTest extends IntegrationTest {
         assertThat(refunds).hasSize(1);
         assertThat(refunds.getFirst().getBodyAsString()).contains("\"reason\":\"BOOKING_FAILED\"");
         // Money was taken, so it shows up in my bookings
-        assertThat(ids(api.get("/bookings", asha).body().get("items"), "id")).containsExactly(bookingId);
+        assertThat(ids(api.get("/api/v1/bookings", asha).body().get("items"), "id")).containsExactly(bookingId);
     }
 
     @Test
@@ -231,12 +231,12 @@ class BookingPaymentTest extends IntegrationTest {
 
         expiryJob.expireOverdue();
 
-        Response booking = api.get("/bookings/" + overdue, asha);
+        Response booking = api.get("/api/v1/bookings/" + overdue, asha);
         assertThat(booking.text("status")).isEqualTo("EXPIRED");
         assertThat(booking.body().get("paymentExpiresAt").isNull()).isTrue();
         assertThat(jdbc.sql("select status from booking.booking_seat where booking_id = :id").param("id", overdue)
                 .query(String.class).list()).containsOnly("EXPIRED");
-        assertThat(api.get("/bookings", asha).body().get("totalItems").asLong()).isZero();
+        assertThat(api.get("/api/v1/bookings", asha).body().get("totalItems").asLong()).isZero();
     }
 
     @Test
@@ -257,7 +257,7 @@ class BookingPaymentTest extends IntegrationTest {
         jdbc.sql("update booking.booking set payment_expires_at = now() - interval '1 minute' where id = :id")
                 .param("id", bookingId).update();
         expiryJob.expireOverdue();
-        api.send("DELETE", "/holds/" + holdId, asha.token(), null);
+        api.send("DELETE", "/api/v1/holds/" + holdId, asha.token(), null);
 
         assertThat(paidCallback(paymentServiceAccount, bookingId, PAYMENT_ID).status()).isEqualTo(204);
 
@@ -270,7 +270,7 @@ class BookingPaymentTest extends IntegrationTest {
         TestShow show = newShow();
         long bookingId = book(asha, show, show.seats("A", 1)).id();
 
-        Response cancelled = api.post("/bookings/" + bookingId + "/cancel", asha);
+        Response cancelled = api.post("/api/v1/bookings/" + bookingId + "/cancel", asha);
 
         assertThat(cancelled.text("status")).isEqualTo("CANCELLED");
         List<LoggedRequest> refunds = paymentService.findAll(postRequestedFor(urlEqualTo(REFUND)));
@@ -283,7 +283,7 @@ class BookingPaymentTest extends IntegrationTest {
         TestShow show = newShow();
         long bookingId = checkout(asha, hold(asha, show, show.seats("A", 1)).text("id")).id();
 
-        Response response = api.post("/bookings/" + bookingId + "/cancel", asha);
+        Response response = api.post("/api/v1/bookings/" + bookingId + "/cancel", asha);
 
         assertThat(response.status()).isEqualTo(409);
         assertThat(response.text("detail")).isEqualTo("Only confirmed bookings can be cancelled");

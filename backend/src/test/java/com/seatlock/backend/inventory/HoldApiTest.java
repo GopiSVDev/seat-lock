@@ -31,7 +31,7 @@ class HoldApiTest extends IntegrationTest {
 
         assertThat(hold.status()).isEqualTo(201);
         String holdId = hold.text("id");
-        assertThat(hold.header("Location")).isEqualTo("/holds/" + holdId);
+        assertThat(hold.header("Location")).isEqualTo("/api/v1/holds/" + holdId);
         assertThat(hold.body().get("showId").asLong()).isEqualTo(show.showId());
         assertThat(ids(hold.body().get("seats"), "showSeatId")).containsExactlyElementsOf(show.seats("A", 2));
         assertThat(hold.body().get("seats").get(0).get("label").asString()).isEqualTo("A1");
@@ -43,7 +43,7 @@ class HoldApiTest extends IntegrationTest {
         // Postgres only learns about seats once they are booked
         assertThat(seatStatuses(show.seats("A", 2))).containsOnly("AVAILABLE");
 
-        Response again = api.get("/holds/" + holdId, asha);
+        Response again = api.get("/api/v1/holds/" + holdId, asha);
         assertThat(again.status()).isEqualTo(200);
         assertThat(again.text("expiresAt")).isEqualTo(hold.text("expiresAt"));
     }
@@ -59,7 +59,7 @@ class HoldApiTest extends IntegrationTest {
         assertThat(hold.body().get("totalAmount").asLong()).isEqualTo(2 * REGULAR_PRICE + RECLINER_PRICE);
         assertThat(hold.body().get("seats").get(0).get("price").asLong()).isEqualTo(REGULAR_PRICE);
         assertThat(hold.body().get("seats").get(2).get("price").asLong()).isEqualTo(RECLINER_PRICE);
-        assertThat(api.get("/holds/" + hold.text("id"), asha).body().get("totalAmount").asLong())
+        assertThat(api.get("/api/v1/holds/" + hold.text("id"), asha).body().get("totalAmount").asLong())
                 .isEqualTo(2 * REGULAR_PRICE + RECLINER_PRICE);
     }
 
@@ -72,7 +72,7 @@ class HoldApiTest extends IntegrationTest {
 
         assertThat(response.status()).isEqualTo(409);
         assertThat(redis.hasKey("seat:" + show.showId() + ":" + show.seats("A", 3).get(2))).isFalse();
-        Response availability = api.get("/shows/" + show.showId() + "/availability", null);
+        Response availability = api.get("/api/v1/shows/" + show.showId() + "/availability", null);
         assertThat(ids(availability.body().get("unavailable"))).containsExactlyElementsOf(show.seats("A", 2));
         assertThat(availability.body().get("availableSeats").asInt()).isEqualTo(26);
     }
@@ -82,10 +82,10 @@ class HoldApiTest extends IntegrationTest {
         TestShow show = newShow();
         String holdId = hold(asha, show, show.seats("A", 2)).text("id");
 
-        assertThat(api.send("DELETE", "/holds/" + holdId, asha.token(), null).status()).isEqualTo(204);
+        assertThat(api.send("DELETE", "/api/v1/holds/" + holdId, asha.token(), null).status()).isEqualTo(204);
 
-        assertThat(api.get("/holds/" + holdId, asha).status()).isEqualTo(404);
-        assertThat(api.send("DELETE", "/holds/" + holdId, asha.token(), null).status()).isEqualTo(404);
+        assertThat(api.get("/api/v1/holds/" + holdId, asha).status()).isEqualTo(404);
+        assertThat(api.send("DELETE", "/api/v1/holds/" + holdId, asha.token(), null).status()).isEqualTo(404);
         assertThat(hold(ravi, show, show.seats("A", 2)).status()).isEqualTo(201);
     }
 
@@ -109,7 +109,7 @@ class HoldApiTest extends IntegrationTest {
         Response second = hold(asha, show, show.seatIdsByRow().get("A").subList(1, 3));
 
         assertThat(second.status()).isEqualTo(201);
-        assertThat(api.get("/holds/" + first, asha).status()).isEqualTo(404);
+        assertThat(api.get("/api/v1/holds/" + first, asha).status()).isEqualTo(404);
         assertThat(hold(ravi, show, show.seats("A", 1)).status()).as("A1 was let go").isEqualTo(201);
     }
 
@@ -121,7 +121,7 @@ class HoldApiTest extends IntegrationTest {
 
         hold(asha, other, other.seats("A", 1));
 
-        assertThat(api.get("/holds/" + first, asha).status()).isEqualTo(200);
+        assertThat(api.get("/api/v1/holds/" + first, asha).status()).isEqualTo(200);
     }
 
     @Test
@@ -129,9 +129,9 @@ class HoldApiTest extends IntegrationTest {
         TestShow show = newShow();
         String holdId = hold(asha, show, show.seats("A", 1)).text("id");
 
-        assertThat(api.get("/holds/" + holdId, ravi).status()).isEqualTo(404);
-        assertThat(api.send("DELETE", "/holds/" + holdId, ravi.token(), null).status()).isEqualTo(404);
-        assertThat(api.get("/holds/" + holdId, asha).status()).isEqualTo(200);
+        assertThat(api.get("/api/v1/holds/" + holdId, ravi).status()).isEqualTo(404);
+        assertThat(api.send("DELETE", "/api/v1/holds/" + holdId, ravi.token(), null).status()).isEqualTo(404);
+        assertThat(api.get("/api/v1/holds/" + holdId, asha).status()).isEqualTo(200);
     }
 
     @Test
@@ -179,7 +179,7 @@ class HoldApiTest extends IntegrationTest {
 
     @Test
     void bestAvailableForAnUnknownShowIsNotFound() {
-        Response response = api.post("/holds/best-available", asha,
+        Response response = api.post("/api/v1/holds/best-available", asha,
                 Map.of("showId", 999999999, "quantity", 1, "seatType", "REGULAR"));
 
         assertThat(response.status()).isEqualTo(404);
@@ -200,7 +200,7 @@ class HoldApiTest extends IntegrationTest {
     }
 
     private Response bestAvailable(TestUser user, TestShow show, int quantity, String seatType) {
-        return api.post("/holds/best-available", user,
+        return api.post("/api/v1/holds/best-available", user,
                 Map.of("showId", show.showId(), "quantity", quantity, "seatType", seatType));
     }
 

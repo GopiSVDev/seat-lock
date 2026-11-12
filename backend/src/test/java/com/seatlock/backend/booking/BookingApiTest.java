@@ -44,7 +44,7 @@ class BookingApiTest extends IntegrationTest {
 
         assertThat(booking.status()).isEqualTo(200);
         assertThat(ids(booking.body().get("seats"), "showSeatId")).containsExactlyElementsOf(show.seats("A", 2));
-        assertThat(api.get("/holds/" + holdId, asha).status()).isEqualTo(404);
+        assertThat(api.get("/api/v1/holds/" + holdId, asha).status()).isEqualTo(404);
         assertThat(redis.hasKey("hold:" + holdId)).isFalse();
         assertThat(redis.hasKey("seat:" + show.showId() + ":" + show.seats("A", 1).getFirst())).isFalse();
         // The hold is gone, but its booking is found again: no second booking
@@ -60,11 +60,11 @@ class BookingApiTest extends IntegrationTest {
         seats.add(show.seats("C", 1).getFirst());
         long bookingId = book(asha, show, seats).id();
 
-        Response booking = api.get("/bookings/" + bookingId, asha);
+        Response booking = api.get("/api/v1/bookings/" + bookingId, asha);
         assertThat(booking.body().get("totalAmount").asLong()).isEqualTo(REGULAR_PRICE + RECLINER_PRICE);
         assertThat(ids(booking.body().get("seats"), "price")).containsExactlyInAnyOrder(REGULAR_PRICE, RECLINER_PRICE);
 
-        Response cancelled = api.post("/bookings/" + bookingId + "/cancel", asha);
+        Response cancelled = api.post("/api/v1/bookings/" + bookingId + "/cancel", asha);
         assertThat(cancelled.body().get("totalAmount").asLong()).isEqualTo(REGULAR_PRICE + RECLINER_PRICE);
     }
 
@@ -88,7 +88,7 @@ class BookingApiTest extends IntegrationTest {
 
         assertThat(confirm(ravi, holdId).status()).isEqualTo(404);
         assertThat(confirm(asha, "no-such-hold").status()).isEqualTo(404);
-        assertThat(api.post("/bookings", asha, Map.of()).status()).isEqualTo(400);
+        assertThat(api.post("/api/v1/bookings", asha, Map.of()).status()).isEqualTo(400);
         assertThat(confirm(asha, holdId).status()).isEqualTo(200);
     }
 
@@ -105,9 +105,9 @@ class BookingApiTest extends IntegrationTest {
         TestShow show = newShow();
         long bookingId = book(asha, show, show.seats("A", 1)).id();
 
-        assertThat(api.get("/bookings/" + bookingId, asha).status()).isEqualTo(200);
-        assertThat(api.get("/bookings/" + bookingId, ravi).status()).isEqualTo(404);
-        assertThat(api.post("/bookings/" + bookingId + "/cancel", ravi).status()).isEqualTo(404);
+        assertThat(api.get("/api/v1/bookings/" + bookingId, asha).status()).isEqualTo(200);
+        assertThat(api.get("/api/v1/bookings/" + bookingId, ravi).status()).isEqualTo(404);
+        assertThat(api.post("/api/v1/bookings/" + bookingId + "/cancel", ravi).status()).isEqualTo(404);
         assertThat(seatStatuses(show.seats("A", 1))).containsOnly("BOOKED");
     }
 
@@ -119,16 +119,17 @@ class BookingApiTest extends IntegrationTest {
         long past = book(asha, second, second.seats("A", 1)).id();
         moveShowSnapshotIntoThePast(past);
 
-        assertThat(ids(api.get("/bookings?period=UPCOMING", asha).body().get("items"), "id")).containsExactly(future);
-        assertThat(ids(api.get("/bookings", asha).body().get("items"), "id")).containsExactly(future);
-        assertThat(ids(api.get("/bookings?period=PAST", asha).body().get("items"), "id")).containsExactly(past);
-        assertThat(api.get("/bookings", ravi).body().get("totalItems").asLong()).isZero();
+        assertThat(ids(api.get("/api/v1/bookings?period=UPCOMING", asha).body().get("items"), "id"))
+                .containsExactly(future);
+        assertThat(ids(api.get("/api/v1/bookings", asha).body().get("items"), "id")).containsExactly(future);
+        assertThat(ids(api.get("/api/v1/bookings?period=PAST", asha).body().get("items"), "id")).containsExactly(past);
+        assertThat(api.get("/api/v1/bookings", ravi).body().get("totalItems").asLong()).isZero();
     }
 
     @Test
     void listParametersAreValidated() {
-        assertThat(api.get("/bookings?size=51", asha).status()).isEqualTo(400);
-        assertThat(api.get("/bookings?period=SOON", asha).status()).isEqualTo(400);
+        assertThat(api.get("/api/v1/bookings?size=51", asha).status()).isEqualTo(400);
+        assertThat(api.get("/api/v1/bookings?period=SOON", asha).status()).isEqualTo(400);
     }
 
     @Test
@@ -136,7 +137,7 @@ class BookingApiTest extends IntegrationTest {
         TestShow show = newShow();
         long bookingId = book(asha, show, show.seats("B", 2)).id();
 
-        Response cancelled = api.post("/bookings/" + bookingId + "/cancel", asha);
+        Response cancelled = api.post("/api/v1/bookings/" + bookingId + "/cancel", asha);
 
         assertThat(cancelled.status()).isEqualTo(200);
         assertThat(cancelled.body().get("status").asString()).isEqualTo("CANCELLED");
@@ -150,8 +151,8 @@ class BookingApiTest extends IntegrationTest {
         TestShow show = newShow();
         long bookingId = book(asha, show, show.seats("A", 1)).id();
 
-        Response first = api.post("/bookings/" + bookingId + "/cancel", asha);
-        Response second = api.post("/bookings/" + bookingId + "/cancel", asha);
+        Response first = api.post("/api/v1/bookings/" + bookingId + "/cancel", asha);
+        Response second = api.post("/api/v1/bookings/" + bookingId + "/cancel", asha);
 
         assertThat(second.status()).isEqualTo(200);
         assertThat(second.body().get("cancelledAt")).isEqualTo(first.body().get("cancelledAt"));
@@ -163,11 +164,12 @@ class BookingApiTest extends IntegrationTest {
         long bookingId = book(asha, show, show.seats("A", 1)).id();
         moveShowSnapshotIntoThePast(bookingId);
 
-        Response response = api.post("/bookings/" + bookingId + "/cancel", asha);
+        Response response = api.post("/api/v1/bookings/" + bookingId + "/cancel", asha);
 
         assertThat(response.status()).isEqualTo(409);
         assertThat(response.body().get("detail").asString()).isEqualTo("Show has already started");
-        assertThat(api.get("/bookings/" + bookingId, asha).body().get("status").asString()).isEqualTo("CONFIRMED");
+        assertThat(api.get("/api/v1/bookings/" + bookingId, asha).body().get("status").asString())
+                .isEqualTo("CONFIRMED");
         assertThat(seatStatuses(show.seats("A", 1))).containsOnly("BOOKED");
     }
 

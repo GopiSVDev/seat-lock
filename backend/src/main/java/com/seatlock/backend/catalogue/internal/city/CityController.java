@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.List;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/cities")
 @RequiredArgsConstructor
@@ -36,7 +38,7 @@ public class CityController {
     @PostMapping
     public ResponseEntity<CityResponse> create(@Valid @RequestBody CreateCityRequest request) {
         CityResponse response = cityService.create(request);
-        return ResponseEntity.created(URI.create("/cities/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create(API_V1 + "/cities/" + response.id())).body(response);
     }
 
     @PostMapping("/{id}/aliases")

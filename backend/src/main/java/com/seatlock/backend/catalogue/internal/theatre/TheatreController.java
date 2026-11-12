@@ -20,6 +20,8 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.seatlock.backend.shared.web.ApiVersionConfig.API_V1;
+
 @RestController
 @RequestMapping("/theatres")
 @RequiredArgsConstructor
@@ -47,7 +49,7 @@ public class TheatreController {
     @PostMapping
     public ResponseEntity<TheatreResponse> create(@Valid @RequestBody CreateTheatreRequest request) {
         TheatreResponse response = theatreService.create(request);
-        return ResponseEntity.created(URI.create("/theatres/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create(API_V1 + "/theatres/" + response.id())).body(response);
     }
 
     @GetMapping("/{id}")

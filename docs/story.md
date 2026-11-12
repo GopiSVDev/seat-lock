@@ -109,17 +109,17 @@ flowchart TB
 ```
 
 **Behind the counter.**
-- The four steps are `POST /movies`, `POST /theatres`, `POST /theatres/1/screens` and `POST /shows`.
+- The four steps are `POST /api/v1/movies`, `POST /api/v1/theatres`, `POST /api/v1/theatres/1/screens` and `POST /api/v1/shows`.
 - A cinema is filed under its **city**, chosen from the office's fixed list of towns (`cityId`), never
   written by hand. That's why "Chennai" and "chenai" can't become two towns. Visitors asking for "Madras"
-  or "chenai" are still pointed to Chennai (`GET /cities?query=`).
+  or "chenai" are still pointed to Chennai (`GET /api/v1/cities?query=`).
 - The chair score is the **seat rank**. It is computed once, when the screen is created, from how far the
   chair is from the sweet spot (60% of the way back, centre of the row).
 - A **chair** (`seat`) belongs to the hall forever. A **chair for one evening** (`show_seat`) belongs to a
   show. The same chair A1 has a different show seat for every show: free tonight, maybe taken tomorrow.
 - The message from the what's on desk to the seat desk is the `ShowScheduled` event. Both notebooks are
   updated together: there is never a show without its chairs.
-- Prices are per **seat type** for one show (`prices` in `POST /shows`, every type the hall has). They are
+- Prices are per **seat type** for one show (`prices` in `POST /api/v1/shows`, every type the hall has). They are
   written in paise (`15000` = ₹150), whole numbers, so sums never get rounding errors. The seat desk copies
   the price onto every chair's line, and later the ticket copies it again, so a ticket always says what was
   paid.
@@ -151,9 +151,9 @@ sequenceDiagram
 ```
 
 **Behind the counter.**
-- The hall plan is `GET /shows/{id}/layout`. Its answer says "you may keep this for a day", so browsers and
+- The hall plan is `GET /api/v1/shows/{id}/layout`. Its answer says "you may keep this for a day", so browsers and
   a **CDN** (the helpers at the entrance) keep copies, and most people never reach the app at all.
-- The taken board is `GET /shows/{id}/availability`. The app keeps the answer in memory for 1 second
+- The taken board is `GET /api/v1/shows/{id}/availability`. The app keeps the answer in memory for 1 second
   (a **cache**), so a thousand people looking in the same second cost the database one question, not a
   thousand.
 - Because the board can be up to a second old, Asha might see a chair as free that was sold half a second
@@ -229,14 +229,14 @@ sequenceDiagram
 ```
 
 **Behind the counter.**
-- Step 1 is `POST /holds` with `showSeatIds: [3, 4]`; the answer has the hold's id, `expiresAt` (the
+- Step 1 is `POST /api/v1/holds` with `showSeatIds: [3, 4]`; the answer has the hold's id, `expiresAt` (the
   timer) and `totalAmount` (what the chairs cost together). The sticky-note board is **Redis**, and the
   fading timer is a **TTL** on every key. Sticking all notes or none is a small **Lua script** that Redis
   runs in one go.
-- Step 2 is `POST /bookings` with the hold's id: a `PENDING_PAYMENT` booking and a Razorpay order. The
+- Step 2 is `POST /api/v1/bookings` with the hold's id: a `PENDING_PAYMENT` booking and a Razorpay order. The
   cashier is the separate **payment service**, with its own database; the desks talk to it over HTTP, each
   showing its own staff wristband (a **client credentials** token).
-- Step 3 is `POST /bookings/{id}/payment` with Razorpay's three values. The stamp is an **HMAC signature**.
+- Step 3 is `POST /api/v1/bookings/{id}/payment` with Razorpay's three values. The stamp is an **HMAC signature**.
   "Only if still free" is one database statement:
   `UPDATE show_seat SET status = 'BOOKED' WHERE id IN (3, 4) AND status = 'AVAILABLE'`.
   If fewer chairs were updated than asked for, nothing changes.
@@ -255,8 +255,8 @@ fresh note every 6 seconds, up to 10. A family changing their mind a few times n
 with the stopwatch runs out in a second, and then hears "Wait 6 seconds". The pads are kept at the board
 itself, so it doesn't matter which window he walks up to.
 
-- That is a per-user **rate limit** (a **token bucket**, Bucket4j) on `POST /holds` and
-  `POST /holds/best-available`: beyond it `429 Too Many Requests` with a `Retry-After` header. It counts
+- That is a per-user **rate limit** (a **token bucket**, Bucket4j) on `POST /api/v1/holds` and
+  `POST /api/v1/holds/best-available`: beyond it `429 Too Many Requests` with a `Retry-After` header. It counts
   per wristband (the user id in the token), not per address: many phones share one address.
 - The pads are kept in Redis, so several seat desks (backend instances) share them. If the board is
   down, the pad check is skipped; nobody can stick notes then anyway.
@@ -367,9 +367,9 @@ its notes on them. If another fan stuck a note on one of those chairs a moment e
 again.
 
 **Behind the counter.**
-- Today this is `POST /holds/best-available` with `{"quantity": 2, "seatType": "REGULAR"}`, then
-  `POST /bookings` with the hold's id. (The numbers above are from before holds, when it was
-  `POST /bookings/best-available`.)
+- Today this is `POST /api/v1/holds/best-available` with `{"quantity": 2, "seatType": "REGULAR"}`, then
+  `POST /api/v1/bookings` with the hold's id. (The numbers above are from before holds, when it was
+  `POST /api/v1/bookings/best-available`.)
 - The old "put a hand on the 50 best free chairs, skip chairs someone else is holding" was
   `SELECT ... ORDER BY seat_rank LIMIT 50 FOR UPDATE SKIP LOCKED`. Now the read takes no locks; the
   sticky-note script decides who gets a chair, and it picks again up to 3 times.
@@ -411,7 +411,7 @@ fade without a ticket, those chairs go back on sale.
 | Cache (1 second) | Rewriting the board once a second instead of for every person who asks |
 | Transaction | Writing in both notebooks together: all of it or none of it |
 | Row lock | Putting your hand on a chair: others must wait |
-| Hold (`POST /holds`) | Sticky notes on your chairs: reserved for you for 5 minutes |
+| Hold (`POST /api/v1/holds`) | Sticky notes on your chairs: reserved for you for 5 minutes |
 | Redis | The sticky-note board next to the seat desk's notebook |
 | TTL | The timer that makes a sticky note fade by itself |
 | Lua script | Sticking all your notes in one go, or none |

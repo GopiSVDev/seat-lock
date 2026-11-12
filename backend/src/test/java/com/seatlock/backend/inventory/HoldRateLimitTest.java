@@ -54,9 +54,8 @@ class HoldRateLimitTest extends IntegrationTest {
         TestShow show = newShow();
         exhaust(asha, show);
 
-        assertThat(
-                api.post("/holds", ravi, Map.of("showId", show.showId(), "showSeatIds", show.seats("B", 1))).status())
-                .isEqualTo(201);
+        assertThat(api.post("/api/v1/holds", ravi, Map.of("showId", show.showId(), "showSeatIds", show.seats("B", 1)))
+                .status()).isEqualTo(201);
     }
 
     @Test
@@ -64,8 +63,8 @@ class HoldRateLimitTest extends IntegrationTest {
         TestShow show = newShow();
         String lastHold = exhaust(asha, show);
 
-        assertThat(api.send("DELETE", "/holds/" + lastHold, asha.token(), null).status()).isEqualTo(204);
-        assertThat(api.get("/holds/" + lastHold, asha).status()).isEqualTo(404);
+        assertThat(api.send("DELETE", "/api/v1/holds/" + lastHold, asha.token(), null).status()).isEqualTo(204);
+        assertThat(api.get("/api/v1/holds/" + lastHold, asha).status()).isEqualTo(404);
 
         // Ravi's own bucket is fresh: hold, then use up the rest and confirm after
         String raviHold = exhaust(ravi, show);
@@ -88,7 +87,7 @@ class HoldRateLimitTest extends IntegrationTest {
     }
 
     private Response bestAvailable(TestUser user, TestShow show) {
-        return api.post("/holds/best-available", user,
+        return api.post("/api/v1/holds/best-available", user,
                 Map.of("showId", show.showId(), "quantity", 2, "seatType", "REGULAR"));
     }
 }

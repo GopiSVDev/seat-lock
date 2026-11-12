@@ -50,7 +50,7 @@
     }
 
     document.getElementById('pay').onclick = async () => {
-        const booking = await call('POST', '/bookings', {holdId: document.getElementById('holdId').value.trim()});
+        const booking = await call('POST', '/api/v1/bookings', {holdId: document.getElementById('holdId').value.trim()});
         if (!booking.checkout) return;
 
         // Close the widget a minute before the hold ends, so nobody pays for seats they no longer have
@@ -63,7 +63,7 @@
             name: 'SeatLock',
             description: booking.show.movie.title + ', ' + booking.seats.map(s => s.label).join(' '),
             timeout: Math.max(secondsLeft, 60),
-            handler: result => call('POST', '/bookings/' + booking.id + '/payment', {
+            handler: result => call('POST', '/api/v1/bookings/' + booking.id + '/payment', {
                 razorpayOrderId: result.razorpay_order_id,
                 razorpayPaymentId: result.razorpay_payment_id,
                 razorpaySignature: result.razorpay_signature

@@ -50,7 +50,7 @@ class BookingConcurrencyTest extends IntegrationTest {
         TestShow show = newShow();
 
         List<TestUser> buyers = IntStream.range(0, 30).mapToObj(n -> TestUser.customer("Buyer " + n)).toList();
-        List<Response> holds = Concurrently.run(30, n -> api.post("/holds/best-available", buyers.get(n),
+        List<Response> holds = Concurrently.run(30, n -> api.post("/api/v1/holds/best-available", buyers.get(n),
                 Map.of("showId", show.showId(), "quantity", 1, "seatType", "REGULAR")));
 
         // A buyer gives up after a few lost races, so the split can vary; what must
@@ -98,7 +98,8 @@ class BookingConcurrencyTest extends IntegrationTest {
         List<Long> seats = show.seats("A", 2);
         long bookingId = book(asha, show, seats).id();
 
-        List<Response> responses = Concurrently.run(10, n -> api.post("/bookings/" + bookingId + "/cancel", asha));
+        List<Response> responses = Concurrently.run(10,
+                n -> api.post("/api/v1/bookings/" + bookingId + "/cancel", asha));
 
         assertThat(countByStatus(responses)).containsExactly(Map.entry(200, 10L));
         assertThat(seatStatuses(seats)).containsOnly("AVAILABLE");
