@@ -1,7 +1,9 @@
 package com.seatlock.backend.support;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.seatlock.backend.support.Api.Response;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +17,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -61,6 +64,9 @@ public abstract class IntegrationTest {
                 () -> paymentService.baseUrl() + "/token");
     }
 
+    // Circuit breaker and bulkhead around payment service calls (application.properties)
+    protected static final String PAYMENT_BREAKER = "payment";
+
     protected final TestUser admin = TestUser.admin();
 
     @Autowired
@@ -72,6 +78,9 @@ public abstract class IntegrationTest {
     @Autowired
     private JsonMapper jsonMapper;
 
+    @Autowired
+    protected CircuitBreakerRegistry circuitBreakers;
+
     @Value("${local.server.port}")
     protected int port;
 
@@ -81,6 +90,8 @@ public abstract class IntegrationTest {
     void startClient() {
         api = new Api("http://localhost:" + port, jsonMapper);
         paymentService.resetAll();
+        // One breaker for the whole context: failures from earlier tests must not open it
+        circuitBreakers.circuitBreaker(PAYMENT_BREAKER).reset();
         paymentService.stubFor(post(urlEqualTo("/token")).willReturn(okJson("""
                 {"access_token": "%s", "token_type": "Bearer", "expires_in": 300}
                 """.formatted(SERVICE_TOKEN))));
@@ -88,12 +99,21 @@ public abstract class IntegrationTest {
     }
 
     protected void stubPaymentServiceUp() {
-        paymentService.stubFor(post(urlEqualTo("/payments"))
-                .willReturn(aResponse().withStatus(201).withHeader("Content-Type", "application/json").withBody("""
-                        {"id": %d, "bookingId": 1, "amount": 30000, "currency": "INR", "status": "CREATED",
-                         "razorpayOrderId": "order_test", "razorpayPaymentId": null, "keyId": "rzp_test_key"}
-                        """.formatted(PAYMENT_ID))));
+        paymentService.stubFor(post(urlEqualTo("/payments")).willReturn(paymentCreated()));
         paymentService.stubFor(post(urlPathMatching("/payments/\\d+/(verify|refund)")).willReturn(okJson("{}")));
+    }
+
+    // Creating a payment answers as usual, only after `delay`
+    protected void stubPaymentServiceSlow(Duration delay) {
+        paymentService.stubFor(
+                post(urlEqualTo("/payments")).willReturn(paymentCreated().withFixedDelay((int) delay.toMillis())));
+    }
+
+    private static ResponseDefinitionBuilder paymentCreated() {
+        return aResponse().withStatus(201).withHeader("Content-Type", "application/json").withBody("""
+                {"id": %d, "bookingId": 1, "amount": 30000, "currency": "INR", "status": "CREATED",
+                 "razorpayOrderId": "order_test", "razorpayPaymentId": null, "keyId": "rzp_test_key"}
+                """.formatted(PAYMENT_ID));
     }
 
     protected TestShow newShow() {
@@ -107,9 +127,8 @@ public abstract class IntegrationTest {
                 150, "certification", "UA", "releaseDate", "2026-01-01", "genres", List.of("DRAMA"))));
         long theatreId = created(api.post("/api/v1/theatres", admin,
                 Map.of("name", unique("Cinema"), "cityId", cityId, "address", "1 Main Road")));
-        long screenId = created(
-                api.post("/api/v1/theatres/" + theatreId + "/api/v1/screens", admin, Map.of("name", "Screen 1", "rows",
-                        List.of(row("A", 10, "REGULAR"), row("B", 10, "REGULAR"), row("C", 8, "RECLINER")))));
+        long screenId = created(api.post("/api/v1/theatres/" + theatreId + "/screens", admin, Map.of("name", "Screen 1",
+                "rows", List.of(row("A", 10, "REGULAR"), row("B", 10, "REGULAR"), row("C", 8, "RECLINER")))));
         long showId = created(api.post("/api/v1/shows", admin,
                 Map.of("movieId", movieId, "screenId", screenId, "startTime", startTime.toString(), "language",
                         "ENGLISH", "format", "IMAX_2D", "prices",

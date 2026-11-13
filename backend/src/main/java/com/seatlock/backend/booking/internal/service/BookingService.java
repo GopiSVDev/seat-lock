@@ -19,6 +19,7 @@ import com.seatlock.backend.inventory.InventoryApi;
 import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.DownstreamException;
 import com.seatlock.backend.shared.exception.NotFoundException;
+import com.seatlock.backend.shared.exception.ServiceUnavailableException;
 import com.seatlock.backend.shared.security.CurrentUser;
 import com.seatlock.backend.shared.web.PageResponse;
 import lombok.RequiredArgsConstructor;
@@ -29,8 +30,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
@@ -119,9 +118,20 @@ public class BookingService {
         settlePaid(bookingRepository.findById(id).orElseThrow(), "webhook");
     }
 
-    // Idempotent: cancelling a cancelled booking returns it unchanged
-    @Transactional
+    // Idempotent: cancelling a cancelled booking returns it unchanged.
+    // The refund call waits until the transaction has handed its connection back to the pool.
     public BookingResponse cancel(Long id, CurrentUser customer) {
+        Cancellation cancellation = transactionTemplate.execute(status -> cancelSeats(id, customer));
+        if (cancellation.refund()) {
+            refund(cancellation.booking(), "BOOKING_CANCELLED");
+        }
+        return cancellation.response();
+    }
+
+    private record Cancellation(Booking booking, BookingResponse response, boolean refund) {
+    }
+
+    private Cancellation cancelSeats(Long id, CurrentUser customer) {
         // Microseconds: what timestamptz stores, so this response matches GET /bookings/{id}
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         boolean cancelledNow = bookingWriteRepository.cancel(id, customer.id(), now);
@@ -134,17 +144,15 @@ public class BookingService {
             inventoryApi.releaseSeats(booking.getShowId(), seats.stream().map(BookingSeat::getShowSeatId).toList());
             bookingWriteRepository.cancelSeats(id);
             log.info("Booking {} cancelled; {} seats released", id, seats.size());
-            // Older bookings were made before payments existed
-            if (booking.getPaymentId() != null) {
-                afterCommit(() -> refund(booking, "BOOKING_CANCELLED"));
-            }
         } else if (booking.getStatus() == BookingStatus.CONFIRMED) {
             throw new ConflictException("Show has already started");
         } else if (booking.getStatus() != BookingStatus.CANCELLED) {
             throw new ConflictException("Only confirmed bookings can be cancelled");
         }
 
-        return BookingResponse.from(booking, seats);
+        // Older bookings were made before payments existed
+        return new Cancellation(booking, BookingResponse.from(booking, seats),
+                cancelledNow && booking.getPaymentId() != null);
     }
 
     @Transactional(readOnly = true)
@@ -231,9 +239,8 @@ public class BookingService {
             paymentClient.refund(booking.getPaymentId(), reason);
             log.info("Booking {}: refund of payment {} requested ({})", booking.getId(), booking.getPaymentId(),
                     reason);
-        } catch (DownstreamException e) {
-            // The buyer's money is held with nothing to show for it; reconciliation (steps
-            // 5/6) must retry this
+        } catch (DownstreamException | ServiceUnavailableException e) {
+            // The buyer's money is held with nothing to show for it; reconciliation (step 5c) must retry this
             log.error("Refund of booking {} ({}) failed and needs a retry", booking.getId(), reason, e);
         }
     }
@@ -245,14 +252,5 @@ public class BookingService {
 
     private BookingResponse response(Booking booking) {
         return BookingResponse.from(booking, bookingSeatRepository.findByBookingIdOrderByIdAsc(booking.getId()));
-    }
-
-    private static void afterCommit(Runnable action) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                action.run();
-            }
-        });
     }
 }

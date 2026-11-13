@@ -207,6 +207,14 @@ other chairs meanwhile), the ticket desk can't give her A3 and A4. It stamps the
 cashier gives the money back at once. If she never pays, a clerk walks round every 30 seconds and stamps
 overdue unpaid tickets "expired".
 
+**When the cashier is slow.** Every clerk who walks over to the cashier stands there until the cashier
+answers. If the cashier is slow and every clerk walks over, nobody is left to show the seat map. So at most
+a quarter of the clerks may wait at the cashier's window; the next customer hears "payments are busy, come
+back in 5 seconds" at once (the **bulkhead**). Nobody waits more than 7 seconds either (the **timeout**).
+And if the cashier keeps failing, the ticket desk hangs a sign "payments closed, back in 30 seconds" and
+stops sending anyone (the **circuit breaker**); after 30 seconds two customers try, and if both get served
+the sign comes down.
+
 ```mermaid
 sequenceDiagram
     actor Asha
@@ -442,6 +450,10 @@ fade without a ticket, those chairs go back on sale.
 | Webhook | The bank's letter to the cashier: "this bill is paid" |
 | Idempotent | Doing it twice changes nothing the second time |
 | Refund | The cashier giving the money back |
+| Timeout | Not standing at the cashier's window for more than 7 seconds |
+| Bulkhead | Only a quarter of the clerks may queue at the cashier at once |
+| Circuit breaker | The "payments closed, back in 30 seconds" sign |
+| `503` + `Retry-After` | "Payments are busy, come back in 5 seconds" |
 
 ## Not in the story yet
 

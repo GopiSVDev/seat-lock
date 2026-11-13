@@ -1,5 +1,6 @@
 package com.seatlock.backend.shared.web;
 
+import com.seatlock.backend.shared.exception.ServiceUnavailableException;
 import com.seatlock.backend.shared.exception.TooManyRequestsException;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -30,5 +31,15 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode().value()).isEqualTo(429);
         assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("6");
         assertThat(response.getBody().getDetail()).isEqualTo("Too many hold requests, try again in 6 seconds");
+    }
+
+    @Test
+    void refusedDependencyIs503WithRetryAfter() {
+        ResponseEntity<ProblemDetail> response = new GlobalExceptionHandler()
+                .handleServiceUnavailable(new ServiceUnavailableException("Payments are unavailable", Duration.ZERO));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(503);
+        assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("1");
+        assertThat(response.getBody().getDetail()).isEqualTo("Payments are unavailable, try again in 1 second");
     }
 }

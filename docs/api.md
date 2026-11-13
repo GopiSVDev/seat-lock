@@ -78,6 +78,7 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
 | 500 | Anything unexpected (details only in the server log) | `Unexpected error` |
 | 502 | The payment service failed or could not be reached (details only in the server log) | e.g. `Payment service could not create payment` |
 | 503 | Redis or the database can't be reached; nothing is held or booked | `Service temporarily unavailable` |
+| 503 | Too many payments in progress, or the payment service is failing and calls are paused (also sends `Retry-After: <seconds>`) | `Payments are busy, try again in 5 seconds`, `Payments are unavailable, try again in 23 seconds` |
 
 Validation example:
 
@@ -866,6 +867,7 @@ only in this response; `paymentExpiresAt` is set while the booking is `PENDING_P
 |---|---|
 | `404 Hold not found: <holdId>` | the hold expired, was released, or is someone else's |
 | `502 Payment service could not create payment` | the payment service or Razorpay failed; the booking exists, retry the same request |
+| `503 Payments are busy, ...` / `503 Payments are unavailable, ...` | too many payments at once, or the payment service is failing; the booking may exist, retry the same request after `Retry-After` |
 
 #### `POST /api/v1/bookings/{id}/payment`
 
@@ -895,6 +897,7 @@ the hold was lost before the payment arrived; the money is then refunded automat
 | `404 Booking not found: <id>` | unknown, or another user's booking |
 | `409 Payment has not been started` | checkout never reached the payment service (retry `POST /api/v1/bookings`) |
 | `502` | the payment service failed or could not be reached |
+| `503` | too many payments at once, or the payment service is failing; retry after `Retry-After` |
 
 #### `GET /api/v1/bookings`
 
