@@ -133,6 +133,13 @@
             <artifactId>spring-boot-starter-security-oauth2-client</artifactId>
         </dependency>
 
+        <!-- Circuit breaker and bulkhead around payment service calls (used from code, no annotations) -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot4</artifactId>
+            <version>2.4.0</version>
+        </dependency>
+
         <!-- Fake payment service in tests -->
         <dependency>
             <groupId>org.wiremock</groupId>

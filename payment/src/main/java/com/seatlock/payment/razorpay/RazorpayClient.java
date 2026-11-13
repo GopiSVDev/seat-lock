@@ -18,12 +18,12 @@ public class RazorpayClient {
     private final RestClient rest;
 
     public RazorpayClient(RazorpayProperties properties) {
-        // Plain timeouts only; retries and circuit breaking are step 5 (Resilience4j).
+        // Read timeout below the backend's 7 s wait on us, so our error reaches it first.
         // HTTP/1.1: the JDK client's default HTTP/2 tries an h2c upgrade on plain http,
         // which servers handle unevenly
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(2)).build());
-        requestFactory.setReadTimeout(Duration.ofSeconds(10));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
         this.rest = RestClient.builder().baseUrl(properties.baseUrl()).requestFactory(requestFactory)
                 .defaultHeaders(headers -> headers.setBasicAuth(properties.keyId(), properties.keySecret())).build();
     }

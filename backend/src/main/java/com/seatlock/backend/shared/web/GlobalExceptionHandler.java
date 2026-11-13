@@ -4,6 +4,7 @@ import com.seatlock.backend.shared.exception.BadRequestException;
 import com.seatlock.backend.shared.exception.ConflictException;
 import com.seatlock.backend.shared.exception.DownstreamException;
 import com.seatlock.backend.shared.exception.NotFoundException;
+import com.seatlock.backend.shared.exception.ServiceUnavailableException;
 import com.seatlock.backend.shared.exception.TooManyRequestsException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -47,6 +48,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
                 .body(ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage()));
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleServiceUnavailable(ServiceUnavailableException ex) {
+        log.info("Rejected with 503: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage()));
     }
 
     // Details (the other service's status and body) stay in the logs

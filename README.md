@@ -217,7 +217,7 @@ can reach:
 
 Paths, headers and bodies are forwarded unchanged (the webhook's signature covers the raw bytes). The
 services learn the caller's address from `X-Forwarded-For` and log it. A service that is down is `502`, one
-slower than 20 s is `504`, both as problem details. Redirects go back to the browser instead of being
+slower than 10 s is `504`, both as problem details. Redirects go back to the browser instead of being
 followed. Checking tokens and rate limiting at the edge are not done yet: the services check every token
 themselves, and no test has shown a need for edge limits.
 
@@ -268,7 +268,7 @@ fails the build if a class breaks this rule.
   release could free a seat someone else had booked in between, and it would be sold twice.
 
 `shared/` holds cross-cutting code: the global error handler, the exception types that services throw
-(`NotFoundException`, `ConflictException`, `TooManyRequestsException`, `DownstreamException` → 502, ...),
+(`NotFoundException`, `ConflictException`, `TooManyRequestsException`, `DownstreamException` → 502, `ServiceUnavailableException` → 503 with `Retry-After`, ...),
 security (user tokens in, the backend's own client-credentials token out), and the Redis-backed
 `RateLimiter` that modules apply to their own endpoints (inventory limits holds).
 
@@ -414,6 +414,30 @@ through the browser path; only the webhook backup is missing.
 To see whether Razorpay's webhooks arrive: `docker compose logs -f payment | grep -E 'webhooks|Razorpay event'`.
 Each delivery logs its event and ids, then `POST /webhooks/razorpay -> 200`; a wrong secret shows as
 `Rejected Razorpay webhook: invalid signature` and `-> 400`.
+
+### When the payment service is slow or down
+
+Every checkout waits on the payment service, and each waiting request holds one of the backend's request
+threads. Without protection a slow payment service would hold all of them, and even the seat map would stop
+answering (`PaymentResilienceTest` proved this before the fix). Three Resilience4j guards in `PaymentClient`:
+
+- **Timeouts shrink inwards:** gateway 10 s → backend waits 7 s for the payment service → it waits 5 s for
+  Razorpay. The inner call always gives up first, so its error reaches the caller instead of a gateway 504
+  while the work goes on behind it.
+- **Bulkhead:** at most `PAYMENT_MAX_CONCURRENT_CALLS` (50 of 200 threads) checkout and pay calls at once,
+  and none queue. The next one gets `503 Payments are busy, try again in 5 seconds` with `Retry-After: 5`
+  at once, so the other threads stay free for browsing and holds.
+- **Circuit breaker:** over the last 10 calls (judged from 5), if half failed or took over 3 s, the backend
+  stops calling for 30 s and answers `503 Payments are unavailable, try again in N seconds` without
+  waiting. Then 2 trial calls decide: both fine closes it, a failure opens it again. Timeouts, connection
+  errors and 5xx count as failures; a `4xx` (say, a forged signature) is a bad request, not a sick service,
+  so it doesn't. Refunds go through the breaker but not the bulkhead: they are rare, and turning one away
+  because checkouts are busy would leave the money stuck.
+
+The breaker's state changes are logged (`Payment circuit breaker OPEN ...`) and exported to Prometheus
+(`resilience4j_circuitbreaker_state`, `resilience4j_bulkhead_available_concurrent_calls`, ...). Cancel
+calls the refund only after its transaction has returned the database connection, so a slow refund can't
+drain the 10-connection pool.
 
 ### Confirming a paid booking
 
@@ -605,7 +629,8 @@ payment succeeds unless a test says otherwise); in payment tests it plays Razorp
 | `RoutingTest` (api-gateway) | API calls reach the backend with path, query, token and body unchanged and answers come back as they are; the tooling pages too, with redirects passed back; the webhook reaches the payment service byte for byte; `/internal`, `/payments`, `/actuator` and unknown paths are 404 and never forwarded; forwarded headers; a service that is down is 502, a slow one 504 |
 | `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
 | `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
-| `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest`, `RateLimiterTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable, `Retry-After` rounded up to whole seconds, the rate limit lets requests through when Redis fails |
+| `PaymentResilienceTest` | with the payment service taking 5 s, 22 parallel checkouts leave the seat map answering in under 1 s: 10 wait, 12 get `503` + `Retry-After` at once; 5 failures open the breaker, the next checkout is `503` without calling the payment service, and it closes again once the service is back; rejected signatures (400) never open it; a slow refund holds no database connection |
+| `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest`, `RateLimiterTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable, `Retry-After` rounded up to whole seconds, 503 with `Retry-After` when a dependency is refused, the rate limit lets requests through when Redis fails |
 
 ## Project layout
 
