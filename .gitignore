@@ -40,6 +40,7 @@ build/
 specs.md
 NOTES.md
 CLAUDE.md
+INTERVIEW.md
 
 ### Load testing ###
 # The load-test tooling, raw run data, profiles and helper scripts stay local; results and run reports are published
