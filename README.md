@@ -1,5 +1,7 @@
 # SeatLock
 
+[![CI](https://github.com/GopiSVDev/seat-lock/actions/workflows/ci.yml/badge.svg)](https://github.com/GopiSVDev/seat-lock/actions/workflows/ci.yml)
+
 A movie ticket booking backend (in the spirit of BookMyShow or Ticketmaster) built to answer one question:
 **how do you never sell the same seat twice when thousands of people try to book at once?**
 
@@ -637,6 +639,11 @@ docker compose run --rm api-gateway-test   # the gateway's routes (WireMock play
 docker compose run --rm notification-test  # the notification service (PostgreSQL + Kafka)
 ```
 
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every pull request and push to `main`: one
+parallel job per app runs `mvn spotless:check verify` (formatting, then every test, with Testcontainers on the
+runner's Docker), writes the line coverage (JaCoCo) to the run summary, uploads the coverage report, and checks
+that the Docker image still builds. No secrets are needed: Razorpay, Keycloak and the other services are faked in tests.
+
 Tests run against a **real PostgreSQL** with every Flyway migration applied and a **real Redis**, and talk to the app over **real
 HTTP** on a random port, so security filters, error handling, JSON and SQL are all part of each test. Each test
 creates its own city, theatre, show and users, so tests are independent of each other and of their order.
@@ -714,7 +721,9 @@ Deliberately left out until a test or feature needs them:
 - **Edge checks at the gateway**: token checks and per-IP rate limits for anonymous reads (the services
   check every token themselves today).
 - **Flash-sale protection**: admission control and a waiting room for traffic beyond capacity.
-- Notifications, search.
+- **Delivery pipeline**: publishing images to a registry (GHCR), static analysis (SonarCloud), image
+  vulnerability scans (Trivy), a coverage threshold.
+- Search.
 - Show overlap checks.
 - **Horizontal scaling**: holds and rate limits already live in Redis; the availability cache stays per instance
   (Caffeine) on purpose: sharing it in Redis would turn every ~1 µs hit into a network round trip to save a few
