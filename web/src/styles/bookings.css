@@ -1,0 +1,264 @@
+.booking {
+  max-width: 640px;
+}
+
+.booked {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 20px 0 24px;
+}
+
+.booked-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+}
+
+.booked h1,
+.booking-title {
+  font-size: var(--text-2xl);
+}
+
+.booking-title {
+  margin: 16px 0 20px;
+}
+
+/* ---------- ticket ---------- */
+.ticket {
+  --notch: 10px;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 20, 20, 0.04), 0 12px 32px rgba(20, 20, 20, 0.07);
+}
+
+.ticket[data-status='CANCELLED'],
+.ticket[data-status='EXPIRED'],
+.ticket[data-status='FAILED'] {
+  background: var(--bg-subtle);
+}
+
+.ticket[data-status='CANCELLED'] .ticket-film h2,
+.ticket[data-status='EXPIRED'] .ticket-film h2 {
+  color: var(--ink-2);
+}
+
+.ticket-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 20px 0;
+}
+
+.ticket-film {
+  flex: 1;
+  min-width: 0;
+}
+
+.ticket-film h2 {
+  font-size: var(--text-lg);
+}
+
+.ticket-film p {
+  margin-top: 4px;
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+
+.ticket-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 20px;
+}
+
+.ticket-facts dt {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+}
+
+.ticket-facts dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ticket-wide {
+  grid-column: 1 / -1;
+}
+
+.ticket-seats {
+  font-size: var(--text-lg);
+}
+
+/* the tear line with a notch cut on each side */
+.ticket-tear {
+  position: relative;
+  height: 0;
+  margin: 0 var(--notch);
+  border-top: 1.5px dashed var(--line-strong);
+}
+
+.ticket-tear::before,
+.ticket-tear::after {
+  content: '';
+  position: absolute;
+  top: calc(var(--notch) * -1 - 1px);
+  width: calc(var(--notch) * 2);
+  height: calc(var(--notch) * 2);
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.ticket-tear::before {
+  left: calc(var(--notch) * -2 - 1px);
+  clip-path: inset(0 0 0 50%);
+}
+
+.ticket-tear::after {
+  right: calc(var(--notch) * -2 - 1px);
+  clip-path: inset(0 50% 0 0);
+}
+
+.ticket-bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px 20px;
+}
+
+.ticket-bottom > div {
+  display: grid;
+}
+
+.ticket-bottom > div:last-child {
+  text-align: right;
+}
+
+.ticket-bottom span {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+}
+
+.ticket-bottom strong {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+@media (min-width: 560px) {
+  .ticket-top,
+  .ticket-facts {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .ticket-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .ticket-wide {
+    grid-column: span 2;
+  }
+  .ticket-facts > div:last-child {
+    grid-column: 3;
+  }
+  .ticket-bottom {
+    padding: 18px 24px 22px;
+  }
+}
+
+.booking-after {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.booking-after .notice {
+  width: 100%;
+}
+
+/* ---------- list ---------- */
+.bookings {
+  max-width: 840px;
+}
+
+.booking-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.booking-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+}
+
+.booking-row:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-subtle);
+}
+
+.booking-row-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.booking-row-body strong {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-row-body span {
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-row-side {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.booking-row-side strong {
+  font-weight: 650;
+}
+
+.booking-row > svg {
+  flex: none;
+  color: var(--ink-3);
+}
+
+@media (max-width: 559px) {
+  .booking-row > svg {
+    display: none;
+  }
+}
