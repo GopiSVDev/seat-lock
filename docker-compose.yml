@@ -11,6 +11,10 @@ services:
       PAYMENT_DB: ${PAYMENT_DB:?PAYMENT_DB is not set}
       PAYMENT_DB_USER: ${PAYMENT_DB_USER:?PAYMENT_DB_USER is not set}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is not set}
+      # Read by postgres/notification-db.sh
+      NOTIFICATION_DB: ${NOTIFICATION_DB:?NOTIFICATION_DB is not set}
+      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER:?NOTIFICATION_DB_USER is not set}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD is not set}
     # pg_stat_statements: per-statement stats for postgres-exporter (load tests)
     command:
       [
@@ -26,6 +30,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./monitoring/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres/payment-db.sh:/docker-entrypoint-initdb.d/20-payment-db.sh:ro
+      - ./postgres/notification-db.sh:/docker-entrypoint-initdb.d/30-notification-db.sh:ro
     healthcheck:
       test:
         [
@@ -48,6 +53,32 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # Booking events. One broker in KRaft mode (no ZooKeeper), only reachable inside Docker.
+  # No volume: unsent events wait in the backend's outbox, so a fresh broker loses nothing important.
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: seat-lock-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      # Single broker: internal topics can't have more than one copy
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
 
   backend:
     build:
@@ -75,10 +106,13 @@ services:
       OAUTH_CLIENT_ID: seatlock-backend
       OAUTH_CLIENT_SECRET: ${BACKEND_CLIENT_SECRET:?BACKEND_CLIENT_SECRET is not set}
       PAYMENT_URL: http://payment:${PAYMENT_PORT:?PAYMENT_PORT is not set}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
       keycloak:
         condition: service_healthy
@@ -122,6 +156,35 @@ services:
       postgres:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:$${SERVER_PORT}/actuator/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Notification service: consumes booking.confirmed and "sends" the email (a log line). No routes, no port.
+  notification:
+    build:
+      context: ./notification
+    container_name: seat-lock-notification
+    restart: unless-stopped
+    environment:
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=25
+      SERVER_PORT: "8082"
+      DB_URL: jdbc:postgresql://postgres:5432/${NOTIFICATION_DB:?NOTIFICATION_DB is not set}
+      DB_USERNAME: ${NOTIFICATION_DB_USER:?NOTIFICATION_DB_USER is not set}
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD is not set}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test:
@@ -233,6 +296,21 @@ services:
     working_dir: /app
     volumes:
       - ./payment:/src:ro
+      - maven_repo:/root/.m2
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["sh", "-c", "cp /src/pom.xml /app/ && cp -r /src/src /app/ && mvn -B test"]
+
+  # docker compose run --rm notification-test   (same setup as backend-test)
+  notification-test:
+    image: maven:3.9.16-eclipse-temurin-25
+    profiles: [test]
+    working_dir: /app
+    volumes:
+      - ./notification:/src:ro
       - maven_repo:/root/.m2
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

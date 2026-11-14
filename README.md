@@ -67,7 +67,7 @@ docker compose ps               # every service healthy
 ```
 
 `docker compose up --build -d` starts everything (Postgres, Redis, Keycloak, backend, payment service, API
-gateway) in dependency order. Every request goes through the gateway on port 8080. On a new Postgres volume an init script creates the payment service's database; on a new
+gateway) in dependency order. Every request goes through the gateway on port 8080. On a new Postgres volume init scripts create the payment and notification databases; on a new
 Keycloak volume the realm is imported. After pulling changes to either (new realm clients, a new database),
 start over from empty volumes, which **deletes all data** (bookings, shows, Keycloak users created later):
 
@@ -146,7 +146,7 @@ authorization code with PKCE) and sends the token with every call. The hand-writ
 ## Architecture
 
 One Spring Boot application (the backend) split into three modules, plus a separate **payment service**,
-both behind an **API gateway**.
+both behind an **API gateway**, and a **notification service** that only listens to Kafka.
 Each backend module owns its own tables in its own PostgreSQL schema, and modules only talk through small
 public interfaces or events, so they could later be split into separate services. Redis holds the
 short-lived seat holds. Payment was split out first: it holds the payment provider's secrets, talks to an
@@ -177,6 +177,12 @@ flowchart LR
     paydb[(payment database)]
     razorpay([Razorpay])
 
+    kafka[[Kafka<br/>booking.confirmed]]
+    subgraph notif[Notification service]
+        notification[notification<br/>confirmation emails]
+    end
+    notifdb[(notification database)]
+
     client -- "/api/v1/**" --> gateway
     gateway --> catalogue & inventory & booking
     booking -- "REST + service token<br/>create / verify / refund" --> payment
@@ -192,14 +198,18 @@ flowchart LR
     inventory --- s2
     inventory --- redis
     booking --- s3
+    booking -- "outbox relay" --> kafka
+    kafka --> notification
+    notification --- notifdb
 ```
 
 | Module | Owns | Public API (what other modules may use) | Endpoints |
 |---|---|---|---|
 | **catalogue** | movies, theatres, screens, physical seats, shows | `CatalogueApi`, `ShowSummary`, `ShowScheduled` event | movies, theatres, screens, shows |
 | **inventory** | `show_seat`: every seat of every show and its status (AVAILABLE / BOOKED); seat holds (Redis) | `InventoryApi`, `ConfirmedHold`, `BookedSeat` | seat map (layout, availability), holds |
-| **booking** | bookings and the seats in each booking | none yet | bookings, internal paid callback |
+| **booking** | bookings and the seats in each booking; the outbox | `BookingConfirmed` event on Kafka | bookings, internal paid callback |
 | **payment** (own app) | payments, payment attempts, refunds (own database `payment`) | REST, service tokens only | `/payments/**`, `/webhooks/razorpay` |
+| **notification** (own app) | sent notifications (own database `notification`) | none: consumes `booking.confirmed` | none |
 | **api-gateway** (own app) | nothing: routes requests | none | everything public, forwarded |
 
 ### The API gateway
@@ -387,9 +397,9 @@ Booking states: `PENDING_PAYMENT → CONFIRMED → CANCELLED`, `PENDING_PAYMENT 
 `PENDING_PAYMENT/EXPIRED → FAILED` (paid but seats lost, refunded). Payment states (payment service):
 `CREATED → CAPTURED → REFUND_PENDING → REFUNDED`; failed card attempts are recorded but keep the order open.
 
-**Known gap, closed in later steps:** if the money is captured but both the browser and every webhook
-delivery are lost, or a refund request itself fails, nothing retries yet. Steps 5 and 6 add reconciliation
-and events for that.
+**Known gap (not built):** if the money is captured but both the browser and every webhook delivery are
+lost, or a refund request itself fails, nothing retries. A reconciliation job comparing our payments with
+Razorpay's would close it.
 
 **Refunds take days.** Razorpay sends `refund.created` within seconds (logged and ignored: the refund id is
 already known from the refund request) but `refund.processed` only once the bank has credited the money,
@@ -456,6 +466,26 @@ holding answers `503` (fails closed).
 **Safety net:** a partial unique index (in the `V1__baseline.sql` migration) allows at most one
 CONFIRMED booking per show seat. If the application logic ever had a bug, the database would still refuse a
 double sale.
+
+### Telling other services: the outbox and Kafka
+
+When a booking is confirmed, the notification service sends the customer a confirmation. Calling it over
+HTTP would make confirming depend on it (the problem from the previous section), and sending a message
+after the commit loses it if the backend dies in between; sending before the commit announces a booking
+that may roll back. The database and Kafka can't be updated in one atomic step (the dual-write problem), so:
+
+1. **Transactional outbox.** The `BookingConfirmed` event is inserted into `booking.outbox` in the same
+   transaction that sets the booking `CONFIRMED`: both commit or neither does.
+2. **Relay.** A job in the backend runs every 500 ms, takes unsent rows (`FOR UPDATE SKIP LOCKED`, so with
+   two instances each row goes out once), sends them to Kafka topic `booking.confirmed` (key = booking id,
+   so one booking's events stay in order) and marks them sent. If Kafka is down the rows wait; confirming
+   never waits on Kafka.
+3. **At least once.** A crash after sending but before marking sends the row again. The notification
+   service stores each `eventId` under a unique constraint first (`ON CONFLICT DO NOTHING`), so a repeat
+   is skipped and the customer gets one email.
+
+The "email" is a log line: `docker compose logs -f notification`. In production, change data capture
+(Debezium reading the outbox table from Postgres's log) often replaces the polling relay.
 
 ### Best available: `POST /api/v1/holds/best-available`
 
@@ -604,6 +634,7 @@ Oversold seats in every test so far: **0**. These runs predate seat holds (step 
 docker compose run --rm backend-test    # Maven in Docker; Testcontainers starts a throwaway PostgreSQL 16 and Redis 8
 docker compose run --rm payment-test    # the payment service's own tests (PostgreSQL + WireMock as Razorpay)
 docker compose run --rm api-gateway-test   # the gateway's routes (WireMock plays the backend and the payment service)
+docker compose run --rm notification-test  # the notification service (PostgreSQL + Kafka)
 ```
 
 Tests run against a **real PostgreSQL** with every Flyway migration applied and a **real Redis**, and talk to the app over **real
@@ -629,6 +660,8 @@ payment succeeds unless a test says otherwise); in payment tests it plays Razorp
 | `RoutingTest` (api-gateway) | API calls reach the backend with path, query, token and body unchanged and answers come back as they are; the tooling pages too, with redirects passed back; the webhook reaches the payment service byte for byte; `/internal`, `/payments`, `/actuator` and unknown paths are 404 and never forwarded; forwarded headers; a service that is down is 502, a slow one 504 |
 | `CatalogueApiTest`, `SeatMapApiTest` | typo-tolerant city search, validation errors per field, a new show appears in now showing, showtimes and the theatre page; seat map layout and availability |
 | `ArchitectureTest` (ArchUnit) | module boundaries: no module uses another's `internal` package, catalogue depends on no other module, nothing depends on booking |
+| `BookingEventsTest` | a confirmed booking writes one outbox row and its `BookingConfirmed` event reaches Kafka, even when browser and webhook both report the payment; with Kafka paused, confirming still answers at once and the event follows once Kafka is back |
+| `BookingConfirmedListenerTest` (notification) | an event sends one email with the booking's details; the same event delivered twice sends one |
 | `PaymentResilienceTest` | with the payment service taking 5 s, 22 parallel checkouts leave the seat map answering in under 1 s: 10 wait, 12 get `503` + `Retry-After` at once; 5 failures open the breaker, the next checkout is `503` without calling the payment service, and it closes again once the service is back; rejected signatures (400) never open it; a slow refund holds no database connection |
 | `CurrentUserTest`, `IndiaTimeTest`, `GlobalExceptionHandlerTest`, `RateLimiterTest` | unit tests: name fallbacks from the token, the India day boundary, 503 when Redis is unreachable, `Retry-After` rounded up to whole seconds, 503 with `Retry-After` when a dependency is refused, the rate limit lets requests through when Redis fails |
 
@@ -638,9 +671,10 @@ payment succeeds unless a test says otherwise); in payment tests it plays Razorp
 backend/              Spring Boot application (Dockerfile, pom.xml, src/)
 payment/              payment service, a separate Spring Boot application (Dockerfile, pom.xml, src/)
 api-gateway/          API gateway, the single entry point (Dockerfile, pom.xml, src/)
+notification/         notification service: consumes booking.confirmed from Kafka (Dockerfile, pom.xml, src/)
 keycloak/             Keycloak realm (roles, login and service clients, test users), imported on first start
-postgres/             init script: the payment database and its user
-docker-compose.yml    postgres + redis + backend + payment + api-gateway + keycloak; profiles: test, tunnel (Razorpay webhook), monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
+postgres/             init scripts: the payment and notification databases and their users
+docker-compose.yml    postgres + redis + kafka + backend + payment + notification + api-gateway + keycloak; profiles: test, tunnel (Razorpay webhook), monitoring (Prometheus, postgres-exporter), cdn (nginx edge)
 docker-compose.vm.yml host networking overrides for the load-test VM
 .env.example          every setting the app needs (copy to .env)
 loadtest/results/     SUMMARY.md: performance story; RESULTS.md + runs/: every load-test run and its report
@@ -654,7 +688,7 @@ app, so a missing value fails at startup instead of silently using a wrong one. 
 `/actuator/prometheus` inside Docker only: the gateway does not route `/actuator`, and its own actuator listens
 on port 9000, which is not published.
 
-**Logs** (plain text on stdout, `docker compose logs <service>`), the same in all three applications:
+**Logs** (plain text on stdout, `docker compose logs <service>`), the same in every application:
 
 - one line per request: `172.18.0.1 POST /api/v1/bookings/7/payment -> 200 (85 ms)` (the caller's address); health checks and metric scrapes are skipped
 - every rejection with its reason: `Rejected with 409: Show has already started`, `Rejected with 401: Jwt expired at …`
@@ -666,13 +700,16 @@ on port 9000, which is not published.
 
 Never logged: tokens, signatures, secrets, request or response bodies, customer names. Customers appear only
 as their opaque Keycloak id. A log level can be changed without a rebuild through the service's environment in
-compose, for example `LOGGING_LEVEL_COM_SEATLOCK=DEBUG`. Request ids across services come with tracing (step 10).
+compose, for example `LOGGING_LEVEL_COM_SEATLOCK=DEBUG`. Request ids across services (tracing) are not built.
 
 ## Not built yet
 
 Deliberately left out until a test or feature needs them:
 
-- **Payment reconciliation**: retrying lost confirmations and failed refund requests (steps 5 and 6);
+- **Kafka extras**: a dead-letter topic (a broken message is retried 10 times, then logged and skipped),
+  a schema registry, real email or SMS, change data capture instead of the polling relay.
+
+- **Payment reconciliation**: retrying lost confirmations and failed refund requests;
   partial refunds and cancellation fees.
 - **Edge checks at the gateway**: token checks and per-IP rate limits for anonymous reads (the services
   check every token themselves today).

@@ -6,6 +6,7 @@ import com.seatlock.backend.booking.internal.domain.BookingPeriod;
 import com.seatlock.backend.booking.internal.domain.BookingSeat;
 import com.seatlock.backend.booking.internal.domain.BookingStatus;
 import com.seatlock.backend.booking.internal.domain.ShowSnapshot;
+import com.seatlock.backend.booking.internal.outbox.OutboxWriter;
 import com.seatlock.backend.booking.internal.repository.BookingRepository;
 import com.seatlock.backend.booking.internal.repository.BookingSeatRepository;
 import com.seatlock.backend.booking.internal.repository.BookingWriteRepository;
@@ -67,6 +68,7 @@ public class BookingService {
     private final BookingSeatRepository bookingSeatRepository;
     private final BookingWriteRepository bookingWriteRepository;
     private final TransactionTemplate transactionTemplate;
+    private final OutboxWriter outboxWriter;
 
     public record Checkout(BookingResponse booking, boolean isNew) {
     }
@@ -210,6 +212,9 @@ public class BookingService {
                 boolean settled = bookingWriteRepository.settle(booking.getId(), BookingStatus.CONFIRMED);
                 if (settled) {
                     inventoryApi.confirmHold(booking.getHoldId(), booking.getCustomerId());
+                    // Same transaction: no confirmed booking without its event, no event without the booking
+                    outboxWriter.bookingConfirmed(booking,
+                            bookingSeatRepository.findByBookingIdOrderByIdAsc(booking.getId()));
                 }
                 return settled;
             }));
