@@ -5,6 +5,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -23,6 +24,13 @@ public class TestInfrastructure {
     @ServiceConnection(name = "redis")
     GenericContainer<?> redis() {
         return new GenericContainer<>(DockerImageName.parse("redis:8.2.1-alpine")).withExposedPorts(6379);
+    }
+
+    // Same image as docker-compose.yml
+    @Bean
+    @ServiceConnection
+    KafkaContainer kafka() {
+        return new KafkaContainer(DockerImageName.parse("apache/kafka:4.1.0"));
     }
 
     // Replaces the Keycloak-backed decoder: test tokens carry the user, so no Keycloak is needed
