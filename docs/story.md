@@ -14,6 +14,7 @@ For the technical overview see the [README](../README.md); for every endpoint se
 - [Chapter 4: Two people, one chair](#chapter-4-two-people-one-chair)
 - [Chapter 5: The big rush](#chapter-5-the-big-rush)
 - [Chapter 6: Sold out](#chapter-6-sold-out)
+- [Chapter 7: The confirmation](#chapter-7-the-confirmation)
 - [Glossary](#glossary-everyday-words-for-technical-ideas)
 - [Not in the story yet](#not-in-the-story-yet)
 
@@ -30,6 +31,10 @@ desk keeps its own notebook:
 
 Next door, in a separate room with its own locked notebook, sits the **cashier** (the payment service).
 The cashier talks to the **bank** (Razorpay) and is the only one who knows the bank's secret code words.
+
+Down the hall is the **post room** (Kafka), where the ticket desk leaves news for anyone who wants it, and a
+**messenger** (the notification service) who collects every "ticket sold" note and writes to the customer.
+The ticket desk never waits for the messenger; it only drops the note off.
 
 Everyone comes in through **one entrance with a doorman** (the API gateway). The doorman sells
 nothing and only knows which way each visitor must go: customers to the desks, the bank's messenger to the
@@ -87,6 +92,10 @@ flowchart LR
     cashier --> bank
     bank -- "messenger: payment done" --> door
     door --> cashier
+    post[["Post room: Kafka"]]
+    messenger["Messenger<br/>writes to the customer"]
+    tickets -- "news: ticket sold" --> post
+    post --> messenger
 ```
 
 ## Chapter 1: Getting a show ready
@@ -383,6 +392,11 @@ chairs from its notebook, leaves out every chair with a sticky note on it, picks
 its notes on them. If another fan stuck a note on one of those chairs a moment earlier, it simply picks
 again.
 
+**The rehearsal with money.** Later the whole office was rehearsed again, now with paying: 50 new fans every
+second for a minute, 5 halls of 1,000 chairs each, every fan reserving, paying (at a pretend bank, so no real
+money moved) and getting a ticket. **2,025 fans** got tickets, all **5,000 chairs** were sold, not one chair
+twice, not one request lost, and the messenger wrote exactly one letter per ticket.
+
 **Behind the counter.**
 - Today this is `POST /api/v1/holds/best-available` with `{"quantity": 2, "seatType": "REGULAR"}`, then
   `POST /api/v1/bookings` with the hold's id. (The numbers above are from before holds, when it was
@@ -411,6 +425,49 @@ fade without a ticket, those chairs go back on sale.
   holds existed).
 - Holds narrow that gap: held seats are listed as unavailable at once. The board is still up to a second
   old, and fans still think before pressing, so a few late `409`s remain.
+
+## Chapter 7: The confirmation
+
+**What happens.** Asha has her ticket. A moment later her phone buzzes: "Your tickets for *Interstellar*, A3
+and A4, tonight at 18:30."
+
+The ticket desk doesn't phone the messenger itself. If it did, a messenger out sick would stop the desk from
+selling tickets. And it can't simply post a letter after stamping the ticket: if the clerk fainted between the
+stamp and the post box, Asha would never hear. So the desk keeps an **"outgoing news" tray** inside its own
+notebook:
+
+1. In the same moment it stamps Asha's ticket paid, it writes "ticket sold to Asha" on the tray page. Both
+   are written together, or neither is.
+2. Every half second a clerk empties the tray into the post room and ticks each note off. If the post room is
+   closed, the notes simply wait in the tray; selling tickets goes on.
+3. If the clerk faints after posting but before ticking, the note is posted again. So the messenger keeps a
+   list of every note number already handled, and a note seen before goes in the bin: Asha gets one
+   letter, not two.
+
+```mermaid
+sequenceDiagram
+    participant Tickets as Ticket desk
+    participant Tray as Outgoing tray
+    participant Post as Post room
+    participant Messenger
+    actor Asha
+    Tickets->>Tray: Stamp the ticket paid AND write the note, together
+    loop every half second
+        Tray->>Post: Unsent notes
+        Tray->>Tray: Tick them off
+    end
+    Post->>Messenger: Ticket sold to Asha (note 17)
+    Messenger->>Messenger: Seen note 17 before? No: write it down
+    Messenger-->>Asha: Your tickets for tonight
+```
+
+**Behind the counter.**
+- The tray is the **transactional outbox**: a `booking.outbox` table written in the same transaction as the
+  confirmed booking. The clerk is the **relay**, a job that sends unsent rows to the Kafka topic
+  `booking.confirmed` and marks them sent.
+- Posting again after a faint is **at-least-once** delivery; the messenger's list is a unique `event_id` in
+  its own database, which makes it an **idempotent consumer**.
+- In the rehearsal from chapter 5: 2,025 tickets, 2,025 notes, 2,025 letters.
 
 ## Glossary: everyday words for technical ideas
 
@@ -454,9 +511,18 @@ fade without a ticket, those chairs go back on sale.
 | Bulkhead | Only a quarter of the clerks may queue at the cashier at once |
 | Circuit breaker | The "payments closed, back in 30 seconds" sign |
 | `503` + `Retry-After` | "Payments are busy, come back in 5 seconds" |
+| Kafka | The post room where desks leave news for whoever wants it |
+| Topic (`booking.confirmed`) | The post room's pigeonhole for "ticket sold" notes |
+| Transactional outbox | The "outgoing news" tray inside the ticket desk's own notebook |
+| Relay | The clerk who empties the tray into the post room every half second |
+| Notification service | The messenger who writes to the customer |
+| Idempotent consumer | The messenger binning a note number already handled |
+| WireMock (fake Razorpay) | The pretend bank used in rehearsals |
+| CI (GitHub Actions) | An inspector who rehearses every change before it reaches the office |
 
 ## Not in the story yet
 
 - **Lost letters**: if both Asha's receipt and every one of the bank's letters got lost, or a refund request
   itself failed, nobody checks again yet. A clerk who compares the cashier's book with the bank's comes later.
 - **A queue at the door** for when far more fans arrive than the office can serve.
+- **A pile for broken notes**: a note the messenger can't read is tried a few times, then set aside unread.

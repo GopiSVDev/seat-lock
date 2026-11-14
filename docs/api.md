@@ -59,7 +59,7 @@ Errors use [RFC 9457 problem details](https://www.rfc-editor.org/rfc/rfc9457)
   "title": "Conflict",
   "status": 409,
   "detail": "One or more seats are already held or booked",
-  "instance": "/holds"
+  "instance": "/api/v1/holds"
 }
 ```
 
@@ -87,7 +87,7 @@ Validation example:
   "title": "Bad Request",
   "status": 400,
   "detail": "Validation failed",
-  "instance": "/holds/best-available",
+  "instance": "/api/v1/holds/best-available",
   "errors": {
     "quantity": "must be less than or equal to 10",
     "seatType": "must match \"REGULAR|PREMIUM|RECLINER\""
@@ -792,7 +792,8 @@ A cancelled booking keeps its amounts.
 If the browser never gets to step 3 (tab closed, network lost), Razorpay's webhook confirms the booking
 anyway, through the payment service and [`POST /internal/bookings/{id}/paid`](#post-internalbookingsidpaid).
 `/dev/checkout.html` on the backend is a dev-only page that does all three steps (paste a token and a hold
-id).
+id). Every confirmed booking is then announced on the Kafka topic `booking.confirmed`, and the notification
+service sends the customer a confirmation (a log line locally).
 
 #### `POST /api/v1/bookings`
 
