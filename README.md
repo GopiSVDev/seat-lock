@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/GopiSVDev/seat-lock/actions/workflows/ci.yml/badge.svg)](https://github.com/GopiSVDev/seat-lock/actions/workflows/ci.yml)
 
-A movie ticket booking backend (in the spirit of BookMyShow or Ticketmaster) built to answer one question:
+A movie ticket booking system (in the spirit of BookMyShow or Ticketmaster), backend and website, built to
+answer one question:
 **how do you never sell the same seat twice when thousands of people try to book at once?**
 
 Customers browse movies and shows, hold seats for 5 minutes, pay through Razorpay (test mode) and get a
@@ -27,15 +28,21 @@ problem.
   announced twice.
 - **Performance on 1 vCPU / 2 GB:** seat map 710 → 4,150 views/s, bookings 470 → 960/s, each step
   measured with k6.
-- **129 automated tests** (Testcontainers with real PostgreSQL, Redis and Kafka; WireMock; ArchUnit),
-  **94% line coverage**, run by GitHub Actions on every pull request.
+- **A website for every flow:** city search, movies with real posters, showtimes, a live seat map (pick how
+  many seats, one tap selects them side by side), Razorpay Checkout with a payment countdown, e-tickets, my
+  bookings and admin pages with a visual screen builder ([screenshots](#the-website)).
+- **160 automated tests** (129 on the JVM with Testcontainers' real PostgreSQL, Redis and Kafka, WireMock and
+  ArchUnit, **94% line coverage**; 31 for the website) plus a Playwright smoke test in a real browser, run by
+  GitHub Actions on every pull request.
 
 **Stack:** Java 25, Spring Boot 4 (Web MVC, Data JPA, Security, Kafka), Spring Cloud Gateway, PostgreSQL 16,
 Flyway, Redis 8, Kafka 4 (KRaft), Keycloak 26 (OAuth2/OIDC, JWT), Resilience4j, Bucket4j, Razorpay, Docker
-Compose, Testcontainers, WireMock, JUnit 5, k6, GitHub Actions.
+Compose, Testcontainers, WireMock, JUnit 5, k6, GitHub Actions. Website: React 19, TypeScript, Vite, React
+Router, TanStack Query, oidc-client-ts, nginx, Vitest, Testing Library, Playwright.
 
 - [What it does](#what-it-does)
 - [Quick start](#quick-start)
+- [The website](#the-website)
 - [Architecture](#architecture)
 - [How a booking works](#how-a-booking-works)
 - [Data model](#data-model)
@@ -85,12 +92,20 @@ Everything runs in Docker.
 
 ```bash
 cp .env.example .env            # credentials, ports, Razorpay test keys (no defaults in the app)
-docker compose up --build -d    # API gateway :8080 (the only app port), Keycloak :8180, PostgreSQL :5433
+docker compose up --build -d    # website :5173, API gateway :8080, Keycloak :8180, PostgreSQL :5433
 docker compose ps               # every service healthy
 ```
 
-This starts PostgreSQL, Redis, Kafka, Keycloak, the backend, the payment and notification services and the
-API gateway in dependency order. On a new Postgres volume init scripts create the payment and notification
+Open **[localhost:5173](http://localhost:5173)** and sign in as `asha`/`asha` (or `admin`/`admin` for the admin
+pages). An empty database has no shows yet; add November 2026 releases (posters, runtimes and dates from
+their Wikipedia pages), ten real cinemas in five cities and five days of shows, through the API as admin:
+
+```bash
+docker run --rm --network host -v "$PWD/web":/app -w /app node:24.11.0-alpine node scripts/demo-data.mjs
+```
+
+This starts PostgreSQL, Redis, Kafka, Keycloak, the backend, the payment and notification services, the
+API gateway and the website in dependency order. On a new Postgres volume init scripts create the payment and notification
 databases; on a new Keycloak volume the realm is imported. After pulling changes to either, start over from
 empty volumes (this **deletes all data**):
 
@@ -139,8 +154,8 @@ curl -s "$B/theatres/1/shows?date=2030-01-01"            # what's playing at one
 docker compose logs notification | grep "Email to"       # the confirmation, sent through Kafka
 ```
 
-Paying needs a browser: Razorpay Checkout is a widget, so `/dev/checkout.html` (a dev-only page served by the
-backend) checks out, opens Checkout in test mode and reports the result. The payment service needs Razorpay
+Paying needs a browser: Razorpay Checkout is a widget. The website does it; so does `/dev/checkout.html` (a
+dev-only page served by the backend: paste a token and a hold id). The payment service needs Razorpay
 test keys in `.env` ([below](#running-it-with-razorpay-test-mode)).
 
 Test users in the `seatlock` realm: `admin`/`admin` (ADMIN), `asha`/`asha` and `ravi`/`ravi` (CUSTOMER); new
@@ -156,16 +171,72 @@ Razorpay webhook**, so the real chain runs (signature check, payment service, se
 **Swagger UI** at [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) (OpenAPI spec at
 `/v3/api-docs`); its **Authorize** button logs in through Keycloak (authorization code with PKCE).
 
+## The website
+
+`web/` is a React + TypeScript single-page app, built by Vite and served by **nginx** on `:5173`. nginx also
+proxies `/api/` and `/v3/api-docs` to the API gateway, so the browser talks to one origin and the backend needs
+no CORS. Logins go to Keycloak (client `seatlock-web`, authorization code with PKCE); tokens last 5 minutes
+and are renewed silently with the refresh token, and a `401` renews once, then logs in again. Admin pages are
+shown only to the `ADMIN` role; the API still checks every call. API types are generated from the OpenAPI
+spec (`npm run gen:api`, kept in `src/api/schema.d.ts`).
+
+**Design.** A light, quiet interface that lets the posters carry the colour: Onest (one variable typeface,
+tabular figures for times and prices), near-black ink on white, one red accent for actions, green for seats
+and showtimes, and no animation anywhere. The flow is the one people know from ticketing apps: city, movie,
+date and showtime, how many seats, seat map, review and pay, e-ticket. Posters lazy-load with fixed 2:3
+boxes (no layout shift); browsing pages are in the main bundle while checkout, bookings and admin load on
+first use; hovering a movie or a showtime prefetches the next page's data; nginx gzips text and caches
+hashed assets forever.
+
+| Flow | What the site does |
+|---|---|
+| City | typo-tolerant search ("chenai", "madras" → Chennai), popular cities, remembered in the browser |
+| Movies | posters, language / format / genre filters, paging |
+| Movie, cinema | India-time date strip, showtimes grouped by cinema or by movie |
+| Seat map | "how many seats?" (1 to 10), then one tap selects that many side by side (a tap on a selected seat unselects it, a tap elsewhere moves the block); "best available" per section; back rows on top, screen at the bottom; layout + availability polled every 4 s; zoom; live total in ₹ |
+| Continue | reserves the seats (`POST /holds`), signing in first if needed (the selection survives the trip to Keycloak and carries on by itself); `409` names the seats someone else just booked and marks them on the map; `429` counts down `Retry-After` |
+| Review and pay | booking summary, a 10-minute countdown, Razorpay Checkout closing a minute before the window ends; declined payment, closed window, `502`, `503` + `Retry-After` and an expired window each explained; leaving the page releases the seats |
+| Tickets, my bookings | e-ticket for every status with a booking id, upcoming / past tabs, cancel with a dialog explaining the refund (`409` once the show started) |
+| Admin | movies (poster URL, genres, certificate), cinemas, a screen builder with a live preview, shows with a price per seat type, city names; each `400` field error shown next to its field |
+
+Accessibility: every seat is a button with a spoken label ("D8, Regular ₹180, sold"), states differ by fill
+and number as well as colour, one seat is in the tab order and arrows move between the rest, focus is always
+visible, and the payment countdown announces each minute.
+
+| | |
+|---|---|
+| ![Movies](docs/screenshots/movies-desktop.png) | ![Movie](docs/screenshots/movie-desktop.png) |
+| Movies in Chennai | A movie and its showtimes by cinema |
+| ![Seat map](docs/screenshots/seats-desktop.png) | ![Review and pay](docs/screenshots/checkout-desktop.png) |
+| Two seats wanted: one tap selected F9 and F10 | Review and pay, with the payment countdown |
+| ![Ticket](docs/screenshots/ticket-desktop.png) | ![Cancel](docs/screenshots/cancel-dialog.png) |
+| Paid in Razorpay test mode: the e-ticket | Cancelling explains the refund first |
+| ![My bookings](docs/screenshots/my-bookings-desktop.png) | ![Screen builder](docs/screenshots/admin-screen-builder.png) |
+| My bookings | Admin: building a screen with a live preview |
+
+On a phone:
+
+| | | | |
+|---|---|---|---|
+| ![Movies](docs/screenshots/movies-phone.png) | ![Seats taken](docs/screenshots/seats-taken-phone.png) | ![Checkout](docs/screenshots/checkout-phone.png) | ![Ticket](docs/screenshots/ticket-phone.png) |
+
+What the website works around, because the API doesn't offer it: a seat map page finds its cinema's name
+through `GET /screens/{id}` and `GET /theatres/{id}` (the show has no theatre); the admin pages can't list a
+cinema's screens, so the show form takes a screen id and remembers screens built in that browser; after a page
+refresh, checkout gets its Razorpay order again by repeating `POST /bookings` with the same hold (the API
+returns the same booking and order).
+
 ## Architecture
 
-A modular monolith (the backend, three modules) plus three small services: the **API gateway** in front,
+A modular monolith (the backend, three modules) plus three small services and the website: the **API gateway** in front,
 the **payment service** that talks to Razorpay, and the **notification service** that only listens to Kafka.
 Payment was split out first: it holds the provider's secrets, talks to an outside system that can be slow or
 down, and keeps its own database.
 
 ```mermaid
 flowchart LR
-    client([Browser / app])
+    client([Browser])
+    web[web: nginx<br/>the site + /api proxy]
     keycloak([Keycloak<br/>logins, tokens])
     razorpay([Razorpay])
     gateway[api-gateway<br/>the only public port]
@@ -184,7 +255,9 @@ flowchart LR
     notifdb[(notification DB)]
 
     client -- "log in" --> keycloak
-    client -- "/api/v1/** + JWT" --> gateway
+    client -- "pages, /api/v1/** + JWT" --> web
+    web -- "/api/v1/**" --> gateway
+    client -- "Checkout widget" --> razorpay
     razorpay -- "webhook" --> gateway
     gateway -- "/api/v1/**" --> backend
     gateway -- "/webhooks/razorpay" --> payment
@@ -209,6 +282,7 @@ flowchart LR
 | **payment** (service) | payments, attempts, refunds (database `payment`) | REST, service tokens only | `/payments/**`, `/webhooks/razorpay` |
 | **notification** (service) | sent notifications (database `notification`) | none: consumes `booking.confirmed` | none |
 | **api-gateway** (service) | nothing: routes requests | none | everything public |
+| **web** (nginx) | the website's static files | the pages | proxies `/api/` and `/v3/api-docs` to the gateway |
 
 ### The API gateway
 
@@ -585,11 +659,16 @@ docker compose run --rm backend-test       # 100 tests: Testcontainers PostgreSQ
 docker compose run --rm payment-test       # 19: PostgreSQL; WireMock as Razorpay, Keycloak and the backend
 docker compose run --rm notification-test  # 2: PostgreSQL + Kafka
 docker compose run --rm api-gateway-test   # 8: WireMock as the backend and the payment service
+docker compose run --rm web-test           # website: lint, type check, 31 unit tests (Vitest + Testing Library)
+docker compose run --rm web-e2e            # website smoke test in Chromium against the running stack (Playwright)
+docker compose run --rm web-e2e npx playwright test --project screenshots   # refresh docs/screenshots
 ```
 
 **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every pull request and push to `main`: one
-parallel job per app checks formatting (Spotless), runs every test, reports line coverage (JaCoCo) and builds
-the Docker image. No secrets needed: every outside system is faked.
+parallel job per Java app checks formatting (Spotless), runs every test, reports line coverage (JaCoCo) and
+builds the Docker image; the `web` job lints, type checks, runs the unit tests and builds the site and its
+image. No secrets needed: every outside system is faked. The Playwright smoke test needs the whole stack and
+Razorpay test keys, so it runs locally.
 
 | App | Tests | Line coverage |
 |---|---:|---:|
@@ -597,6 +676,7 @@ the Docker image. No secrets needed: every outside system is faked.
 | payment | 19 | 92.5% |
 | notification | 2 | 90.0% |
 | api-gateway | 8 | 94.4% |
+| web | 31 unit + 1 browser smoke test | not measured |
 
 Tests use a **real PostgreSQL** with every migration applied, **real Redis and Kafka**, and talk to the app
 over **real HTTP**, so security filters, error handling, JSON and SQL are part of each test. Each test creates
@@ -614,6 +694,8 @@ The tests worth reading first:
 | `WebhookTest` (payment) | forged events are 400; repeats change nothing; backend down → 502 so Razorpay retries |
 | `BookingConstraintsTest` | the database itself refuses bad states, including one seat in two confirmed bookings |
 | `ArchitectureTest` (ArchUnit) | module boundaries: nobody uses another module's `internal`, nothing depends on booking |
+| `smoke.spec.ts` (web, Playwright) | a real browser: "chenai" finds Chennai, picks survive the Keycloak login, the hold shows 2 seats as yours with a 5-minute timer, checkout shows the 10-minute dial and Razorpay Checkout opens |
+| `SeatMap.test.tsx`, `Countdown.test.tsx` (web) | one tap selects the wanted number of seats side by side, within gaps between sold seats; unselect, move, top up; sold seats can't be picked; arrow keys and Enter; the payment countdown ends once at zero and turns red in the last minute |
 
 ## Project layout
 
@@ -622,13 +704,14 @@ backend/              the modular monolith: catalogue, inventory, booking (Sprin
 payment/              payment service (Spring Boot)
 notification/         notification service: consumes booking.confirmed (Spring Boot)
 api-gateway/          API gateway, the single entry point (Spring Cloud Gateway)
+web/                  the website (React, TypeScript, Vite; nginx in Docker); scripts/demo-data.mjs adds real films and shows
 keycloak/             realm: roles, login and service clients, test users (imported on first start)
 postgres/             init scripts: the payment and notification databases and their users
 formatter/            the Eclipse formatter profile Spotless uses for every app
 docker-compose.yml    everything above + PostgreSQL, Redis, Kafka, Keycloak; profiles: test, tunnel, monitoring, cdn
 .github/workflows/    CI
 .env.example          every setting the apps need (copy to .env)
-docs/                 api.md (API reference), story.md (the app explained as a story)
+docs/                 api.md (API reference), story.md (the app explained as a story), screenshots/ (the website)
 collections/          Bruno collection: every endpoint with tests
 loadtest/results/     performance story and every load-test run
 monitoring/           Prometheus config, PostgreSQL init (pg_stat_statements)
@@ -660,4 +743,6 @@ Deliberately left out of this project's scope:
   Kubernetes.
 - **Horizontal scaling, measured:** holds and rate limits already live in Redis; the availability cache stays
   per instance (Caffeine) on purpose, since sharing it would turn every ~1 µs hit into a network round trip.
-- Search, show overlap checks, a frontend.
+- Search, show overlap checks.
+- **Website extras:** sign-up beyond Keycloak's own page, a cinema's list of screens (no API for it), PWA /
+  offline tickets, translations.

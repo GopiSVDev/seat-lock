@@ -225,6 +225,31 @@ services:
       retries: 5
       start_period: 20s
 
+  # The website: static files from nginx, which also proxies /api/ and /v3/api-docs to the gateway,
+  # so the browser sees one origin and nothing needs CORS
+  web:
+    build:
+      context: ./web
+      args:
+        # The login issuer the backend trusts; the browser goes there to log in
+        VITE_OIDC_AUTHORITY: ${JWT_ISSUER_URI:?JWT_ISSUER_URI is not set}
+    container_name: seat-lock-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:?WEB_PORT is not set}:80"
+    environment:
+      GATEWAY_URL: http://api-gateway:${GATEWAY_PORT:?GATEWAY_PORT is not set}
+      # Only render variables we own; nginx's own $vars stay untouched
+      NGINX_ENVSUBST_FILTER: GATEWAY_URL
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Public HTTPS URL for Razorpay's webhook (dev only): docker compose --profile tunnel up -d tunnel
   # Quick tunnel: no Cloudflare account, a new random *.trycloudflare.com URL on every start (see the logs).
   # Points at the gateway, so only routed paths are reachable through it.
@@ -329,6 +354,48 @@ services:
       - maven_repo:/root/.m2
     command: ["sh", "-c", "cp /src/pom.xml /app/ && cp -r /src/src /app/ && mvn -B test"]
 
+  # docker compose run --rm web-test   (lint, type check, unit tests; sources copied, node_modules kept in a volume)
+  web-test:
+    image: node:24.11.0-alpine
+    profiles: [test]
+    working_dir: /app
+    volumes:
+      - ./web:/src:ro
+      - web_node_modules:/app/node_modules
+      - npm_cache:/root/.npm
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /src && tar -c --exclude=node_modules --exclude=dist . | tar -x -C /app && cd /app && npm ci --no-audit --no-fund && npm run lint && npm run typecheck && npm test",
+      ]
+
+  # docker compose run --rm web-e2e   (Playwright smoke test against the running stack on localhost:WEB_PORT)
+  # README screenshots: docker compose run --rm web-e2e npx playwright test --project screenshots
+  # Host networking: the browser must reach the site and Keycloak's login page at the URLs a person uses.
+  web-e2e:
+    image: mcr.microsoft.com/playwright:v1.56.1-noble
+    profiles: [test]
+    network_mode: host
+    working_dir: /app
+    volumes:
+      - ./web:/src:ro
+      - web_e2e_node_modules:/app/node_modules
+      - npm_cache:/root/.npm
+      - ./web/test-results:/app/test-results
+      - ./docs/screenshots:/app/screenshots
+    environment:
+      WEB_URL: http://localhost:${WEB_PORT:?WEB_PORT is not set}
+    # copy the sources in and install, run the given command, give its output files to the owner of ./web
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "cd /src && tar -c --exclude=node_modules --exclude=dist --exclude=test-results . | tar -x -C /app && cd /app && npm ci --no-audit --no-fund --loglevel=error && \"$$@\"; status=$$?; chown -R $$(stat -c %u:%g /src) /app/screenshots /app/test-results; exit $$status",
+        "--",
+      ]
+    command: ["npx", "playwright", "test", "--project", "smoke"]
+
   # --- Load test monitoring: runs on the laptop, the app (postgres, backend) runs in the LXD VM ---
   # docker compose --profile monitoring up -d prometheus postgres-exporter
   # Host networking so Prometheus reaches the VM and k6 reaches Prometheus on localhost:9090.
@@ -383,6 +450,9 @@ services:
       - /var/cache/nginx/edge:size=256m
 
 volumes:
+  web_node_modules:
+  web_e2e_node_modules:
+  npm_cache:
   maven_repo:
   postgres_data:
   prometheus_data:

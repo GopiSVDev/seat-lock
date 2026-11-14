@@ -62,3 +62,39 @@ jobs:
       # The Dockerfile is not exercised by the tests; this catches a broken image build
       - name: Docker image builds
         run: docker build -t seatlock-${{ matrix.app }}:ci .
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_OIDC_AUTHORITY: http://localhost:8180/realms/seatlock
+
+      # The Playwright smoke test needs the whole stack and Razorpay keys, so it runs locally (web-e2e)
+      - name: Docker image builds
+        run: docker build --build-arg VITE_OIDC_AUTHORITY=http://localhost:8180/realms/seatlock -t seatlock-web:ci .
